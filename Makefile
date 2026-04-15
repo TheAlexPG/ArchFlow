@@ -1,13 +1,18 @@
-.PHONY: dev dev-infra dev-backend dev-frontend test test-backend test-frontend build up down db-migrate db-upgrade db-downgrade api-codegen lint
+.PHONY: dev dev-deps dev-infra dev-backend dev-frontend setup test test-backend test-frontend build up down db-migrate db-upgrade db-downgrade api-codegen lint
 
 # ─── Development ───────────────────────────────────────────────
 
-dev: dev-infra
+dev: dev-deps dev-infra db-upgrade
 	@echo "Starting backend and frontend..."
 	@trap 'kill 0' EXIT; \
 		$(MAKE) dev-backend & \
 		$(MAKE) dev-frontend & \
 		wait
+
+dev-deps:
+	@echo "Syncing dependencies..."
+	@cd backend && uv sync --all-extras --quiet
+	@cd frontend && npm install --silent
 
 dev-infra:
 	docker compose -f docker/docker-compose.dev.yml up -d
@@ -17,6 +22,13 @@ dev-backend:
 
 dev-frontend:
 	cd frontend && npm run dev
+
+setup: dev-deps dev-infra
+	@echo "Running initial setup..."
+	cd backend && uv run alembic revision --autogenerate -m "initial schema"
+	cd backend && uv run alembic upgrade head
+	@cp -n .env.example .env 2>/dev/null || true
+	@echo "Done! Run 'make dev' to start."
 
 # ─── Testing ───────────────────────────────────────────────────
 
