@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useDeleteObject, useObject, useUpdateObject } from '../../hooks/use-api'
+import { useConnections, useDeleteObject, useObject, useObjects, useUpdateObject } from '../../hooks/use-api'
 import { useCanvasStore } from '../../stores/canvas-store'
 import type { ObjectScope, ObjectStatus, ObjectType } from '../../types/model'
 import { STATUS_COLORS, TYPE_LABELS } from '../canvas/node-utils'
@@ -185,15 +185,58 @@ export function ObjectSidebar() {
         )}
 
         {sidebarTab === 'connections' && (
-          <div className="text-sm text-neutral-500">
-            Connections tab — coming in Phase 2
-          </div>
+          <ConnectionsTab objectId={obj.id} />
         )}
 
         {sidebarTab === 'history' && (
-          <div className="text-sm text-neutral-500">
-            History tab — coming in Phase 3
+          <div className="text-sm text-neutral-500 italic">
+            History will be available after versioning is enabled.
           </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ConnectionsTab({ objectId }: { objectId: string }) {
+  const { data: connections = [] } = useConnections()
+  const { data: objects = [] } = useObjects()
+
+  const incoming = connections.filter((c) => c.target_id === objectId)
+  const outgoing = connections.filter((c) => c.source_id === objectId)
+
+  const getObjectName = (id: string) => objects.find((o) => o.id === id)?.name || 'Unknown'
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <div className="text-xs text-neutral-500 mb-2">
+          Outgoing ({outgoing.length})
+        </div>
+        {outgoing.map((c) => (
+          <div key={c.id} className="flex items-center gap-2 py-1.5 text-xs">
+            <span className="text-neutral-500">→</span>
+            <span className="text-neutral-300">{getObjectName(c.target_id)}</span>
+            {c.label && <span className="text-neutral-600 truncate">({c.label})</span>}
+          </div>
+        ))}
+        {outgoing.length === 0 && (
+          <div className="text-xs text-neutral-600 italic">None</div>
+        )}
+      </div>
+      <div>
+        <div className="text-xs text-neutral-500 mb-2">
+          Incoming ({incoming.length})
+        </div>
+        {incoming.map((c) => (
+          <div key={c.id} className="flex items-center gap-2 py-1.5 text-xs">
+            <span className="text-neutral-500">←</span>
+            <span className="text-neutral-300">{getObjectName(c.source_id)}</span>
+            {c.label && <span className="text-neutral-600 truncate">({c.label})</span>}
+          </div>
+        ))}
+        {incoming.length === 0 && (
+          <div className="text-xs text-neutral-600 italic">None</div>
         )}
       </div>
     </div>
