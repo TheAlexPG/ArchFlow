@@ -1,0 +1,36 @@
+import uuid
+from datetime import datetime
+
+from pydantic import BaseModel, Field
+
+from app.models.connection import ConnectionDirection
+
+
+class ConnectionCreate(BaseModel):
+    source_id: uuid.UUID
+    target_id: uuid.UUID
+    label: str | None = None
+    protocol: str | None = None
+    direction: ConnectionDirection = ConnectionDirection.UNIDIRECTIONAL
+    tags: list[str] | None = None
+
+
+class ConnectionUpdate(BaseModel):
+    label: str | None = None
+    protocol: str | None = None
+    direction: ConnectionDirection | None = None
+    tags: list[str] | None = None
+
+
+class ConnectionResponse(BaseModel):
+    id: uuid.UUID
+    source_id: uuid.UUID
+    target_id: uuid.UUID
+    label: str | None = None
+    protocol: str | None = None
+    direction: ConnectionDirection
+    tags: list[str] | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
