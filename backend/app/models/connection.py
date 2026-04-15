@@ -31,8 +31,12 @@ class Connection(Base, UUIDMixin, TimestampMixin):
     tags: Mapped[list[str] | None] = mapped_column(ARRAY(String), default=None)
 
     # Relationships
-    source = relationship("ModelObject", foreign_keys=[source_id], back_populates="source_connections")
-    target = relationship("ModelObject", foreign_keys=[target_id], back_populates="target_connections")
+    source = relationship(
+        "ModelObject", foreign_keys=[source_id], back_populates="source_connections"
+    )
+    target = relationship(
+        "ModelObject", foreign_keys=[target_id], back_populates="target_connections"
+    )
 
     __table_args__ = (
         Index("ix_connections_source_id", "source_id"),

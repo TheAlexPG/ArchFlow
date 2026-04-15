@@ -80,7 +80,7 @@ async def get_children(db: AsyncSession, object_id: uuid.UUID) -> list[ModelObje
 async def get_dependencies(
     db: AsyncSession, object_id: uuid.UUID
 ) -> dict[str, list]:
-    """Get upstream (sources connecting TO this object) and downstream (targets FROM this object)."""
+    """Get upstream and downstream dependencies for an object."""
     upstream_q = await db.execute(
         select(Connection)
         .where(Connection.target_id == object_id)

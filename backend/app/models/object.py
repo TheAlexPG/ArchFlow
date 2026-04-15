@@ -68,12 +68,20 @@ class ModelObject(Base, UUIDMixin, TimestampMixin):
     parent = relationship("ModelObject", remote_side="ModelObject.id", back_populates="children")
     children = relationship("ModelObject", back_populates="parent", cascade="all, delete-orphan")
     source_connections = relationship(
-        "Connection", foreign_keys="Connection.source_id", back_populates="source", cascade="all, delete-orphan"
+        "Connection",
+        foreign_keys="Connection.source_id",
+        back_populates="source",
+        cascade="all, delete-orphan",
     )
     target_connections = relationship(
-        "Connection", foreign_keys="Connection.target_id", back_populates="target", cascade="all, delete-orphan"
+        "Connection",
+        foreign_keys="Connection.target_id",
+        back_populates="target",
+        cascade="all, delete-orphan",
     )
-    diagram_placements = relationship("DiagramObject", back_populates="object", cascade="all, delete-orphan")
+    diagram_placements = relationship(
+        "DiagramObject", back_populates="object", cascade="all, delete-orphan"
+    )
 
     @property
     def c4_level(self) -> str:

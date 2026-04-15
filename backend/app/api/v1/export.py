@@ -17,8 +17,14 @@ async def export_model(db: AsyncSession = Depends(get_db)):
     objects_result = await db.execute(select(ModelObject).order_by(ModelObject.name))
     connections_result = await db.execute(select(Connection))
 
-    objects = [ObjectResponse.from_model(obj).model_dump(mode="json") for obj in objects_result.scalars().all()]
-    connections = [ConnectionResponse.model_validate(c).model_dump(mode="json") for c in connections_result.scalars().all()]
+    objects = [
+        ObjectResponse.from_model(obj).model_dump(mode="json")
+        for obj in objects_result.scalars().all()
+    ]
+    connections = [
+        ConnectionResponse.model_validate(c).model_dump(mode="json")
+        for c in connections_result.scalars().all()
+    ]
 
     return JSONResponse({
         "version": "1.0",
@@ -34,8 +40,8 @@ async def import_model(file: UploadFile, db: AsyncSession = Depends(get_db)):
     try:
         content = await file.read()
         data = json.loads(content)
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        raise HTTPException(status_code=400, detail="Invalid JSON file")
+    except (json.JSONDecodeError, UnicodeDecodeError) as e:
+        raise HTTPException(status_code=400, detail="Invalid JSON file") from e
 
     if "objects" not in data:
         raise HTTPException(status_code=400, detail="Missing 'objects' field")
