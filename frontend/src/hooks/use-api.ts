@@ -98,6 +98,14 @@ export function useCreateConnection() {
   })
 }
 
+export function useSavePosition() {
+  return useMutation({
+    mutationFn: async ({ id, x, y }: { id: string; x: number; y: number }) => {
+      await api.put(`/objects/${id}`, { metadata: { position: { x, y } } })
+    },
+  })
+}
+
 export function useDeleteConnection() {
   const qc = useQueryClient()
   return useMutation({

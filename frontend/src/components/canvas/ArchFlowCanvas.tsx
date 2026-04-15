@@ -9,13 +9,14 @@ import {
   type Edge,
   type NodeTypes,
   type EdgeTypes,
+  type NodeDragEvent,
   MarkerType,
   type OnSelectionChangeParams,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { useCallback, useEffect, useRef } from 'react'
 
-import { useConnections, useCreateConnection, useObjects } from '../../hooks/use-api'
+import { useConnections, useCreateConnection, useObjects, useSavePosition } from '../../hooks/use-api'
 import { useCanvasStore } from '../../stores/canvas-store'
 import type { ModelObject, Connection } from '../../types/model'
 import { C4Edge } from './C4Edge'
@@ -29,11 +30,21 @@ const edgeTypes: EdgeTypes = {
   c4: C4Edge as unknown as EdgeTypes['c4'],
 }
 
+function getPosition(obj: ModelObject, index: number): { x: number; y: number } {
+  const pos = (obj.metadata as Record<string, unknown>)?.position as
+    | { x: number; y: number }
+    | undefined
+  if (pos && typeof pos.x === 'number' && typeof pos.y === 'number') {
+    return pos
+  }
+  return { x: (index % 5) * 280 + 50, y: Math.floor(index / 5) * 200 + 50 }
+}
+
 function objectToNode(obj: ModelObject, index: number): Node {
   return {
     id: obj.id,
     type: 'c4',
-    position: { x: (index % 5) * 280 + 50, y: Math.floor(index / 5) * 200 + 50 },
+    position: getPosition(obj, index),
     data: { object: obj } satisfies C4NodeData,
   }
 }
@@ -53,12 +64,12 @@ function CanvasInner() {
   const { data: objects = [] } = useObjects()
   const { data: connections = [] } = useConnections()
   const createConnection = useCreateConnection()
+  const savePosition = useSavePosition()
   const { selectNode, selectEdge } = useCanvasStore()
   const { setNodes, setEdges, getNodes } = useReactFlow()
   const prevObjectsRef = useRef<string>('')
   const prevConnsRef = useRef<string>('')
 
-  // Sync API data → React Flow (only when data actually changes)
   useEffect(() => {
     const key = objects.map((o) => `${o.id}:${o.updated_at}`).join(',')
     if (key === prevObjectsRef.current) return
@@ -81,6 +92,13 @@ function CanvasInner() {
     prevConnsRef.current = key
     setEdges(connections.map(connectionToEdge))
   }, [connections, setEdges])
+
+  const onNodeDragStop = useCallback(
+    (_event: NodeDragEvent, node: Node) => {
+      savePosition.mutate({ id: node.id, x: node.position.x, y: node.position.y })
+    },
+    [savePosition],
+  )
 
   const onConnect = useCallback(
     (params: RFConnection) => {
@@ -107,6 +125,7 @@ function CanvasInner() {
     <ReactFlow
       defaultNodes={[]}
       defaultEdges={[]}
+      onNodeDragStop={onNodeDragStop}
       onConnect={onConnect}
       onSelectionChange={onSelectionChange}
       nodeTypes={nodeTypes}

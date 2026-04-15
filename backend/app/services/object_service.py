@@ -57,7 +57,12 @@ async def update_object(
 ) -> ModelObject:
     update_data = data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
-        setattr(obj, field, value)
+        if field == "metadata_" and value and obj.metadata_:
+            # Merge metadata instead of replacing
+            merged = {**obj.metadata_, **value}
+            setattr(obj, field, merged)
+        else:
+            setattr(obj, field, value)
     await db.flush()
     await db.refresh(obj)
     return obj
