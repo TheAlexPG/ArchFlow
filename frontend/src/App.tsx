@@ -27,13 +27,17 @@ function App() {
         <AuthPage />
       ) : (
         <ReactFlowProvider>
-          <div className="flex flex-col h-full bg-neutral-950 text-neutral-100">
+          <div
+            style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#0a0a0a', color: '#f5f5f5' }}
+          >
             <TopBar />
-            <div className="flex flex-1 overflow-hidden">
+            <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
               <ObjectTree />
-              <div className="flex-1 relative">
+              <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
                 <AddObjectToolbar />
-                <ArchFlowCanvas />
+                <div style={{ position: 'absolute', inset: 0 }}>
+                  <ArchFlowCanvas />
+                </div>
               </div>
               <ObjectSidebar />
             </div>

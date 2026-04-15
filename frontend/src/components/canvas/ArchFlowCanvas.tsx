@@ -3,9 +3,7 @@ import {
   Background,
   Controls,
   MiniMap,
-  useNodesState,
-  useEdgesState,
-  addEdge,
+  useReactFlow,
   type Connection as RFConnection,
   type Node,
   type Edge,
@@ -15,7 +13,7 @@ import {
   type OnSelectionChangeParams,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { useCallback, useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 
 import { useConnections, useCreateConnection, useObjects } from '../../hooks/use-api'
 import { useCanvasStore } from '../../stores/canvas-store'
@@ -51,32 +49,38 @@ function connectionToEdge(conn: Connection): Edge {
   }
 }
 
-export function ArchFlowCanvas() {
+function CanvasInner() {
   const { data: objects = [] } = useObjects()
   const { data: connections = [] } = useConnections()
   const createConnection = useCreateConnection()
   const { selectNode, selectEdge } = useCanvasStore()
+  const { setNodes, setEdges, getNodes } = useReactFlow()
+  const prevObjectsRef = useRef<string>('')
+  const prevConnsRef = useRef<string>('')
 
-  const initialNodes = useMemo(() => objects.map(objectToNode), [objects])
-  const initialEdges = useMemo(() => connections.map(connectionToEdge), [connections])
-
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
-
-  // Sync when data changes
+  // Sync API data → React Flow (only when data actually changes)
   useEffect(() => {
-    setNodes(objects.map((obj, i) => {
-      const existing = nodes.find((n) => n.id === obj.id)
+    const key = objects.map((o) => `${o.id}:${o.updated_at}`).join(',')
+    if (key === prevObjectsRef.current) return
+    prevObjectsRef.current = key
+
+    const currentNodes = getNodes()
+    const newNodes = objects.map((obj, i) => {
+      const existing = currentNodes.find((n) => n.id === obj.id)
       if (existing) {
         return { ...existing, data: { object: obj } satisfies C4NodeData }
       }
       return objectToNode(obj, i)
-    }))
-  }, [objects]) // eslint-disable-line react-hooks/exhaustive-deps
+    })
+    setNodes(newNodes)
+  }, [objects, setNodes, getNodes])
 
   useEffect(() => {
+    const key = connections.map((c) => c.id).join(',')
+    if (key === prevConnsRef.current) return
+    prevConnsRef.current = key
     setEdges(connections.map(connectionToEdge))
-  }, [connections]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [connections, setEdges])
 
   const onConnect = useCallback(
     (params: RFConnection) => {
@@ -91,24 +95,18 @@ export function ArchFlowCanvas() {
   )
 
   const onSelectionChange = useCallback(
-    ({ nodes: selectedNodes, edges: selectedEdges }: OnSelectionChangeParams) => {
-      if (selectedNodes.length > 0) {
-        selectNode(selectedNodes[0].id)
-      } else if (selectedEdges.length > 0) {
-        selectEdge(selectedEdges[0].id)
-      } else {
-        selectNode(null)
-      }
+    ({ nodes: sel, edges: selEdges }: OnSelectionChangeParams) => {
+      if (sel.length > 0) selectNode(sel[0].id)
+      else if (selEdges.length > 0) selectEdge(selEdges[0].id)
+      else selectNode(null)
     },
     [selectNode, selectEdge],
   )
 
   return (
     <ReactFlow
-      nodes={nodes}
-      edges={edges}
-      onNodesChange={onNodesChange}
-      onEdgesChange={onEdgesChange}
+      defaultNodes={[]}
+      defaultEdges={[]}
       onConnect={onConnect}
       onSelectionChange={onSelectionChange}
       nodeTypes={nodeTypes}
@@ -120,15 +118,19 @@ export function ArchFlowCanvas() {
         type: 'c4',
         markerEnd: { type: MarkerType.ArrowClosed, color: '#525252' },
       }}
-      className="bg-neutral-950"
+      style={{ background: '#0a0a0a' }}
     >
       <Background color="#333" gap={20} size={1} />
-      <Controls className="!bg-neutral-800 !border-neutral-700 !shadow-lg [&>button]:!bg-neutral-800 [&>button]:!border-neutral-700 [&>button]:!text-neutral-300 [&>button:hover]:!bg-neutral-700" />
+      <Controls />
       <MiniMap
         nodeColor="#3b82f6"
         maskColor="rgba(0, 0, 0, 0.7)"
-        className="!bg-neutral-900 !border-neutral-700"
+        style={{ background: '#171717', border: '1px solid #333' }}
       />
     </ReactFlow>
   )
+}
+
+export function ArchFlowCanvas() {
+  return <CanvasInner />
 }
