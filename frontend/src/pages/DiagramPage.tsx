@@ -1,41 +1,74 @@
+import { useCallback, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ReactFlowProvider } from '@xyflow/react'
 import { ArchFlowCanvas } from '../components/canvas/ArchFlowCanvas'
 import { AddObjectToolbar } from '../components/toolbar/AddObjectToolbar'
 import { ObjectSidebar } from '../components/sidebar/ObjectSidebar'
 import { ObjectTree } from '../components/tree/ObjectTree'
+import { SearchModal } from '../components/nav/SearchModal'
+import { useDiagram } from '../hooks/use-diagrams'
 import { useAuthStore } from '../stores/auth-store'
 
 export function DiagramPage() {
   const { diagramId } = useParams<{ diagramId: string }>()
+  const { data: diagram } = useDiagram(diagramId)
   const navigate = useNavigate()
   const { logout } = useAuthStore()
+  const [searchOpen, setSearchOpen] = useState(false)
+
+  const toggleSearch = useCallback(() => setSearchOpen((v) => !v), [])
 
   return (
     <ReactFlowProvider>
       <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#0a0a0a', color: '#f5f5f5' }}>
-        {/* Top bar */}
+        {/* Top bar with breadcrumbs */}
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           padding: '8px 16px', borderBottom: '1px solid #262626', background: '#111',
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <button
               onClick={() => navigate('/')}
               style={{
                 background: 'none', border: 'none', color: '#a3a3a3', cursor: 'pointer',
-                fontSize: 14, padding: '4px 8px',
+                fontSize: 16, padding: '2px 6px',
+              }}
+              title="Home"
+            >
+              ⌂
+            </button>
+            <span style={{ color: '#333' }}>›</span>
+            <button
+              onClick={() => navigate('/')}
+              style={{
+                background: 'none', border: 'none', color: '#a3a3a3', cursor: 'pointer',
+                fontSize: 13, padding: '2px 6px',
               }}
             >
-              ← Back
+              Diagrams
             </button>
-            <span style={{ color: '#404040' }}>|</span>
-            <span style={{ fontWeight: 600, fontSize: 14 }}>ArchFlow</span>
-            <span style={{ color: '#525252', fontSize: 13 }}>
-              Diagram
+            <span style={{ color: '#333' }}>›</span>
+            <span style={{ fontSize: 13, fontWeight: 500 }}>
+              {diagram?.name || 'Loading...'}
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button
+              onClick={toggleSearch}
+              style={{
+                background: '#1a1a1a', border: '1px solid #333', borderRadius: 6,
+                color: '#737373', cursor: 'pointer', fontSize: 12, padding: '4px 10px',
+                display: 'flex', alignItems: 'center', gap: 6,
+              }}
+            >
+              🔍 Search
+              <span style={{
+                background: '#262626', borderRadius: 3, padding: '1px 4px',
+                fontSize: 10, color: '#525252',
+              }}>
+                ⌘K
+              </span>
+            </button>
             <button
               onClick={logout}
               style={{
@@ -60,6 +93,8 @@ export function DiagramPage() {
           <ObjectSidebar />
         </div>
       </div>
+
+      <SearchModal open={searchOpen} onClose={toggleSearch} />
     </ReactFlowProvider>
   )
 }

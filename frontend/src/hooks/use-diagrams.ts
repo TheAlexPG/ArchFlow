@@ -42,6 +42,17 @@ export function useCreateDiagram() {
   })
 }
 
+export function useDiagram(id: string | undefined) {
+  return useQuery({
+    queryKey: ['diagrams', id],
+    queryFn: async () => {
+      const { data } = await api.get<Diagram>(`/diagrams/${id}`)
+      return data
+    },
+    enabled: !!id,
+  })
+}
+
 export function useDeleteDiagram() {
   const qc = useQueryClient()
   return useMutation({

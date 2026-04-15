@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useDiagrams, useCreateDiagram, useDeleteDiagram } from '../hooks/use-diagrams'
+import { SearchModal } from '../components/nav/SearchModal'
 import { useAuthStore } from '../stores/auth-store'
 
 const DIAGRAM_TYPE_LABELS: Record<string, string> = {
@@ -35,6 +36,19 @@ export function OverviewPage() {
   const [showCreate, setShowCreate] = useState(false)
   const [newName, setNewName] = useState('')
   const [newType, setNewType] = useState('system_landscape')
+  const [searchOpen, setSearchOpen] = useState(false)
+  const toggleSearch = useCallback(() => setSearchOpen((v) => !v), [])
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        setSearchOpen((v) => !v)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
 
   const handleCreate = () => {
     if (!newName.trim()) return
@@ -225,6 +239,7 @@ export function OverviewPage() {
           </div>
         )}
       </div>
+      <SearchModal open={searchOpen} onClose={toggleSearch} />
     </div>
   )
 }
