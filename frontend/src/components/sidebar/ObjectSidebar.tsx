@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useConnections, useDeleteObject, useObject, useObjects, useUpdateObject } from '../../hooks/use-api'
 import { useCanvasStore } from '../../stores/canvas-store'
 import type { ObjectScope, ObjectStatus, ObjectType } from '../../types/model'
 import { STATUS_COLORS, TYPE_LABELS } from '../canvas/node-utils'
+import { RichTextEditor } from '../common/RichTextEditor'
 
 export function ObjectSidebar() {
   const { selectedNodeId, sidebarOpen, sidebarTab, setSidebarTab, toggleSidebar } = useCanvasStore()
@@ -12,6 +13,7 @@ export function ObjectSidebar() {
 
   const [editName, setEditName] = useState('')
   const [editDescription, setEditDescription] = useState('')
+  const descTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     if (obj) {
@@ -139,12 +141,15 @@ export function ObjectSidebar() {
 
             {/* Description */}
             <Field label="Description">
-              <textarea
-                value={editDescription}
-                onChange={(e) => setEditDescription(e.target.value)}
-                onBlur={handleSave}
-                rows={3}
-                className="bg-neutral-800 text-neutral-200 text-sm rounded px-2 py-1.5 w-full border border-neutral-700 resize-none"
+              <RichTextEditor
+                content={editDescription}
+                onChange={(html) => {
+                  setEditDescription(html)
+                  descTimerRef.current && clearTimeout(descTimerRef.current)
+                  descTimerRef.current = setTimeout(() => {
+                    updateObject.mutate({ id: obj.id, description: html || null })
+                  }, 500)
+                }}
                 placeholder="Add description..."
               />
             </Field>
