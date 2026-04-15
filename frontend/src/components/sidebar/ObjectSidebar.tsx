@@ -134,6 +134,9 @@ export function ObjectSidebar() {
               <span className="text-sm text-neutral-300">{obj.c4_level}</span>
             </Field>
 
+            {/* Cross-references */}
+            <CrossReferences objectId={obj.id} />
+
             {/* Description */}
             <Field label="Description">
               <textarea
@@ -193,6 +196,29 @@ export function ObjectSidebar() {
             History will be available after versioning is enabled.
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+function CrossReferences({ objectId }: { objectId: string }) {
+  const { data: objects = [] } = useObjects()
+  const { data: connections = [] } = useConnections()
+
+  const children = objects.filter((o) => o.parent_id === objectId)
+  const connCount = connections.filter(
+    (c) => c.source_id === objectId || c.target_id === objectId,
+  ).length
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-neutral-500">Contains</span>
+        <span className="text-neutral-300">{children.length} objects</span>
+      </div>
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-neutral-500">Connections</span>
+        <span className="text-neutral-300">{connCount}</span>
       </div>
     </div>
   )
