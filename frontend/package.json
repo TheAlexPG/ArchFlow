@@ -20,6 +20,7 @@
     "@tiptap/starter-kit": "^3.22.3",
     "@xyflow/react": "^12.10.2",
     "axios": "^1.15.0",
+    "html-to-image": "^1.11.13",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-router-dom": "^7.14.1",

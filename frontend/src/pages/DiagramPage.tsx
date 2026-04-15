@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ReactFlowProvider } from '@xyflow/react'
 import { ArchFlowCanvas } from '../components/canvas/ArchFlowCanvas'
@@ -69,6 +69,25 @@ export function DiagramPage() {
               }}>
                 ⌘K
               </span>
+            </button>
+            <button
+              onClick={async () => {
+                const { toPng } = await import('html-to-image')
+                const el = document.querySelector('.react-flow') as HTMLElement
+                if (!el) return
+                const dataUrl = await toPng(el, { backgroundColor: '#0a0a0a' })
+                const a = document.createElement('a')
+                a.href = dataUrl
+                a.download = `archflow-${new Date().toISOString().slice(0, 10)}.png`
+                a.click()
+              }}
+              style={{
+                background: '#1a1a1a', border: '1px solid #333', borderRadius: 6,
+                color: '#737373', cursor: 'pointer', fontSize: 12, padding: '4px 10px',
+              }}
+              title="Export as PNG"
+            >
+              📷
             </button>
             <button
               onClick={logout}
