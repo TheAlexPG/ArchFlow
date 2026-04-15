@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { ReactFlowProvider } from '@xyflow/react'
 import { ArchFlowCanvas } from '../components/canvas/ArchFlowCanvas'
 import { AddObjectToolbar } from '../components/toolbar/AddObjectToolbar'
+import { FilterToolbar } from '../components/toolbar/FilterToolbar'
 import { ObjectSidebar } from '../components/sidebar/ObjectSidebar'
 import { ObjectTree } from '../components/tree/ObjectTree'
 import { SearchModal } from '../components/nav/SearchModal'
@@ -89,6 +90,7 @@ export function DiagramPage() {
             <div style={{ position: 'absolute', inset: 0 }}>
               <ArchFlowCanvas />
             </div>
+            <FilterToolbar />
           </div>
           <ObjectSidebar />
         </div>
