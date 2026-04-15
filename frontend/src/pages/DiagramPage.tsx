@@ -103,11 +103,11 @@ export function DiagramPage() {
 
         {/* Canvas area */}
         <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-          <ObjectTree />
+          <ObjectTree diagramId={diagramId} />
           <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
-            <AddObjectToolbar />
+            <AddObjectToolbar diagramId={diagramId} />
             <div style={{ position: 'absolute', inset: 0 }}>
-              <ArchFlowCanvas />
+              <ArchFlowCanvas diagramId={diagramId} />
             </div>
             <FilterToolbar />
           </div>

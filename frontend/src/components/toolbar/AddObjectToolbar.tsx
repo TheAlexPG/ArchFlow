@@ -1,41 +1,73 @@
 import { useState } from 'react'
-import { useCreateObject } from '../../hooks/use-api'
+import { useAddObjectToDiagram, useCreateObject } from '../../hooks/use-api'
 import type { ObjectType } from '../../types/model'
 import { TYPE_ICONS, TYPE_LABELS } from '../canvas/node-utils'
 
 const OBJECT_TYPES: ObjectType[] = ['system', 'actor', 'external_system', 'app', 'store', 'component', 'group']
 
-export function AddObjectToolbar() {
+interface AddObjectToolbarProps {
+  diagramId?: string
+}
+
+export function AddObjectToolbar({ diagramId }: AddObjectToolbarProps) {
   const [isOpen, setIsOpen] = useState(false)
   const createObject = useCreateObject()
+  const addToDiagram = useAddObjectToDiagram()
 
   const handleAdd = (type: ObjectType) => {
     const name = prompt(`New ${TYPE_LABELS[type]} name:`)
     if (!name?.trim()) return
-    createObject.mutate({ name: name.trim(), type })
+    createObject.mutate(
+      { name: name.trim(), type },
+      {
+        onSuccess: (obj) => {
+          if (diagramId) {
+            addToDiagram.mutate({
+              diagramId,
+              objectId: obj.id,
+              x: 100 + Math.random() * 400,
+              y: 100 + Math.random() * 300,
+            })
+          }
+        },
+      },
+    )
     setIsOpen(false)
   }
 
   return (
-    <div className="absolute left-4 top-1/2 -translate-y-1/2 z-10 flex flex-col gap-2">
+    <div style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', zIndex: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-10 h-10 rounded-lg bg-neutral-800 border border-neutral-700 text-neutral-300 hover:bg-neutral-700 flex items-center justify-center text-xl shadow-lg transition-colors"
+        style={{
+          width: 40, height: 40, borderRadius: 8, background: '#262626', border: '1px solid #404040',
+          color: '#a3a3a3', cursor: 'pointer', fontSize: 20, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}
         title="Add object"
       >
         +
       </button>
 
       {isOpen && (
-        <div className="bg-neutral-800 border border-neutral-700 rounded-lg shadow-xl p-2 min-w-[180px]">
-          <div className="text-xs text-neutral-500 px-2 py-1 uppercase tracking-wider">Add object</div>
+        <div style={{
+          background: '#262626', border: '1px solid #404040', borderRadius: 8, padding: 6, minWidth: 180,
+        }}>
+          <div style={{ fontSize: 10, color: '#737373', padding: '4px 8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Add object
+          </div>
           {OBJECT_TYPES.map((type) => (
             <button
               key={type}
               onClick={() => handleAdd(type)}
-              className="w-full text-left px-2 py-1.5 rounded text-sm text-neutral-300 hover:bg-neutral-700 flex items-center gap-2 transition-colors"
+              style={{
+                width: '100%', textAlign: 'left', padding: '6px 8px', borderRadius: 4, fontSize: 13,
+                color: '#d4d4d4', background: 'transparent', border: 'none', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 8,
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = '#333')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
             >
-              <span className="w-5 text-center opacity-60">{TYPE_ICONS[type]}</span>
+              <span style={{ width: 20, textAlign: 'center', opacity: 0.6 }}>{TYPE_ICONS[type]}</span>
               {TYPE_LABELS[type]}
             </button>
           ))}

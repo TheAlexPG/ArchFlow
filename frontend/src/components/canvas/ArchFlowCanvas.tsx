@@ -16,7 +16,14 @@ import {
 import '@xyflow/react/dist/style.css'
 import { useCallback, useEffect, useRef } from 'react'
 
-import { useConnections, useCreateConnection, useObjects, useSavePosition } from '../../hooks/use-api'
+import {
+  useConnections,
+  useCreateConnection,
+  useDeleteConnection,
+  useDiagramObjects,
+  useObjects,
+  useSaveDiagramPosition,
+} from '../../hooks/use-api'
 import { useCanvasStore } from '../../stores/canvas-store'
 import type { ModelObject, Connection } from '../../types/model'
 import { C4Edge } from './C4Edge'
@@ -32,25 +39,6 @@ const edgeTypes: EdgeTypes = {
   c4: C4Edge as unknown as EdgeTypes['c4'],
 }
 
-function getPosition(obj: ModelObject, index: number): { x: number; y: number } {
-  const pos = (obj.metadata as Record<string, unknown>)?.position as
-    | { x: number; y: number }
-    | undefined
-  if (pos && typeof pos.x === 'number' && typeof pos.y === 'number') {
-    return pos
-  }
-  return { x: (index % 5) * 280 + 50, y: Math.floor(index / 5) * 200 + 50 }
-}
-
-function objectToNode(obj: ModelObject, index: number): Node {
-  return {
-    id: obj.id,
-    type: obj.type === 'group' ? 'group' : 'c4',
-    position: getPosition(obj, index),
-    data: { object: obj } satisfies C4NodeData,
-  }
-}
-
 function connectionToEdge(conn: Connection): Edge {
   return {
     id: conn.id,
@@ -62,44 +50,78 @@ function connectionToEdge(conn: Connection): Edge {
   }
 }
 
-function CanvasInner() {
-  const { data: objects = [] } = useObjects()
+interface ArchFlowCanvasProps {
+  diagramId?: string
+}
+
+function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
+  const { data: allObjects = [] } = useObjects()
   const { data: connections = [] } = useConnections()
+  const { data: diagramObjects = [] } = useDiagramObjects(diagramId)
   const createConnection = useCreateConnection()
-  const savePosition = useSavePosition()
+  const deleteConnection = useDeleteConnection()
+  const saveDiagramPosition = useSaveDiagramPosition()
   const { selectNode, selectEdge } = useCanvasStore()
   const { setNodes, setEdges, getNodes } = useReactFlow()
-  const prevObjectsRef = useRef<string>('')
+  const prevKeyRef = useRef<string>('')
   const prevConnsRef = useRef<string>('')
 
+  // Build nodes from diagram objects (scoped to this diagram)
   useEffect(() => {
-    const key = objects.map((o) => `${o.id}:${o.updated_at}`).join(',')
-    if (key === prevObjectsRef.current) return
-    prevObjectsRef.current = key
+    if (!diagramId) return
 
+    const objectMap = new Map(allObjects.map((o) => [o.id, o]))
+    const nodes: Node[] = diagramObjects
+      .map((dObj) => {
+        const obj = objectMap.get(dObj.object_id)
+        if (!obj) return null
+        return {
+          id: obj.id,
+          type: obj.type === 'group' ? 'group' : 'c4',
+          position: { x: dObj.position_x, y: dObj.position_y },
+          data: { object: obj } satisfies C4NodeData,
+        } as Node
+      })
+      .filter(Boolean) as Node[]
+
+    const key = nodes.map((n) => `${n.id}:${n.position.x}:${n.position.y}`).join(',')
+    if (key === prevKeyRef.current) return
+    prevKeyRef.current = key
+
+    // Preserve dragged positions
     const currentNodes = getNodes()
-    const newNodes = objects.map((obj, i) => {
-      const existing = currentNodes.find((n) => n.id === obj.id)
-      if (existing) {
-        return { ...existing, data: { object: obj } satisfies C4NodeData }
-      }
-      return objectToNode(obj, i)
+    const merged = nodes.map((n) => {
+      const existing = currentNodes.find((cn) => cn.id === n.id)
+      if (existing) return { ...n, position: existing.position }
+      return n
     })
-    setNodes(newNodes)
-  }, [objects, setNodes, getNodes])
+    setNodes(merged)
+  }, [diagramId, allObjects, diagramObjects, setNodes, getNodes])
 
+  // Filter connections to only those between objects in this diagram
   useEffect(() => {
-    const key = connections.map((c) => c.id).join(',')
+    const objectIds = new Set(diagramObjects.map((d) => d.object_id))
+    const filtered = connections.filter(
+      (c) => objectIds.has(c.source_id) && objectIds.has(c.target_id),
+    )
+    const key = filtered.map((c) => c.id).join(',')
     if (key === prevConnsRef.current) return
     prevConnsRef.current = key
-    setEdges(connections.map(connectionToEdge))
-  }, [connections, setEdges])
+    setEdges(filtered.map(connectionToEdge))
+  }, [connections, diagramObjects, setEdges])
 
   const onNodeDragStop = useCallback(
     (_event: NodeDragEvent, node: Node) => {
-      savePosition.mutate({ id: node.id, x: node.position.x, y: node.position.y })
+      if (diagramId) {
+        saveDiagramPosition.mutate({
+          diagramId,
+          objectId: node.id,
+          x: node.position.x,
+          y: node.position.y,
+        })
+      }
     },
-    [savePosition],
+    [diagramId, saveDiagramPosition],
   )
 
   const onConnect = useCallback(
@@ -123,6 +145,15 @@ function CanvasInner() {
     [selectNode, selectEdge],
   )
 
+  const onEdgesDelete = useCallback(
+    (edges: Edge[]) => {
+      for (const edge of edges) {
+        deleteConnection.mutate(edge.id)
+      }
+    },
+    [deleteConnection],
+  )
+
   return (
     <ReactFlow
       defaultNodes={[]}
@@ -130,6 +161,8 @@ function CanvasInner() {
       onNodeDragStop={onNodeDragStop}
       onConnect={onConnect}
       onSelectionChange={onSelectionChange}
+      onEdgesDelete={onEdgesDelete}
+      deleteKeyCode={['Backspace', 'Delete']}
       nodeTypes={nodeTypes}
       edgeTypes={edgeTypes}
       fitView
@@ -152,6 +185,6 @@ function CanvasInner() {
   )
 }
 
-export function ArchFlowCanvas() {
-  return <CanvasInner />
+export function ArchFlowCanvas({ diagramId }: ArchFlowCanvasProps) {
+  return <CanvasInner diagramId={diagramId} />
 }

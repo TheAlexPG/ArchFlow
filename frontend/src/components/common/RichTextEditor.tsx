@@ -1,6 +1,5 @@
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
-import Link from '@tiptap/extension-link'
 import Placeholder from '@tiptap/extension-placeholder'
 import { useEffect } from 'react'
 
@@ -14,7 +13,6 @@ export function RichTextEditor({ content, onChange, placeholder }: RichTextEdito
   const editor = useEditor({
     extensions: [
       StarterKit,
-      Link.configure({ openOnClick: false }),
       Placeholder.configure({ placeholder: placeholder || 'Add description...' }),
     ],
     content,

@@ -106,6 +106,70 @@ export function useSavePosition() {
   })
 }
 
+// ─── Diagram Objects ────────────────────────────────────
+
+export interface DiagramObjectData {
+  id: string
+  diagram_id: string
+  object_id: string
+  position_x: number
+  position_y: number
+  width: number | null
+  height: number | null
+}
+
+export function useDiagramObjects(diagramId: string | undefined) {
+  return useQuery({
+    queryKey: ['diagram-objects', diagramId],
+    queryFn: async () => {
+      const { data } = await api.get<DiagramObjectData[]>(`/diagrams/${diagramId}/objects`)
+      return data
+    },
+    enabled: !!diagramId,
+  })
+}
+
+export function useAddObjectToDiagram() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({
+      diagramId, objectId, x, y,
+    }: { diagramId: string; objectId: string; x: number; y: number }) => {
+      const { data } = await api.post(`/diagrams/${diagramId}/objects`, {
+        object_id: objectId, position_x: x, position_y: y,
+      })
+      return data
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['diagram-objects', vars.diagramId] })
+    },
+  })
+}
+
+export function useSaveDiagramPosition() {
+  return useMutation({
+    mutationFn: async ({
+      diagramId, objectId, x, y,
+    }: { diagramId: string; objectId: string; x: number; y: number }) => {
+      await api.put(`/diagrams/${diagramId}/objects/${objectId}`, {
+        position_x: x, position_y: y,
+      })
+    },
+  })
+}
+
+export function useRemoveObjectFromDiagram() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ diagramId, objectId }: { diagramId: string; objectId: string }) => {
+      await api.delete(`/diagrams/${diagramId}/objects/${objectId}`)
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['diagram-objects', vars.diagramId] })
+    },
+  })
+}
+
 export function useDeleteConnection() {
   const qc = useQueryClient()
   return useMutation({

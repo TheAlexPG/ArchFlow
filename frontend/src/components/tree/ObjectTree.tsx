@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useCreateObject, useObjects } from '../../hooks/use-api'
+import { useAddObjectToDiagram, useCreateObject, useObjects } from '../../hooks/use-api'
 import { useCanvasStore } from '../../stores/canvas-store'
 import type { ModelObject, ObjectType } from '../../types/model'
 import { TYPE_ICONS, TYPE_LABELS } from '../canvas/node-utils'
@@ -38,12 +38,17 @@ function matchesSearch(obj: ModelObject, query: string): boolean {
   )
 }
 
-export function ObjectTree() {
+interface ObjectTreeProps {
+  diagramId?: string
+}
+
+export function ObjectTree({ diagramId }: ObjectTreeProps) {
   const { data: objects = [] } = useObjects()
   const [search, setSearch] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const { selectNode } = useCanvasStore()
   const createObject = useCreateObject()
+  const addToDiagram = useAddObjectToDiagram()
 
   const tree = useMemo(() => buildTree(objects), [objects])
 
@@ -63,7 +68,21 @@ export function ObjectTree() {
   const handleQuickCreate = (type: ObjectType) => {
     const name = prompt(`New ${TYPE_LABELS[type]} name:`)
     if (!name?.trim()) return
-    createObject.mutate({ name: name.trim(), type })
+    createObject.mutate(
+      { name: name.trim(), type },
+      {
+        onSuccess: (obj) => {
+          if (diagramId) {
+            addToDiagram.mutate({
+              diagramId,
+              objectId: obj.id,
+              x: 100 + Math.random() * 400,
+              y: 100 + Math.random() * 300,
+            })
+          }
+        },
+      },
+    )
   }
 
   return (
