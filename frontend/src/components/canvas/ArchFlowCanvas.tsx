@@ -21,9 +21,11 @@ import { useCanvasStore } from '../../stores/canvas-store'
 import type { ModelObject, Connection } from '../../types/model'
 import { C4Edge } from './C4Edge'
 import { C4Node, type C4NodeData } from './C4Node'
+import { GroupNode } from './GroupNode'
 
 const nodeTypes: NodeTypes = {
   c4: C4Node as unknown as NodeTypes['c4'],
+  group: GroupNode as unknown as NodeTypes['group'],
 }
 
 const edgeTypes: EdgeTypes = {
@@ -43,7 +45,7 @@ function getPosition(obj: ModelObject, index: number): { x: number; y: number } 
 function objectToNode(obj: ModelObject, index: number): Node {
   return {
     id: obj.id,
-    type: 'c4',
+    type: obj.type === 'group' ? 'group' : 'c4',
     position: getPosition(obj, index),
     data: { object: obj } satisfies C4NodeData,
   }
