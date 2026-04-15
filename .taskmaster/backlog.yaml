@@ -1,0 +1,286 @@
+meta:
+  project: ArchFlow
+  updated: '2026-04-15'
+context:
+  active_epic: auth
+  in_progress: []
+  blocked: []
+  recent_completed: []
+  next_up:
+  - id: project-setup-001
+    title: Initialize monorepo structure (frontend/, backend/, docker/)
+    priority: critical
+    epic: project-setup
+  - id: project-setup-002
+    title: Set up Docker Compose (FastAPI, PostgreSQL, Redis, Caddy)
+    priority: critical
+    epic: project-setup
+  - id: backend-api-001
+    title: Set up FastAPI project with async SQLAlchemy and Alembic migrations
+    priority: critical
+    epic: backend-api
+  stats:
+    total: 15
+    done: 0
+    in_progress: 0
+    in_review: 0
+    todo: 15
+    blocked: 0
+    archived: 0
+  active_phase:
+    id: core-model
+    name: Core Model + Canvas
+    stats:
+      total: 15
+      todo: 15
+      in-progress: 0
+      in-review: 0
+      done: 0
+      blocked: 0
+      archived: 0
+    target_date: null
+    start_date: '2026-04-15'
+  stale: []
+epics:
+- id: project-setup
+  name: Project Setup & Infrastructure
+  status: active
+  description: Monorepo structure, Docker Compose, database setup, CI skeleton
+  created: 2026-04-15T11:34
+  tasks:
+  - id: project-setup-001
+    title: Initialize monorepo structure (frontend/, backend/, docker/)
+    status: todo
+    priority: critical
+    created: 2026-04-15T11:34
+    last_referenced: 2026-04-15T11:34
+    notes: Create directory structure, root package.json/pyproject.toml, .gitignore,
+      .editorconfig
+    estimate: S
+    phase: core-model
+  - id: project-setup-002
+    title: Set up Docker Compose (FastAPI, PostgreSQL, Redis, Caddy)
+    status: todo
+    priority: critical
+    created: 2026-04-15T11:34
+    last_referenced: 2026-04-15T11:34
+    notes: docker-compose.yml with backend, frontend, postgres, redis, caddy services.
+      Include health checks.
+    estimate: M
+    phase: core-model
+- id: backend-api
+  name: Backend API Foundation
+  status: active
+  description: FastAPI app, PostgreSQL models, CRUD endpoints for model objects and
+    connections
+  created: 2026-04-15T11:34
+  tasks:
+  - id: backend-api-001
+    title: Set up FastAPI project with async SQLAlchemy and Alembic migrations
+    status: todo
+    priority: critical
+    created: 2026-04-15T11:34
+    last_referenced: 2026-04-15T11:34
+    notes: FastAPI app factory, async SQLAlchemy engine, Alembic config, health endpoint,
+      CORS middleware
+    estimate: M
+    phase: core-model
+  - id: backend-api-002
+    title: Define PostgreSQL schema for model_objects and connections tables
+    status: todo
+    priority: critical
+    created: 2026-04-15T11:34
+    last_referenced: 2026-04-15T11:34
+    notes: 'SQLAlchemy models per spec section 9.2: model_objects (UUID, type enum,
+      parent_id, technology[], tags[], metadata JSONB, position_data) and connections
+      (source_id, target_id, label, protocol, direction enum, tags[])'
+    estimate: M
+    phase: core-model
+  - id: backend-api-003
+    title: Implement CRUD API for model objects
+    status: todo
+    priority: critical
+    created: 2026-04-15T11:34
+    last_referenced: 2026-04-15T11:34
+    notes: GET/POST/PUT/DELETE /objects, GET /objects/{id}/children, GET /objects/{id}/dependencies.
+      Pydantic schemas with validation.
+    estimate: L
+    phase: core-model
+  - id: backend-api-004
+    title: Implement CRUD API for connections
+    status: todo
+    priority: high
+    created: 2026-04-15T11:34
+    last_referenced: 2026-04-15T11:34
+    notes: GET/POST/PUT/DELETE /connections, GET /connections/between?src={}&tgt={}.
+      Validate source/target exist.
+    estimate: M
+    phase: core-model
+- id: frontend-canvas
+  name: Frontend Canvas
+  status: active
+  description: React + TypeScript app, React Flow canvas, object/connection rendering,
+    basic interactions
+  created: 2026-04-15T11:34
+  tasks:
+  - id: frontend-canvas-001
+    title: Scaffold React + TypeScript frontend with Vite, TailwindCSS, Zustand
+    status: todo
+    priority: critical
+    created: 2026-04-15T11:34
+    last_referenced: 2026-04-15T11:34
+    notes: Vite + React 18 + TypeScript, TailwindCSS, Zustand store skeleton, React
+      Router, API client setup
+    estimate: M
+    phase: core-model
+  - id: frontend-canvas-002
+    title: Implement React Flow canvas with custom C4 node types
+    status: todo
+    priority: critical
+    created: 2026-04-15T11:34
+    last_referenced: 2026-04-15T11:34
+    notes: React Flow (xyflow) canvas, custom node components for system/container/component/actor
+      types, custom edge component for connections. Display name, type icon, technology
+      tags.
+    estimate: L
+    phase: core-model
+  - id: frontend-canvas-003
+    title: Build object inspector sidebar (view/edit object properties)
+    status: todo
+    priority: high
+    created: 2026-04-15T11:34
+    last_referenced: 2026-04-15T11:34
+    notes: 'Right sidebar panel: select node to view/edit name, description, type,
+      technology, tags, owner_team, external_links, metadata. Save changes via API.'
+    estimate: M
+    phase: core-model
+  - id: frontend-canvas-004
+    title: Implement canvas interactions (add/delete/move objects, draw connections)
+    status: todo
+    priority: high
+    created: 2026-04-15T11:34
+    last_referenced: 2026-04-15T11:34
+    notes: Toolbar for adding new objects by type, delete selected, drag to move,
+      connect handles for drawing edges, context menu. Persist position changes.
+    estimate: L
+    phase: core-model
+  - id: frontend-canvas-005
+    title: Implement Zustand store with API integration for model state
+    status: todo
+    priority: high
+    created: 2026-04-15T11:34
+    last_referenced: 2026-04-15T11:34
+    notes: Zustand store for objects/connections, fetch on load, optimistic updates,
+      error handling. API client with typed endpoints.
+    estimate: M
+    phase: core-model
+- id: auth
+  name: Basic Authentication
+  status: active
+  description: JWT auth, login/register, single-user local mode
+  created: 2026-04-15T11:34
+  tasks:
+  - id: auth-001
+    title: Implement JWT authentication (register, login, token refresh)
+    status: todo
+    priority: high
+    created: 2026-04-15T11:34
+    last_referenced: 2026-04-15T11:34
+    notes: Users table, bcrypt password hashing, JWT access + refresh tokens, /auth/register,
+      /auth/login, /auth/refresh endpoints. Protected route middleware.
+    estimate: M
+    phase: core-model
+  - id: auth-002
+    title: Build login/register UI pages
+    status: todo
+    priority: high
+    created: 2026-04-15T11:34
+    last_referenced: 2026-04-15T11:34
+    notes: Login and register forms, token storage, auth context provider, protected
+      route wrapper, redirect to login if unauthenticated
+    estimate: M
+    phase: core-model
+- id: import-export
+  name: JSON Import/Export
+  status: active
+  description: Export full model as JSON, import JSON to create/restore models
+  created: 2026-04-15T11:34
+  tasks:
+  - id: import-export-001
+    title: Implement JSON model export endpoint and UI button
+    status: todo
+    priority: medium
+    created: 2026-04-15T11:34
+    last_referenced: 2026-04-15T11:34
+    notes: GET /export — returns full model (objects + connections) as JSON. Frontend
+      download button.
+    estimate: M
+    phase: core-model
+  - id: import-export-002
+    title: Implement JSON model import endpoint and UI upload
+    status: todo
+    priority: medium
+    created: 2026-04-15T11:34
+    last_referenced: 2026-04-15T11:34
+    notes: POST /import — accepts JSON model, validates schema, creates objects +
+      connections. Frontend file upload dialog with validation feedback.
+    estimate: M
+    phase: core-model
+phases:
+- id: core-model
+  name: Core Model + Canvas
+  status: active
+  description: Model CRUD (objects, connections), React Flow canvas, JSON import/export,
+    single-user local mode, PostgreSQL storage, basic auth
+  order: 1
+  created: 2026-04-15T11:34
+  start_date: '2026-04-15'
+- id: c4-zoom
+  name: C4 Zoom + Diagrams
+  status: planned
+  description: C4 level navigation, multiple diagram types, semantic zoom, diagram
+    CRUD, SVG/PNG export
+  order: 2
+  created: 2026-04-15T11:34
+- id: drafts-versioning
+  name: Drafts + Versioning
+  status: planned
+  description: Draft lifecycle (create, edit, merge), version snapshots, diff view,
+    conflict detection, activity log
+  order: 3
+  created: 2026-04-15T11:34
+- id: collaboration
+  name: Collaboration
+  status: planned
+  description: Multi-user, orgs/workspaces, roles/permissions, teams, comments, real-time
+    cursor sync, notifications
+  order: 4
+  created: 2026-04-15T11:34
+- id: api-mcp
+  name: API + MCP
+  status: planned
+  description: REST API (OpenAPI spec), MCP server (read + write tools), API keys,
+    webhooks, rate limiting
+  order: 5
+  created: 2026-04-15T11:34
+- id: ai-features
+  name: AI Features
+  status: planned
+  description: Description generation, architecture summary, impact analysis, text-to-diagram,
+    inaccuracy detection
+  order: 6
+  created: 2026-04-15T11:34
+- id: overlays-flows
+  name: Overlays + Flows
+  status: planned
+  description: Tag overlays, perspectives, dependency highlighting, flow step-through,
+    flow CRUD
+  order: 7
+  created: 2026-04-15T11:34
+- id: enterprise
+  name: Polish + Enterprise
+  status: planned
+  description: SSO/SAML, audit logs, scheduled versions, Structurizr/Mermaid import,
+    performance optimization, Helm chart
+  order: 8
+  created: 2026-04-15T11:34
