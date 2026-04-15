@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.v1.objects import router as objects_router
 from app.core.config import settings
 from app.core.database import engine
 
@@ -27,6 +28,8 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    app.include_router(objects_router, prefix="/api/v1")
 
     @app.get("/health")
     async def health():
