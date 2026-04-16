@@ -3,13 +3,15 @@ import {
   MarkerType,
   MiniMap,
   ReactFlow,
+  useEdgesState,
+  useNodesState,
+  useOnViewportChange,
+  useReactFlow,
   type Edge,
   type EdgeTypes,
   type Node,
   type NodeTypes,
   type Viewport,
-  useOnViewportChange,
-  useReactFlow,
 } from '@xyflow/react'
 import { useEffect, useMemo } from 'react'
 
@@ -78,7 +80,9 @@ interface CompareCanvasProps {
   draftId: string | null
   /** True when the mouse is over this side — only then it emits viewport changes. */
   isActive: boolean
-  viewport: Viewport
+  /** `null` means nobody has driven the viewport yet — each side fits
+   *  independently until the first user pan/zoom on either canvas. */
+  viewport: Viewport | null
   onViewportChange: (vp: Viewport) => void
   movedOnFork: Set<string>
   resizedOnFork: Set<string>
@@ -120,8 +124,9 @@ export function CompareCanvas({
   })
 
   // When the other side is driving, sync ours to the shared viewport.
+  // Skip when no viewport has been set yet so we don't stomp fitView.
   useEffect(() => {
-    if (!isActive) {
+    if (!isActive && viewport) {
       rf.setViewport(viewport, { duration: 0 })
     }
   }, [viewport, isActive, rf])
@@ -142,7 +147,7 @@ export function CompareCanvas({
     return map[id] ?? 'unchanged'
   }
 
-  const nodes: Node[] = useMemo(() => {
+  const computedNodes: Node[] = useMemo(() => {
     const objectMap = new Map(allObjects.map((o) => [o.id, o]))
     return diagramObjects
       .map((dObj) => {
@@ -194,7 +199,7 @@ export function CompareCanvas({
       .filter(Boolean) as Node[]
   }, [allObjects, diagramObjects, diff, movedOnFork, resizedOnFork, side])
 
-  const edges: Edge[] = useMemo(() => {
+  const computedEdges: Edge[] = useMemo(() => {
     const objectIds = new Set(diagramObjects.map((d) => d.object_id))
     return connections
       .filter((c) => objectIds.has(c.source_id) && objectIds.has(c.target_id))
@@ -214,9 +219,21 @@ export function CompareCanvas({
       })
   }, [connections, diagramObjects, diff])
 
+  // ReactFlow works best when the nodes/edges it owns are mutated through
+  // its change handlers — otherwise edges can fail to attach to handles
+  // during the initial paint. Mirror the computed arrays into its state.
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
+  useEffect(() => {
+    setNodes(computedNodes)
+  }, [computedNodes, setNodes])
+  useEffect(() => {
+    setEdges(computedEdges)
+  }, [computedEdges, setEdges])
+
   // Useful for diagrams that have 0 rows — otherwise the canvas looks empty
   // and confusing. We still render ReactFlow so pan/zoom keep working.
-  const isEmpty = nodes.length === 0
+  const isEmpty = computedNodes.length === 0
   if (!diagram) {
     return (
       <div className="flex items-center justify-center h-full text-sm text-neutral-600">
@@ -230,6 +247,8 @@ export function CompareCanvas({
       <ReactFlow
         nodes={nodes}
         edges={edges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         nodesDraggable={false}
@@ -239,8 +258,8 @@ export function CompareCanvas({
         zoomOnScroll
         zoomOnPinch
         panOnScroll={false}
-        fitView={!viewport.zoom}
-        defaultViewport={viewport}
+        fitView
+        fitViewOptions={{ padding: 0.25 }}
         proOptions={{ hideAttribution: true }}
         style={{ background: '#0a0a0a' }}
       >

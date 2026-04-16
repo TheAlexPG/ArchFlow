@@ -33,8 +33,9 @@ export function DraftDetailPage() {
   const discardDraft = useDiscardDraft()
 
   // Shared viewport across both compare canvases. Whichever side the mouse
-  // is currently over becomes the "driver" and the other follows.
-  const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, zoom: 1 })
+  // is currently over becomes the "driver" and the other follows. Null
+  // until the first pan/zoom — before that, both sides fit independently.
+  const [viewport, setViewport] = useState<Viewport | null>(null)
   const [activeSide, setActiveSide] = useState<'source' | 'fork' | null>(null)
 
   if (!draft) {

@@ -52,7 +52,10 @@ export function DiagramPage() {
   const isForkedDiagram = !!diagram?.draft_id
   const isLiveDiagram = !!diagram && !diagram.draft_id
 
-  const handleStartDraft = () => setDraftModalOpen(true)
+  const handleStartDraft = () => {
+    forkDraft.reset()
+    setDraftModalOpen(true)
+  }
 
   const submitDraft = (name: string, description: string | null) => {
     if (!diagramId) return
@@ -68,6 +71,15 @@ export function DiagramPage() {
       },
     )
   }
+
+  // Surface backend errors inside the modal so the user isn't left
+  // wondering why "Create draft" did nothing.
+  const draftError = forkDraft.error
+    ? (() => {
+        const e = forkDraft.error as { response?: { data?: { detail?: string } }; message?: string }
+        return e.response?.data?.detail || e.message || 'Failed to create draft'
+      })()
+    : null
 
   const handleApply = () => {
     if (!currentDraft) return
@@ -328,6 +340,7 @@ export function DiagramPage() {
         onSubmit={submitDraft}
         submitting={forkDraft.isPending}
         sourceName={diagram?.name}
+        errorMessage={draftError}
       />
     </ReactFlowProvider>
   )

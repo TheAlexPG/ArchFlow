@@ -8,6 +8,9 @@ interface CreateDraftModalProps {
   submitting?: boolean
   /** Name of the diagram being forked — shown as context. */
   sourceName?: string
+  /** If the mutation failed, surface the message so the user isn't stuck
+   *  staring at an unchanged modal. */
+  errorMessage?: string | null
 }
 
 export function CreateDraftModal({
@@ -16,6 +19,7 @@ export function CreateDraftModal({
   onSubmit,
   submitting,
   sourceName,
+  errorMessage,
 }: CreateDraftModalProps) {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -126,6 +130,21 @@ export function CreateDraftModal({
           boxSizing: 'border-box',
         }}
       />
+      {errorMessage && (
+        <div
+          style={{
+            marginTop: 12,
+            padding: '8px 10px',
+            fontSize: 12,
+            background: '#450a0a',
+            border: '1px solid #7f1d1d',
+            borderRadius: 6,
+            color: '#fca5a5',
+          }}
+        >
+          {errorMessage}
+        </div>
+      )}
     </Modal>
   )
 }
