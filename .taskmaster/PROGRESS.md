@@ -8,7 +8,7 @@
 |-----------|--------|----------|---------------|
 | Project Setup & Infrastructure | Active | 0/0 | — |
 | Backend API Foundation | Active | 0/0 | — |
-| Frontend Canvas | Active | 1/4 | — |
+| Frontend Canvas | Active | 1/6 | — |
 | Basic Authentication | Active | 0/0 | — |
 | JSON Import/Export | Active | 1/1 | — |
 | Model Objects Tree Panel | Planned | 0/0 | — |

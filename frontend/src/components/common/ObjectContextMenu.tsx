@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import {
   useAddObjectToDiagram,
@@ -16,8 +17,9 @@ interface ObjectContextMenuProps {
 
 export function ObjectContextMenu({ object, diagramId }: ObjectContextMenuProps) {
   const [open, setOpen] = useState(false)
-  const [position, setPosition] = useState<'right' | 'left'>('right')
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
   const { data: objectDiagrams = [] } = useObjectDiagrams(object.id)
   const createObject = useCreateObject()
@@ -25,15 +27,39 @@ export function ObjectContextMenu({ object, diagramId }: ObjectContextMenuProps)
   const deleteObject = useDeleteObject()
   const { selectNode } = useCanvasStore()
 
+  // Position menu near button, flip if near edges
+  useLayoutEffect(() => {
+    if (!open || !btnRef.current) return
+    const rect = btnRef.current.getBoundingClientRect()
+    const menuWidth = 200
+    const menuHeight = 250
+    let left = rect.right + 4
+    let top = rect.top
+    if (left + menuWidth > window.innerWidth) {
+      left = rect.left - menuWidth - 4
+    }
+    if (top + menuHeight > window.innerHeight) {
+      top = window.innerHeight - menuHeight - 8
+    }
+    setCoords({ top, left })
+  }, [open])
+
   // Close on outside click
   useEffect(() => {
     if (!open) return
     const handler = (e: MouseEvent) => {
-      if (btnRef.current && !btnRef.current.contains(e.target as Node)) {
+      const target = e.target as Node
+      if (
+        btnRef.current &&
+        !btnRef.current.contains(target) &&
+        menuRef.current &&
+        !menuRef.current.contains(target)
+      ) {
         setOpen(false)
       }
     }
-    window.addEventListener('click', handler)
+    // Delay to avoid catching the click that opened the menu
+    setTimeout(() => window.addEventListener('click', handler), 0)
     return () => window.removeEventListener('click', handler)
   }, [open])
 
@@ -85,14 +111,11 @@ export function ObjectContextMenu({ object, diagramId }: ObjectContextMenuProps)
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation()
-    // Detect position — if near right edge, open menu to the left
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-    setPosition(window.innerWidth - rect.right < 220 ? 'left' : 'right')
     setOpen(!open)
   }
 
   return (
-    <div style={{ position: 'relative', display: 'inline-block' }}>
+    <>
       <button
         ref={btnRef}
         onClick={handleClick}
@@ -110,27 +133,27 @@ export function ObjectContextMenu({ object, diagramId }: ObjectContextMenuProps)
         ⋯
       </button>
 
-      {open && (
+      {open && coords && createPortal(
         <div
+          ref={menuRef}
           onClick={(e) => e.stopPropagation()}
           style={{
-            position: 'absolute',
-            top: '100%',
-            [position]: 0,
-            marginTop: 4,
-            minWidth: 180,
+            position: 'fixed',
+            top: coords.top,
+            left: coords.left,
+            minWidth: 200,
             background: '#1a1a1a',
             border: '1px solid #333',
             borderRadius: 6,
             boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
-            zIndex: 100,
+            zIndex: 10000,
             padding: 4,
           }}
         >
           <MenuItem icon="🎯" label="View in model" onClick={handleViewInModel} />
-          <MenuItem icon="🔗" label="View dependencies" onClick={() => alert('Coming in Phase 7 (Overlays + Flows)')} />
+          <MenuItem icon="🔗" label="View dependencies" onClick={() => { alert('Coming in Phase 7 (Overlays + Flows)'); setOpen(false) }} />
           <MenuItem icon="⧉" label="Duplicate object" onClick={handleDuplicate} />
-          <MenuItem icon="✨" label="Get insights" onClick={() => alert('Coming in Phase 6 (AI Features)')} />
+          <MenuItem icon="✨" label="Get insights" onClick={() => { alert('Coming in Phase 6 (AI Features)'); setOpen(false) }} />
           <div style={{ height: 1, background: '#333', margin: '4px 0' }} />
           <MenuItem
             icon="🗑"
@@ -138,9 +161,10 @@ export function ObjectContextMenu({ object, diagramId }: ObjectContextMenuProps)
             onClick={handleDelete}
             danger
           />
-        </div>
+        </div>,
+        document.body,
       )}
-    </div>
+    </>
   )
 }
 

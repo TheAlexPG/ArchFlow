@@ -76,7 +76,7 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
   const deleteConnection = useDeleteConnection()
   const saveDiagramPosition = useSaveDiagramPosition()
   const { selectNode, selectEdge } = useCanvasStore()
-  const { setNodes, setEdges, getNodes } = useReactFlow()
+  const { setNodes, setEdges, getNodes, getEdges } = useReactFlow()
   const prevKeyRef = useRef<string>('')
   const prevConnsRef = useRef<string>('')
 
@@ -115,11 +115,13 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     if (key === prevKeyRef.current) return
     prevKeyRef.current = key
 
-    // Preserve dragged positions
+    // Preserve dragged positions and selection state
     const currentNodes = getNodes()
     const merged = nodes.map((n) => {
       const existing = currentNodes.find((cn) => cn.id === n.id)
-      if (existing) return { ...n, position: existing.position }
+      if (existing) {
+        return { ...n, position: existing.position, selected: existing.selected }
+      }
       return n
     })
     setNodes(merged)
@@ -140,8 +142,15 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
       .join(',')
     if (key === prevConnsRef.current) return
     prevConnsRef.current = key
-    setEdges(filtered.map(connectionToEdge))
-  }, [connections, diagramObjects, setEdges])
+    // Preserve selection state across re-renders
+    const currentEdges = getEdges()
+    setEdges(
+      filtered.map(connectionToEdge).map((e) => {
+        const existing = currentEdges.find((ce) => ce.id === e.id)
+        return existing?.selected ? { ...e, selected: true } : e
+      }),
+    )
+  }, [connections, diagramObjects, setEdges, getEdges])
 
   const onNodeDragStop = useCallback(
     (_event: NodeDragEvent, node: Node) => {

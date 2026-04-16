@@ -23,11 +23,11 @@ context:
     completed: 2026-04-16T11:19
   next_up: []
   stats:
-    total: 29
+    total: 31
     done: 22
     in_progress: 0
     in_review: 0
-    todo: 7
+    todo: 9
     blocked: 0
     archived: 21
   active_phase:
@@ -332,6 +332,30 @@ epics:
       2, 3...) with step descriptions. Active step is highlighted.'
     estimate: M
     phase: overlays-flows
+  - id: frontend-canvas-011
+    title: Implement "View dependencies" visual overlay (highlight upstream/downstream)
+    status: todo
+    priority: medium
+    created: 2026-04-16T11:30
+    last_referenced: 2026-04-16T11:30
+    notes: 'IcePanel: context menu "View dependencies" highlights all upstream/downstream
+      connected objects on canvas, dims others. Backend API /objects/{id}/dependencies
+      already exists. Need: visual overlay with dim/highlight states, configurable
+      depth (1/2/n hops).'
+    estimate: M
+    phase: overlays-flows
+  - id: frontend-canvas-012
+    title: Implement "Get insights" AI feature for object analysis
+    status: todo
+    priority: low
+    created: 2026-04-16T11:30
+    last_referenced: 2026-04-16T11:30
+    notes: 'IcePanel: context menu "Get insights" triggers AI analysis of object —
+      generates description, suggests related objects, detects potential issues. Backend
+      needs LLM integration (per spec section 8). Frontend modal/panel with streaming
+      AI response.'
+    estimate: M
+    phase: ai-features
 - id: auth
   name: Basic Authentication
   status: active
