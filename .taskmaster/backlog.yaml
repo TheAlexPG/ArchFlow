@@ -2,15 +2,18 @@ meta:
   project: ArchFlow
   updated: '2026-04-16'
 context:
-  active_epic: popup-picker
+  active_epic: edge-details
   in_progress:
-  - id: popup-picker-001
-    title: Build popup object picker replacing left sidebar tree
-    epic: popup-picker
+  - id: edge-details-004
+    title: Add "Via" support — connections passing through intermediate objects
+    epic: edge-details
     branch: ''
     locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
   blocked: []
   recent_completed:
+  - id: popup-picker-001
+    title: Build popup object picker replacing left sidebar tree
+    completed: 2026-04-16T11:22
   - id: c4-drill-down-002
     title: Show zoom indicator badge on nodes that have child diagrams
     completed: 2026-04-16T11:21
@@ -23,17 +26,13 @@ context:
   - id: node-customization-001
     title: Add node resize handles (drag corners to resize)
     completed: 2026-04-16T11:17
-  - id: node-customization-002
-    title: Improve visual styling per object type (actor/system/external distinct
-      looks)
-    completed: 2026-04-16T11:16
   next_up: []
   stats:
     total: 29
-    done: 20
+    done: 21
     in_progress: 1
     in_review: 0
-    todo: 8
+    todo: 7
     blocked: 0
     archived: 21
   active_phase:
@@ -41,10 +40,10 @@ context:
     name: C4 Zoom + Diagrams
     stats:
       total: 22
-      todo: 1
+      todo: 0
       in-progress: 1
       in-review: 0
-      done: 20
+      done: 21
       blocked: 0
       archived: 0
     target_date: null
@@ -659,10 +658,10 @@ epics:
   tasks:
   - id: popup-picker-001
     title: Build popup object picker replacing left sidebar tree
-    status: in-progress
+    status: done
     priority: high
     created: 2026-04-16T11:08
-    last_referenced: 2026-04-16T11:21
+    last_referenced: 2026-04-16T11:22
     notes: 'IcePanel: + button opens floating popup with search, object list (with
       type icons), tooltip on hover showing type and parent, quick-create buttons
       (System/Actor/Group) at bottom. Left sidebar becomes optional/collapsible to
@@ -670,7 +669,7 @@ epics:
     estimate: L
     phase: c4-zoom
     started: 2026-04-16T11:21
-    locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
+    completed: 2026-04-16T11:22
 - id: c4-drill-down
   name: C4 Zoom Drill-Down Navigation
   status: planned
@@ -753,14 +752,16 @@ epics:
     completed: 2026-04-16T11:15
   - id: edge-details-004
     title: Add "Via" support — connections passing through intermediate objects
-    status: todo
+    status: in-progress
     priority: medium
     created: 2026-04-16T11:08
-    last_referenced: 2026-04-16T11:08
+    last_referenced: 2026-04-16T11:22
     notes: 'IcePanel: connection can route through "Via" objects. Stored as ordered
       array of object IDs. Visual edge routes via those waypoints.'
     estimate: M
     phase: c4-zoom
+    started: 2026-04-16T11:22
+    locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
   - id: edge-details-005
     title: Add Direction Flip button and bidirectional edge rendering
     status: done

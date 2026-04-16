@@ -16,21 +16,36 @@
 | Groups & Visual Grouping | Planned | 1/2 | — |
 | Global Search & Navigation | Planned | 2/2 | — |
 | Home / Overview Page | Planned | 3/3 | — |
-| Popup Object Picker | Planned | 0/1 | Build popup object picker replacing left sidebar tree |
+| Popup Object Picker | Planned | 1/1 | — |
 | C4 Zoom Drill-Down Navigation | Planned | 2/2 | — |
-| Edge Details & Customization | Planned | 4/5 | — |
+| Edge Details & Customization | Planned | 4/5 | Add "Via" support — connections passing through intermediate objects |
 | Node Customization & Styling | Planned | 2/2 | — |
 
-**Active Phase:** C4 Zoom + Diagrams (20/22 done)
+**Active Phase:** C4 Zoom + Diagrams (21/22 done)
 **Phases:** done Core Model + Canvas | >> C4 Zoom + Diagrams | ... Drafts + Versioning | ... Collaboration | ... API + MCP | ... AI Features | ... Overlays + Flows | ... Polish + Enterprise
 
-**In Progress:** popup-picker-001 Build popup object picker replacing left sidebar tree
+**In Progress:** edge-details-004 Add "Via" support — connections passing through intermediate objects
 **Blocked:** —
 **Next Up:** —
 
 ---
 
 ## Changelog
+
+### 2026-04-16 — Work session
+**Done:**
+- Popup via + button with search, existing objects list, quick-create buttons. Left tree now collapsible via top bar toggle.
+
+**Decisions:**
+- None
+
+**Issues:**
+- None
+
+**Tasks touched:** N/A
+
+---
+
 
 ### 2026-04-16 — Work session
 **Done:**

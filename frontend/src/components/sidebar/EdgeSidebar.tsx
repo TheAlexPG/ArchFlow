@@ -170,6 +170,17 @@ export function EdgeSidebar() {
           />
         </Field>
 
+        {/* Via (pass-through objects) */}
+        <Field label="Via (pass-through)">
+          <ViaSelector
+            selected={conn.via_object_ids || []}
+            sourceId={conn.source_id}
+            targetId={conn.target_id}
+            allObjects={objects}
+            onChange={(ids) => handleUpdate({ via_object_ids: ids })}
+          />
+        </Field>
+
         {/* Delete */}
         <button
           onClick={handleDelete}
@@ -187,6 +198,76 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     <div>
       <div className="text-xs text-neutral-500 mb-1">{label}</div>
       {children}
+    </div>
+  )
+}
+
+function ViaSelector({
+  selected,
+  sourceId,
+  targetId,
+  allObjects,
+  onChange,
+}: {
+  selected: string[]
+  sourceId: string
+  targetId: string
+  allObjects: { id: string; name: string }[]
+  onChange: (ids: string[]) => void
+}) {
+  const [showPicker, setShowPicker] = useState(false)
+  const available = allObjects.filter(
+    (o) => o.id !== sourceId && o.id !== targetId && !selected.includes(o.id),
+  )
+
+  const selectedObjects = selected
+    .map((id) => allObjects.find((o) => o.id === id))
+    .filter((o): o is { id: string; name: string } => !!o)
+
+  return (
+    <div>
+      <div className="flex flex-wrap gap-1 mb-1">
+        {selectedObjects.map((obj) => (
+          <span
+            key={obj.id}
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-300 text-xs border border-neutral-700"
+          >
+            {obj.name}
+            <button
+              onClick={() => onChange(selected.filter((id) => id !== obj.id))}
+              className="text-neutral-500 hover:text-neutral-300"
+            >
+              ×
+            </button>
+          </span>
+        ))}
+      </div>
+      <button
+        onClick={() => setShowPicker(!showPicker)}
+        className="text-xs text-blue-400 hover:text-blue-300"
+      >
+        {showPicker ? 'Cancel' : '+ Select objects'}
+      </button>
+      {showPicker && (
+        <div className="mt-1 max-h-32 overflow-y-auto bg-neutral-800 border border-neutral-700 rounded">
+          {available.length === 0 ? (
+            <div className="text-xs text-neutral-600 p-2">No available objects</div>
+          ) : (
+            available.map((obj) => (
+              <button
+                key={obj.id}
+                onClick={() => {
+                  onChange([...selected, obj.id])
+                  setShowPicker(false)
+                }}
+                className="block w-full text-left text-xs px-2 py-1 text-neutral-300 hover:bg-neutral-700"
+              >
+                {obj.name}
+              </button>
+            ))
+          )}
+        </div>
+      )}
     </div>
   )
 }
