@@ -14,8 +14,11 @@ from app.models.activity_log import ActivityAction, ActivityLog, ActivityTargetT
 
 
 # Fields we deliberately don't record as "changed" — they're bookkeeping, not
-# user-visible state, so showing them in the history tab is noise.
-_IGNORED_DIFF_FIELDS = {"id", "created_at", "updated_at"}
+# user-visible state, so showing them in the history tab is noise. Covers
+# both SQL column names and the Python attribute names (ModelObject uses
+# `metadata_` as the attribute for a column whose SQL name is "metadata",
+# to avoid colliding with SQLAlchemy's reserved `Base.metadata`).
+_IGNORED_DIFF_FIELDS = {"id", "created_at", "updated_at", "metadata", "metadata_"}
 
 
 def _snapshot(obj: Any) -> dict:
@@ -24,17 +27,22 @@ def _snapshot(obj: Any) -> dict:
         return {}
     result = {}
     for col in obj.__table__.columns:
-        name = col.name
-        if name in _IGNORED_DIFF_FIELDS:
+        # Read via the Python attribute name (`col.key`), not the SQL
+        # column name — otherwise columns renamed at mapping time (e.g.
+        # `metadata_` → SQL `metadata`) would shadow `Base.metadata`
+        # and we'd try to JSON-serialize a SQLAlchemy MetaData instance.
+        attr_name = col.key
+        sql_name = col.name
+        if attr_name in _IGNORED_DIFF_FIELDS or sql_name in _IGNORED_DIFF_FIELDS:
             continue
-        value = getattr(obj, name, None)
+        value = getattr(obj, attr_name, None)
         # enums → their string value; UUIDs → str; everything else is
         # already JSON-safe for JSONB (dicts/lists/primitives).
         if hasattr(value, "value"):
             value = value.value
         elif isinstance(value, uuid.UUID):
             value = str(value)
-        result[name] = value
+        result[attr_name] = value
     return result
 
 
