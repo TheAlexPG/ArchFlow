@@ -10,14 +10,17 @@ class CommentCreate(BaseModel):
     target_type: CommentTargetType
     target_id: uuid.UUID
     comment_type: CommentType = CommentType.NOTE
-    body: str = Field(..., min_length=1, max_length=8000)
+    # Allow empty body on create — canvas pins are dropped first and the
+    # user types the body immediately after. Empty is valid; the UI shows
+    # the editor anyway.
+    body: str = Field(default="", max_length=8000)
     position_x: float | None = None
     position_y: float | None = None
 
 
 class CommentUpdate(BaseModel):
     comment_type: CommentType | None = None
-    body: str | None = Field(None, min_length=1, max_length=8000)
+    body: str | None = Field(None, max_length=8000)
     resolved: bool | None = None
     position_x: float | None = None
     position_y: float | None = None
