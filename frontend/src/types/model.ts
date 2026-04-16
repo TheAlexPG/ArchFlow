@@ -75,6 +75,7 @@ export interface Diagram {
   description: string | null
   scope_object_id: string | null
   settings: Record<string, unknown> | null
+  pinned: boolean
   created_at: string
   updated_at: string
 }

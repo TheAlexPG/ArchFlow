@@ -1,7 +1,7 @@
 import enum
 import uuid
 
-from sqlalchemy import Enum, ForeignKey, Index, String, Text
+from sqlalchemy import Boolean, Enum, ForeignKey, Index, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -26,6 +26,7 @@ class Diagram(Base, UUIDMixin, TimestampMixin):
         UUID(as_uuid=True), ForeignKey("model_objects.id", ondelete="SET NULL"), default=None
     )
     settings: Mapped[dict | None] = mapped_column(JSONB, default=None)
+    pinned: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Relationships
     scope_object = relationship("ModelObject", foreign_keys=[scope_object_id])

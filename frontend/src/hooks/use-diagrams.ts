@@ -17,6 +17,7 @@ export interface Diagram {
   description: string | null
   scope_object_id: string | null
   settings: Record<string, unknown> | null
+  pinned: boolean
   created_at: string
   updated_at: string
 }
@@ -70,6 +71,17 @@ export function useDeleteDiagram() {
   return useMutation({
     mutationFn: async (id: string) => {
       await api.delete(`/diagrams/${id}`)
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['diagrams'] }),
+  })
+}
+
+export function useUpdateDiagram() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, ...data }: { id: string; pinned?: boolean; name?: string; description?: string | null }) => {
+      const { data: result } = await api.put<Diagram>(`/diagrams/${id}`, data)
+      return result
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['diagrams'] }),
   })

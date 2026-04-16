@@ -20,6 +20,7 @@ class DiagramUpdate(BaseModel):
     description: str | None = None
     scope_object_id: uuid.UUID | None = None
     settings: dict | None = None
+    pinned: bool | None = None
 
 
 class DiagramResponse(BaseModel):
@@ -29,6 +30,7 @@ class DiagramResponse(BaseModel):
     description: str | None = None
     scope_object_id: uuid.UUID | None = None
     settings: dict | None = None
+    pinned: bool = False
     created_at: datetime
     updated_at: datetime
 

@@ -4,6 +4,7 @@ import { AuthPage } from './components/auth/AuthPage'
 import { ActivityPage } from './pages/ActivityPage'
 import { ConnectionsPage } from './pages/ConnectionsPage'
 import { DiagramPage } from './pages/DiagramPage'
+import { DiagramsPage } from './pages/DiagramsPage'
 import { DraftDetailPage } from './pages/DraftDetailPage'
 import { DraftsPage } from './pages/DraftsPage'
 import { ObjectsPage } from './pages/ObjectsPage'
@@ -57,7 +58,7 @@ function App() {
             path="/diagrams"
             element={
               <ProtectedRoute>
-                <OverviewPage />
+                <DiagramsPage />
               </ProtectedRoute>
             }
           />
