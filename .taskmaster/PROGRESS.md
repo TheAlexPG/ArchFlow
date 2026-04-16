@@ -12,25 +12,40 @@
 | Basic Authentication | Active | 0/0 | — |
 | JSON Import/Export | Active | 1/1 | — |
 | Model Objects Tree Panel | Planned | 0/0 | — |
-| Object Detail Sidebar (Tabbed) | Planned | 3/7 | — |
+| Object Detail Sidebar (Tabbed) | Planned | 3/7 | Add "Belongs to" (parent) and "In X diagrams" references in object sidebar |
 | Groups & Visual Grouping | Planned | 1/2 | — |
 | Global Search & Navigation | Planned | 2/2 | — |
 | Home / Overview Page | Planned | 3/3 | — |
 | Popup Object Picker | Planned | 0/1 | — |
 | C4 Zoom Drill-Down Navigation | Planned | 0/2 | — |
 | Edge Details & Customization | Planned | 4/5 | — |
-| Node Customization & Styling | Planned | 1/2 | Add node resize handles (drag corners to resize) |
+| Node Customization & Styling | Planned | 2/2 | — |
 
-**Active Phase:** C4 Zoom + Diagrams (16/22 done)
+**Active Phase:** C4 Zoom + Diagrams (17/22 done)
 **Phases:** done Core Model + Canvas | >> C4 Zoom + Diagrams | ... Drafts + Versioning | ... Collaboration | ... API + MCP | ... AI Features | ... Overlays + Flows | ... Polish + Enterprise
 
-**In Progress:** node-customization-001 Add node resize handles (drag corners to resize)
+**In Progress:** detail-sidebar-006 Add "Belongs to" (parent) and "In X diagrams" references in object sidebar
 **Blocked:** —
 **Next Up:** —
 
 ---
 
 ## Changelog
+
+### 2026-04-16 — Work session
+**Done:**
+- NodeResizer on C4Node and GroupNode with blue handles when selected. Session-only for now; persistence of width/height requires API extension (followup).
+
+**Decisions:**
+- None
+
+**Issues:**
+- Resize is visual only - width/height not yet persisted to backend (diagram_objects has the columns, just need to wire up)
+
+**Tasks touched:** N/A
+
+---
+
 
 ### 2026-04-16 — Work session
 **Done:**

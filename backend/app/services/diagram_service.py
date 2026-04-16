@@ -68,6 +68,18 @@ async def get_diagram_objects(
     return list(result.scalars().all())
 
 
+async def get_diagrams_containing_object(
+    db: AsyncSession, object_id: uuid.UUID
+) -> list[Diagram]:
+    result = await db.execute(
+        select(Diagram)
+        .join(DiagramObject, DiagramObject.diagram_id == Diagram.id)
+        .where(DiagramObject.object_id == object_id)
+        .distinct()
+    )
+    return list(result.scalars().all())
+
+
 async def add_object_to_diagram(
     db: AsyncSession, diagram_id: uuid.UUID, data: DiagramObjectCreate
 ) -> DiagramObject:

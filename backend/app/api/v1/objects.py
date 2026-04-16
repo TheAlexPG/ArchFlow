@@ -4,8 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.schemas.diagram import DiagramResponse
 from app.schemas.object import ObjectCreate, ObjectResponse, ObjectUpdate
-from app.services import object_service
+from app.services import diagram_service, object_service
 
 router = APIRouter(prefix="/objects", tags=["objects"])
 
@@ -67,6 +68,16 @@ async def get_children(object_id: uuid.UUID, db: AsyncSession = Depends(get_db))
         raise HTTPException(status_code=404, detail="Object not found")
     children = await object_service.get_children(db, object_id)
     return [ObjectResponse.from_model(c) for c in children]
+
+
+@router.get("/{object_id}/diagrams", response_model=list[DiagramResponse])
+async def get_object_diagrams(
+    object_id: uuid.UUID, db: AsyncSession = Depends(get_db)
+):
+    obj = await object_service.get_object(db, object_id)
+    if not obj:
+        raise HTTPException(status_code=404, detail="Object not found")
+    return await diagram_service.get_diagrams_containing_object(db, object_id)
 
 
 @router.get("/{object_id}/dependencies")

@@ -2,15 +2,18 @@ meta:
   project: ArchFlow
   updated: '2026-04-16'
 context:
-  active_epic: node-customization
+  active_epic: detail-sidebar
   in_progress:
-  - id: node-customization-001
-    title: Add node resize handles (drag corners to resize)
-    epic: node-customization
+  - id: detail-sidebar-006
+    title: Add "Belongs to" (parent) and "In X diagrams" references in object sidebar
+    epic: detail-sidebar
     branch: ''
     locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
   blocked: []
   recent_completed:
+  - id: node-customization-001
+    title: Add node resize handles (drag corners to resize)
+    completed: 2026-04-16T11:17
   - id: node-customization-002
     title: Improve visual styling per object type (actor/system/external distinct
       looks)
@@ -24,16 +27,13 @@ context:
   - id: edge-details-003
     title: Add edge label size slider and multi-line label rendering
     completed: 2026-04-16T11:15
-  - id: edge-details-005
-    title: Add Direction Flip button and bidirectional edge rendering
-    completed: 2026-04-16T11:15
   next_up: []
   stats:
     total: 29
-    done: 16
+    done: 17
     in_progress: 1
     in_review: 0
-    todo: 12
+    todo: 11
     blocked: 0
     archived: 21
   active_phase:
@@ -41,10 +41,10 @@ context:
     name: C4 Zoom + Diagrams
     stats:
       total: 22
-      todo: 5
+      todo: 4
       in-progress: 1
       in-review: 0
-      done: 16
+      done: 17
       blocked: 0
       archived: 0
     target_date: null
@@ -521,15 +521,17 @@ epics:
     phase: collaboration
   - id: detail-sidebar-006
     title: Add "Belongs to" (parent) and "In X diagrams" references in object sidebar
-    status: todo
+    status: in-progress
     priority: medium
     created: 2026-04-16T11:08
-    last_referenced: 2026-04-16T11:08
+    last_referenced: 2026-04-16T11:18
     notes: 'Extend cross-references: show parent object name (clickable to navigate),
       list of diagrams this object is used in (with links). Needs backend endpoint
       to query diagrams containing an object.'
     estimate: S
     phase: c4-zoom
+    started: 2026-04-16T11:18
+    locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
   - id: detail-sidebar-007
     title: Add "note" comment type alongside question/inaccurate/idea
     status: todo
@@ -774,16 +776,16 @@ epics:
   tasks:
   - id: node-customization-001
     title: Add node resize handles (drag corners to resize)
-    status: in-progress
+    status: done
     priority: medium
     created: 2026-04-16T11:08
-    last_referenced: 2026-04-16T11:16
+    last_referenced: 2026-04-16T11:17
     notes: React Flow NodeResizer component. Store width/height in diagram_objects.width/height.
       Useful for groups and large labels.
     estimate: M
     phase: c4-zoom
     started: 2026-04-16T11:16
-    locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
+    completed: 2026-04-16T11:17
   - id: node-customization-002
     title: Improve visual styling per object type (actor/system/external distinct
       looks)

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useConnections, useDeleteObject, useObject, useObjects, useUpdateObject } from '../../hooks/use-api'
+import { useObjectDiagrams } from '../../hooks/use-diagrams'
 import { useCanvasStore } from '../../stores/canvas-store'
 import type { ObjectScope, ObjectStatus, ObjectType } from '../../types/model'
 import { STATUS_COLORS, TYPE_LABELS } from '../canvas/node-utils'
@@ -209,14 +211,31 @@ export function ObjectSidebar() {
 function CrossReferences({ objectId }: { objectId: string }) {
   const { data: objects = [] } = useObjects()
   const { data: connections = [] } = useConnections()
+  const { data: objectDiagrams = [] } = useObjectDiagrams(objectId)
 
+  const obj = objects.find((o) => o.id === objectId)
+  const parent = obj?.parent_id ? objects.find((o) => o.id === obj.parent_id) : null
   const children = objects.filter((o) => o.parent_id === objectId)
   const connCount = connections.filter(
     (c) => c.source_id === objectId || c.target_id === objectId,
   ).length
 
+  const { selectNode } = useCanvasStore()
+  const navigate = useNavigate()
+
   return (
     <div className="space-y-1.5">
+      {parent && (
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-neutral-500">Belongs to</span>
+          <button
+            onClick={() => selectNode(parent.id)}
+            className="text-blue-400 hover:text-blue-300"
+          >
+            {parent.name}
+          </button>
+        </div>
+      )}
       <div className="flex items-center justify-between text-xs">
         <span className="text-neutral-500">Contains</span>
         <span className="text-neutral-300">{children.length} objects</span>
@@ -224,6 +243,27 @@ function CrossReferences({ objectId }: { objectId: string }) {
       <div className="flex items-center justify-between text-xs">
         <span className="text-neutral-500">Connections</span>
         <span className="text-neutral-300">{connCount}</span>
+      </div>
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-neutral-500">Diagrams</span>
+        {objectDiagrams.length > 0 ? (
+          <div className="flex flex-col gap-0.5 items-end">
+            {objectDiagrams.slice(0, 3).map((d) => (
+              <button
+                key={d.id}
+                onClick={() => navigate(`/diagram/${d.id}`)}
+                className="text-blue-400 hover:text-blue-300 truncate max-w-[160px]"
+              >
+                {d.name}
+              </button>
+            ))}
+            {objectDiagrams.length > 3 && (
+              <span className="text-neutral-600">+{objectDiagrams.length - 3} more</span>
+            )}
+          </div>
+        ) : (
+          <span className="text-neutral-600">None</span>
+        )}
       </div>
     </div>
   )

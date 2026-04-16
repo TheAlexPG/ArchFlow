@@ -42,6 +42,17 @@ export function useCreateDiagram() {
   })
 }
 
+export function useObjectDiagrams(objectId: string | undefined) {
+  return useQuery({
+    queryKey: ['object-diagrams', objectId],
+    queryFn: async () => {
+      const { data } = await api.get<Diagram[]>(`/objects/${objectId}/diagrams`)
+      return data
+    },
+    enabled: !!objectId,
+  })
+}
+
 export function useDiagram(id: string | undefined) {
   return useQuery({
     queryKey: ['diagrams', id],
