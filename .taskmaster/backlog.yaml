@@ -4,11 +4,15 @@ meta:
 context:
   active_epic: detail-sidebar
   in_progress:
+  - id: frontend-canvas-008
+    title: Implement color-coding overlays based on active filter (tag/tech/status/team)
+    epic: frontend-canvas
+    branch: ''
+    locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
   - id: frontend-canvas-012
     title: Implement "Get insights" AI feature for object analysis
     epic: frontend-canvas
     branch: ''
-    locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
   - id: detail-sidebar-004
     title: Implement per-object history tab (change log scoped to selected object)
     epic: detail-sidebar
@@ -26,24 +30,32 @@ context:
   - id: frontend-canvas-011
     title: Implement "View dependencies" visual overlay (highlight upstream/downstream)
     completed: 2026-04-16T12:59
-  next_up: []
+  next_up:
+  - id: frontend-canvas-009
+    title: Add flow alternative paths (branching) support
+    priority: medium
+    epic: frontend-canvas
+  - id: frontend-canvas-010
+    title: Show numbered step labels on canvas connections during flow playback
+    priority: medium
+    epic: frontend-canvas
   stats:
     total: 9
     done: 1
     in_progress: 1
-    in_review: 3
-    todo: 4
+    in_review: 4
+    todo: 3
     blocked: 0
     archived: 43
   active_phase:
-    id: ai-features
-    name: AI Features
+    id: overlays-flows
+    name: Overlays + Flows
     stats:
-      total: 1
-      todo: 0
+      total: 5
+      todo: 3
       in-progress: 1
       in-review: 0
-      done: 0
+      done: 1
       blocked: 0
       archived: 0
     target_date: null
@@ -309,15 +321,17 @@ epics:
     archived: 2026-04-16T12:59
   - id: frontend-canvas-008
     title: Implement color-coding overlays based on active filter (tag/tech/status/team)
-    status: todo
+    status: in-progress
     priority: medium
     created: 2026-04-15T11:43
-    last_referenced: 2026-04-15T11:43
+    last_referenced: 2026-04-16T13:14
     notes: When a filter tab is active, color-code nodes by the selected dimension.
       Non-matching nodes dim to ~30% opacity. Saved as named perspectives per spec
       section 3.2.
     estimate: L
     phase: overlays-flows
+    started: 2026-04-16T13:14
+    locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
   - id: frontend-canvas-009
     title: Add flow alternative paths (branching) support
     status: todo
@@ -355,10 +369,10 @@ epics:
     completed: 2026-04-16T12:59
   - id: frontend-canvas-012
     title: Implement "Get insights" AI feature for object analysis
-    status: in-progress
+    status: in-review
     priority: low
     created: 2026-04-16T11:30
-    last_referenced: 2026-04-16T13:11
+    last_referenced: 2026-04-16T13:13
     notes: 'IcePanel: context menu "Get insights" triggers AI analysis of object —
       generates description, suggests related objects, detects potential issues. Backend
       needs LLM integration (per spec section 8). Frontend modal/panel with streaming
@@ -366,7 +380,6 @@ epics:
     estimate: M
     phase: ai-features
     started: 2026-04-16T13:11
-    locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
 - id: auth
   name: Basic Authentication
   status: active
@@ -930,19 +943,21 @@ phases:
   completed: 2026-04-16T13:11
 - id: ai-features
   name: AI Features
-  status: active
+  status: done
   description: Description generation, architecture summary, impact analysis, text-to-diagram,
     inaccuracy detection
   order: 6
   created: 2026-04-15T11:34
   start_date: '2026-04-16'
+  completed: 2026-04-16T13:13
 - id: overlays-flows
   name: Overlays + Flows
-  status: planned
+  status: active
   description: Tag overlays, perspectives, dependency highlighting, flow step-through,
     flow CRUD
   order: 7
   created: 2026-04-15T11:34
+  start_date: '2026-04-16'
 - id: enterprise
   name: Polish + Enterprise
   status: planned

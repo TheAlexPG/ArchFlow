@@ -32,6 +32,7 @@ import { ActorNode } from './ActorNode'
 import { C4Node, type C4NodeData } from './C4Node'
 import { ExternalSystemNode } from './ExternalSystemNode'
 import { GroupNode } from './GroupNode'
+import { collectLegend, overlayStyleFor, type FilterDim } from './overlay-utils'
 
 const nodeTypes: NodeTypes = {
   c4: C4Node as unknown as NodeTypes['c4'],
@@ -75,7 +76,14 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
   const createConnection = useCreateConnection()
   const deleteConnection = useDeleteConnection()
   const saveDiagramPosition = useSaveDiagramPosition()
-  const { selectNode, selectEdge, dependenciesFocusId, setDependenciesFocus } = useCanvasStore()
+  const {
+    selectNode,
+    selectEdge,
+    dependenciesFocusId,
+    setDependenciesFocus,
+    activeFilter,
+  } = useCanvasStore()
+  const filterDim = activeFilter as FilterDim
   const { setNodes, setEdges, getNodes, getEdges } = useReactFlow()
   const prevKeyRef = useRef<string>('')
   const prevConnsRef = useRef<string>('')
@@ -147,11 +155,15 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     prevKeyRef.current = key
 
     // Preserve dragged positions, selection state, and size from NodeResizer.
-    // Also carry over the opacity hint from dependencies overlay, if active.
+    // Also carry over the opacity hint from dependencies overlay, if active,
+    // and the color outline from the active filter dimension.
     const currentNodes = getNodes()
     const merged = nodes.map((n) => {
       const existing = currentNodes.find((cn) => cn.id === n.id)
       const opacity = dependencyChain && !dependencyChain.nodes.has(n.id) ? 0.15 : 1
+      const obj = (n.data as C4NodeData).object
+      const overlay = overlayStyleFor(obj, filterDim)
+      const baseStyle = { ...(overlay ?? {}), opacity }
       if (existing) {
         return {
           ...n,
@@ -159,13 +171,21 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
           selected: existing.selected,
           width: existing.width,
           height: existing.height,
-          style: { ...existing.style, opacity },
+          style: { ...existing.style, ...baseStyle },
         }
       }
-      return { ...n, style: { opacity } }
+      return { ...n, style: baseStyle }
     })
     setNodes(merged)
-  }, [diagramId, allObjects, diagramObjects, setNodes, getNodes, dependencyChain])
+  }, [
+    diagramId,
+    allObjects,
+    diagramObjects,
+    setNodes,
+    getNodes,
+    dependencyChain,
+    filterDim,
+  ])
 
   // Filter connections to only those between objects in this diagram
   useEffect(() => {
@@ -194,20 +214,27 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     )
   }, [connections, diagramObjects, setEdges, getEdges, dependencyChain])
 
-  // Apply dimming to existing nodes/edges whenever the dependency focus
-  // changes. For nodes added later (new drops), dimming is also re-applied
-  // in the main nodes/edges build effects below via `dependencyChain`.
+  // Apply dimming + color overlay to existing nodes/edges whenever the
+  // dependency focus or active filter changes. For freshly-created nodes,
+  // the same styles are also applied during the main build effect.
   useEffect(() => {
     const currentNodes = getNodes()
     if (currentNodes.length > 0) {
       setNodes(
-        currentNodes.map((n) => ({
-          ...n,
-          style: {
-            ...n.style,
-            opacity: dependencyChain && !dependencyChain.nodes.has(n.id) ? 0.15 : 1,
-          },
-        })),
+        currentNodes.map((n) => {
+          const obj = (n.data as C4NodeData).object
+          const overlay = overlayStyleFor(obj, filterDim)
+          return {
+            ...n,
+            style: {
+              ...n.style,
+              // Overlay outline — clear it when no filter is active.
+              outline: overlay?.outline ?? undefined,
+              outlineOffset: overlay?.outlineOffset ?? undefined,
+              opacity: dependencyChain && !dependencyChain.nodes.has(n.id) ? 0.15 : 1,
+            },
+          }
+        }),
       )
     }
     const currentEdges = getEdges()
@@ -222,7 +249,7 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
         })),
       )
     }
-  }, [dependencyChain, getNodes, setNodes, getEdges, setEdges])
+  }, [dependencyChain, filterDim, getNodes, setNodes, getEdges, setEdges])
 
   // ESC clears the dependencies focus overlay.
   useEffect(() => {

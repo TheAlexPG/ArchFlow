@@ -8,7 +8,7 @@
 |-----------|--------|----------|---------------|
 | Project Setup & Infrastructure | Active | 0/0 | — |
 | Backend API Foundation | Active | 0/0 | — |
-| Frontend Canvas | Active | 1/5 | Implement "Get insights" AI feature for object analysis |
+| Frontend Canvas | Active | 1/5 | Implement color-coding overlays based on active filter (tag/tech/status/team) |
 | Basic Authentication | Active | 0/0 | — |
 | JSON Import/Export | Active | 0/0 | — |
 | Model Objects Tree Panel | Planned | 0/0 | — |
@@ -21,16 +21,21 @@
 | Edge Details & Customization | Planned | 0/0 | — |
 | Node Customization & Styling | Planned | 0/0 | — |
 
-**Active Phase:** AI Features (0/1 done)
-**Phases:** done Core Model + Canvas | done C4 Zoom + Diagrams | done Drafts + Versioning | done Collaboration | done API + MCP | >> AI Features | ... Overlays + Flows | ... Polish + Enterprise
+**Active Phase:** Overlays + Flows (1/5 done)
+**Phases:** done Core Model + Canvas | done C4 Zoom + Diagrams | done Drafts + Versioning | done Collaboration | done API + MCP | done AI Features | >> Overlays + Flows | ... Polish + Enterprise
 
-**In Progress:** frontend-canvas-012 Implement "Get insights" AI feature for object analysis, detail-sidebar-004 Implement per-object history tab (change log scoped to selected object), detail-sidebar-005 Implement typed comments (question, inaccuracy, idea) with icons, detail-sidebar-007 Add "note" comment type alongside question/inaccurate/idea
+**In Progress:** frontend-canvas-008 Implement color-coding overlays based on active filter (tag/tech/status/team), frontend-canvas-012 Implement "Get insights" AI feature for object analysis, detail-sidebar-004 Implement per-object history tab (change log scoped to selected object), detail-sidebar-005 Implement typed comments (question, inaccuracy, idea) with icons, detail-sidebar-007 Add "note" comment type alongside question/inaccurate/idea
 **Blocked:** —
-**Next Up:** —
+**Next Up:** frontend-canvas-009 Add flow alternative paths (branching) support (medium), frontend-canvas-010 Show numbered step labels on canvas connections during flow playback (medium)
 
 ---
 
 ## Changelog
+
+### 2026-04-16 — auto
+10 files / +538 / -23 — anthropic SDK, ai_service, POST /objects/{id}/insights, useGetInsights hook, InsightsModal. Feature gated on ANTHROPIC_API_KEY env.
+Tasks touched: 
+
 
 ### 2026-04-16 — auto
 Included in d76ab0b alongside detail-sidebar-005: note type was added to the CommentType enum from day one — the backend enum is {question, inaccuracy, idea, note} and the composer surfaces all four with their own icons/colors (❓🚩💡📝).
