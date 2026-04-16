@@ -28,24 +28,22 @@ export function AddObjectToolbar({ diagramId }: AddObjectToolbarProps) {
     [diagramObjects],
   )
 
-  const availableObjects = useMemo(
-    () => objects.filter((o) => !inDiagramIds.has(o.id)),
-    [objects, inDiagramIds],
-  )
-
+  // Show every model object — objects already in the diagram stay visible
+  // (like IcePanel) but are flagged as "In diagram" and can't be re-added.
   const filtered = useMemo(() => {
-    if (!search) return availableObjects
+    if (!search) return objects
     const q = search.toLowerCase()
-    return availableObjects.filter(
+    return objects.filter(
       (o) =>
         o.name.toLowerCase().includes(q) ||
         o.description?.toLowerCase().includes(q) ||
         o.technology?.some((t) => t.toLowerCase().includes(q)),
     )
-  }, [availableObjects, search])
+  }, [objects, search])
 
   const handleAddExisting = (objectId: string) => {
     if (!diagramId) return
+    if (inDiagramIds.has(objectId)) return
     addToDiagram.mutate({
       diagramId,
       objectId,
@@ -127,41 +125,60 @@ export function AddObjectToolbar({ diagramId }: AddObjectToolbarProps) {
             <div style={{ flex: 1, overflowY: 'auto', minHeight: 100, maxHeight: 240 }}>
               {filtered.length === 0 ? (
                 <div style={{ padding: 16, fontSize: 12, color: '#525252', textAlign: 'center' }}>
-                  {search ? 'No matches' : 'No objects available'}
+                  {search ? 'No matches' : 'No objects yet'}
                 </div>
               ) : (
-                filtered.map((obj) => (
-                  <div
-                    key={obj.id}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 4,
-                      padding: '2px 12px 2px 0',
-                    }}
-                    className="group"
-                    onMouseEnter={(e) => (e.currentTarget.style.background = '#262626')}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                  >
-                    <button
-                      onClick={() => handleAddExisting(obj.id)}
+                filtered.map((obj) => {
+                  const inDiagram = inDiagramIds.has(obj.id)
+                  return (
+                    <div
+                      key={obj.id}
                       style={{
-                        display: 'flex', alignItems: 'center', gap: 8,
-                        flex: 1, padding: '6px 12px',
-                        background: 'transparent', border: 'none',
-                        color: '#d4d4d4', cursor: 'pointer', fontSize: 12, textAlign: 'left',
+                        display: 'flex', alignItems: 'center', gap: 4,
+                        padding: '2px 12px 2px 0',
                       }}
-                      title={`${TYPE_LABELS[obj.type]}${obj.technology ? ` — ${obj.technology.join(', ')}` : ''}`}
+                      className="group"
+                      onMouseEnter={(e) => (e.currentTarget.style.background = '#262626')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                     >
-                      <span style={{ opacity: 0.5 }}>{TYPE_ICONS[obj.type]}</span>
-                      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {obj.name}
-                      </span>
-                      <span style={{ fontSize: 10, color: '#525252' }}>
-                        {TYPE_LABELS[obj.type]}
-                      </span>
-                    </button>
-                    <ObjectContextMenu object={obj} diagramId={diagramId} />
-                  </div>
-                ))
+                      <button
+                        onClick={() => handleAddExisting(obj.id)}
+                        disabled={inDiagram}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 8,
+                          flex: 1, padding: '6px 12px',
+                          background: 'transparent', border: 'none',
+                          color: inDiagram ? '#737373' : '#d4d4d4',
+                          cursor: inDiagram ? 'default' : 'pointer',
+                          fontSize: 12, textAlign: 'left',
+                        }}
+                        title={
+                          inDiagram
+                            ? 'Already in this diagram'
+                            : `${TYPE_LABELS[obj.type]}${obj.technology ? ` — ${obj.technology.join(', ')}` : ''}`
+                        }
+                      >
+                        <span style={{ opacity: 0.5 }}>{TYPE_ICONS[obj.type]}</span>
+                        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {obj.name}
+                        </span>
+                        {inDiagram ? (
+                          <span
+                            title="In this diagram"
+                            style={{ fontSize: 9, color: '#60a5fa' }}
+                          >
+                            ●
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: 10, color: '#525252' }}>
+                            {TYPE_LABELS[obj.type]}
+                          </span>
+                        )}
+                      </button>
+                      <ObjectContextMenu object={obj} diagramId={diagramId} />
+                    </div>
+                  )
+                })
               )}
             </div>
 
