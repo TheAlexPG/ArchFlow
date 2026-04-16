@@ -2,15 +2,21 @@ meta:
   project: ArchFlow
   updated: '2026-04-16'
 context:
-  active_epic: c4-drill-down
+  active_epic: popup-picker
   in_progress:
-  - id: c4-drill-down-001
-    title: 'Add C4 drill-down: click zoom icon on node to enter child diagram'
-    epic: c4-drill-down
+  - id: popup-picker-001
+    title: Build popup object picker replacing left sidebar tree
+    epic: popup-picker
     branch: ''
     locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
   blocked: []
   recent_completed:
+  - id: c4-drill-down-002
+    title: Show zoom indicator badge on nodes that have child diagrams
+    completed: 2026-04-16T11:21
+  - id: c4-drill-down-001
+    title: 'Add C4 drill-down: click zoom icon on node to enter child diagram'
+    completed: 2026-04-16T11:20
   - id: detail-sidebar-006
     title: Add "Belongs to" (parent) and "In X diagrams" references in object sidebar
     completed: 2026-04-16T11:19
@@ -21,19 +27,13 @@ context:
     title: Improve visual styling per object type (actor/system/external distinct
       looks)
     completed: 2026-04-16T11:16
-  - id: edge-details-001
-    title: Build edge details sidebar (Sender/Receiver/Via/Direction/Shape/Label)
-    completed: 2026-04-16T11:15
-  - id: edge-details-002
-    title: Add edge shape customization (curved/straight/step/smoothstep)
-    completed: 2026-04-16T11:15
   next_up: []
   stats:
     total: 29
-    done: 18
+    done: 20
     in_progress: 1
     in_review: 0
-    todo: 10
+    todo: 8
     blocked: 0
     archived: 21
   active_phase:
@@ -41,10 +41,10 @@ context:
     name: C4 Zoom + Diagrams
     stats:
       total: 22
-      todo: 3
+      todo: 1
       in-progress: 1
       in-review: 0
-      done: 18
+      done: 20
       blocked: 0
       archived: 0
     target_date: null
@@ -659,16 +659,18 @@ epics:
   tasks:
   - id: popup-picker-001
     title: Build popup object picker replacing left sidebar tree
-    status: todo
+    status: in-progress
     priority: high
     created: 2026-04-16T11:08
-    last_referenced: 2026-04-16T11:08
+    last_referenced: 2026-04-16T11:21
     notes: 'IcePanel: + button opens floating popup with search, object list (with
       type icons), tooltip on hover showing type and parent, quick-create buttons
       (System/Actor/Group) at bottom. Left sidebar becomes optional/collapsible to
       give canvas more space.'
     estimate: L
     phase: c4-zoom
+    started: 2026-04-16T11:21
+    locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
 - id: c4-drill-down
   name: C4 Zoom Drill-Down Navigation
   status: planned
@@ -678,10 +680,10 @@ epics:
   tasks:
   - id: c4-drill-down-001
     title: 'Add C4 drill-down: click zoom icon on node to enter child diagram'
-    status: in-progress
+    status: done
     priority: high
     created: 2026-04-16T11:08
-    last_referenced: 2026-04-16T11:19
+    last_referenced: 2026-04-16T11:20
     notes: 'IcePanel: objects that have sub-diagrams show magnifying glass icon. Click
       opens popup "Level N - App diagram" with list of child diagrams + "+ New diagram"
       button. Parent-child relationship between diagrams via scope_object_id. Backend:
@@ -690,18 +692,20 @@ epics:
     estimate: L
     phase: c4-zoom
     started: 2026-04-16T11:19
-    locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
+    completed: 2026-04-16T11:20
   - id: c4-drill-down-002
     title: Show zoom indicator badge on nodes that have child diagrams
-    status: todo
+    status: done
     priority: medium
     created: 2026-04-16T11:08
-    last_referenced: 2026-04-16T11:08
+    last_referenced: 2026-04-16T11:21
     notes: Query diagrams by scope_object_id to know which objects have sub-diagrams.
       Show small 🔍 icon + count badge on those nodes. IcePanel reference — helps users
       know where they can zoom in.
     estimate: S
     phase: c4-zoom
+    started: 2026-04-16T11:21
+    completed: 2026-04-16T11:21
 - id: edge-details
   name: Edge Details & Customization
   status: planned

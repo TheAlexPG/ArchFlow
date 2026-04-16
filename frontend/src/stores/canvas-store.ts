@@ -7,6 +7,7 @@ interface CanvasState {
   sidebarTab: 'details' | 'connections' | 'history'
   activeFilter: 'none' | 'tags' | 'technology' | 'status' | 'teams'
   addingObjectType: string | null
+  treeOpen: boolean
 
   selectNode: (id: string | null) => void
   selectEdge: (id: string | null) => void
@@ -14,6 +15,7 @@ interface CanvasState {
   setSidebarTab: (tab: 'details' | 'connections' | 'history') => void
   setActiveFilter: (filter: 'none' | 'tags' | 'technology' | 'status' | 'teams') => void
   setAddingObjectType: (type: string | null) => void
+  toggleTree: () => void
 }
 
 export const useCanvasStore = create<CanvasState>((set) => ({
@@ -23,6 +25,7 @@ export const useCanvasStore = create<CanvasState>((set) => ({
   sidebarTab: 'details',
   activeFilter: 'none',
   addingObjectType: null,
+  treeOpen: false,
 
   selectNode: (id) =>
     set({ selectedNodeId: id, selectedEdgeId: null, sidebarOpen: id !== null }),
@@ -33,4 +36,5 @@ export const useCanvasStore = create<CanvasState>((set) => ({
   setSidebarTab: (tab) => set({ sidebarTab: tab }),
   setActiveFilter: (filter) => set({ activeFilter: filter }),
   setAddingObjectType: (type) => set({ addingObjectType: type }),
+  toggleTree: () => set((state) => ({ treeOpen: !state.treeOpen })),
 }))

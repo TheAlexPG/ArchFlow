@@ -16,21 +16,51 @@
 | Groups & Visual Grouping | Planned | 1/2 | — |
 | Global Search & Navigation | Planned | 2/2 | — |
 | Home / Overview Page | Planned | 3/3 | — |
-| Popup Object Picker | Planned | 0/1 | — |
-| C4 Zoom Drill-Down Navigation | Planned | 0/2 | Add C4 drill-down: click zoom icon on node to enter child diagram |
+| Popup Object Picker | Planned | 0/1 | Build popup object picker replacing left sidebar tree |
+| C4 Zoom Drill-Down Navigation | Planned | 2/2 | — |
 | Edge Details & Customization | Planned | 4/5 | — |
 | Node Customization & Styling | Planned | 2/2 | — |
 
-**Active Phase:** C4 Zoom + Diagrams (18/22 done)
+**Active Phase:** C4 Zoom + Diagrams (20/22 done)
 **Phases:** done Core Model + Canvas | >> C4 Zoom + Diagrams | ... Drafts + Versioning | ... Collaboration | ... API + MCP | ... AI Features | ... Overlays + Flows | ... Polish + Enterprise
 
-**In Progress:** c4-drill-down-001 Add C4 drill-down: click zoom icon on node to enter child diagram
+**In Progress:** popup-picker-001 Build popup object picker replacing left sidebar tree
 **Blocked:** —
 **Next Up:** —
 
 ---
 
 ## Changelog
+
+### 2026-04-16 — Work session
+**Done:**
+- Zoom icon badge shown on nodes with child diagrams (part of c4-drill-down-001)
+
+**Decisions:**
+- None
+
+**Issues:**
+- None
+
+**Tasks touched:** N/A
+
+---
+
+
+### 2026-04-16 — Work session
+**Done:**
+- Drill-down via zoom icon button on nodes. Backend filter by scope_object_id. Click icon navigates to child diagram.
+
+**Decisions:**
+- None
+
+**Issues:**
+- Multi-child popup deferred — single click goes to first child diagram for now
+
+**Tasks touched:** N/A
+
+---
+
 
 ### 2026-04-16 — Work session
 **Done:**

@@ -17,7 +17,7 @@ export function DiagramPage() {
   const { data: diagram } = useDiagram(diagramId)
   const navigate = useNavigate()
   const { logout } = useAuthStore()
-  const { selectedEdgeId } = useCanvasStore()
+  const { selectedEdgeId, treeOpen, toggleTree } = useCanvasStore()
   const [searchOpen, setSearchOpen] = useState(false)
 
   const toggleSearch = useCallback(() => setSearchOpen((v) => !v), [])
@@ -57,6 +57,18 @@ export function DiagramPage() {
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button
+              onClick={toggleTree}
+              style={{
+                background: treeOpen ? '#333' : '#1a1a1a',
+                border: '1px solid #333', borderRadius: 6,
+                color: treeOpen ? '#f5f5f5' : '#737373',
+                cursor: 'pointer', fontSize: 12, padding: '4px 10px',
+              }}
+              title="Toggle object tree"
+            >
+              ☰
+            </button>
             <button
               onClick={toggleSearch}
               style={{
@@ -106,7 +118,7 @@ export function DiagramPage() {
 
         {/* Canvas area */}
         <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-          <ObjectTree diagramId={diagramId} />
+          {treeOpen && <ObjectTree diagramId={diagramId} />}
           <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
             <AddObjectToolbar diagramId={diagramId} />
             <div style={{ position: 'absolute', inset: 0 }}>
