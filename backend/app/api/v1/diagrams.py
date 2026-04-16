@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -18,8 +18,11 @@ router = APIRouter(prefix="/diagrams", tags=["diagrams"])
 
 
 @router.get("", response_model=list[DiagramResponse])
-async def list_diagrams(db: AsyncSession = Depends(get_db)):
-    return await diagram_service.get_diagrams(db)
+async def list_diagrams(
+    scope_object_id: uuid.UUID | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    return await diagram_service.get_diagrams(db, scope_object_id)
 
 
 @router.get("/{diagram_id}", response_model=DiagramResponse)

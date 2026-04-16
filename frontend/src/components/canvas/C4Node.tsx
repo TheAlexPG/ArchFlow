@@ -1,5 +1,7 @@
 import { Handle, NodeResizer, Position, type NodeProps } from '@xyflow/react'
+import { useNavigate } from 'react-router-dom'
 import type { ModelObject } from '../../types/model'
+import { useDiagrams } from '../../hooks/use-diagrams'
 import { STATUS_COLORS, TYPE_BORDER_COLORS, TYPE_ICONS } from './node-utils'
 
 export type C4NodeData = {
@@ -10,6 +12,19 @@ export function C4Node({ data, selected }: NodeProps) {
   const obj = (data as C4NodeData).object
   const borderColor = TYPE_BORDER_COLORS[obj.type]
   const statusColor = STATUS_COLORS[obj.status]
+  const navigate = useNavigate()
+  const { data: childDiagrams = [] } = useDiagrams(obj.id)
+  const hasChildren = childDiagrams.length > 0
+
+  const handleDrillDown = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (childDiagrams.length === 1) {
+      navigate(`/diagram/${childDiagrams[0].id}`)
+    } else if (childDiagrams.length > 1) {
+      // TODO: popup selector — for now go to first
+      navigate(`/diagram/${childDiagrams[0].id}`)
+    }
+  }
 
   return (
     <div
@@ -38,6 +53,18 @@ export function C4Node({ data, selected }: NodeProps) {
         style={{ backgroundColor: statusColor }}
         title={obj.status}
       />
+
+      {/* Drill-down zoom icon */}
+      {hasChildren && (
+        <button
+          onClick={handleDrillDown}
+          onMouseDown={(e) => e.stopPropagation()}
+          className="nodrag absolute -top-2 -left-2 bg-blue-600 hover:bg-blue-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold shadow-lg border border-blue-700"
+          title={`Zoom into (${childDiagrams.length} diagram${childDiagrams.length > 1 ? 's' : ''})`}
+        >
+          🔍
+        </button>
+      )}
 
       {/* Type icon + Name */}
       <div className="flex items-start gap-2">

@@ -12,25 +12,40 @@
 | Basic Authentication | Active | 0/0 | — |
 | JSON Import/Export | Active | 1/1 | — |
 | Model Objects Tree Panel | Planned | 0/0 | — |
-| Object Detail Sidebar (Tabbed) | Planned | 3/7 | Add "Belongs to" (parent) and "In X diagrams" references in object sidebar |
+| Object Detail Sidebar (Tabbed) | Planned | 4/7 | — |
 | Groups & Visual Grouping | Planned | 1/2 | — |
 | Global Search & Navigation | Planned | 2/2 | — |
 | Home / Overview Page | Planned | 3/3 | — |
 | Popup Object Picker | Planned | 0/1 | — |
-| C4 Zoom Drill-Down Navigation | Planned | 0/2 | — |
+| C4 Zoom Drill-Down Navigation | Planned | 0/2 | Add C4 drill-down: click zoom icon on node to enter child diagram |
 | Edge Details & Customization | Planned | 4/5 | — |
 | Node Customization & Styling | Planned | 2/2 | — |
 
-**Active Phase:** C4 Zoom + Diagrams (17/22 done)
+**Active Phase:** C4 Zoom + Diagrams (18/22 done)
 **Phases:** done Core Model + Canvas | >> C4 Zoom + Diagrams | ... Drafts + Versioning | ... Collaboration | ... API + MCP | ... AI Features | ... Overlays + Flows | ... Polish + Enterprise
 
-**In Progress:** detail-sidebar-006 Add "Belongs to" (parent) and "In X diagrams" references in object sidebar
+**In Progress:** c4-drill-down-001 Add C4 drill-down: click zoom icon on node to enter child diagram
 **Blocked:** —
 **Next Up:** —
 
 ---
 
 ## Changelog
+
+### 2026-04-16 — Work session
+**Done:**
+- Belongs to (clickable parent) + Diagrams list with navigate links. Backend endpoint /objects/{id}/diagrams
+
+**Decisions:**
+- None
+
+**Issues:**
+- None
+
+**Tasks touched:** N/A
+
+---
+
 
 ### 2026-04-16 — Work session
 **Done:**

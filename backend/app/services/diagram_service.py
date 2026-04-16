@@ -13,8 +13,13 @@ from app.schemas.diagram import (
 )
 
 
-async def get_diagrams(db: AsyncSession) -> list[Diagram]:
-    result = await db.execute(select(Diagram).order_by(Diagram.name))
+async def get_diagrams(
+    db: AsyncSession, scope_object_id: uuid.UUID | None = None
+) -> list[Diagram]:
+    query = select(Diagram)
+    if scope_object_id is not None:
+        query = query.where(Diagram.scope_object_id == scope_object_id)
+    result = await db.execute(query.order_by(Diagram.name))
     return list(result.scalars().all())
 
 

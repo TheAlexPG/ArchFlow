@@ -21,11 +21,12 @@ export interface Diagram {
   updated_at: string
 }
 
-export function useDiagrams() {
+export function useDiagrams(scopeObjectId?: string | null) {
   return useQuery({
-    queryKey: ['diagrams'],
+    queryKey: ['diagrams', { scope: scopeObjectId }],
     queryFn: async () => {
-      const { data } = await api.get<Diagram[]>('/diagrams')
+      const params = scopeObjectId ? { scope_object_id: scopeObjectId } : {}
+      const { data } = await api.get<Diagram[]>('/diagrams', { params })
       return data
     },
   })

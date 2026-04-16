@@ -2,15 +2,18 @@ meta:
   project: ArchFlow
   updated: '2026-04-16'
 context:
-  active_epic: detail-sidebar
+  active_epic: c4-drill-down
   in_progress:
-  - id: detail-sidebar-006
-    title: Add "Belongs to" (parent) and "In X diagrams" references in object sidebar
-    epic: detail-sidebar
+  - id: c4-drill-down-001
+    title: 'Add C4 drill-down: click zoom icon on node to enter child diagram'
+    epic: c4-drill-down
     branch: ''
     locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
   blocked: []
   recent_completed:
+  - id: detail-sidebar-006
+    title: Add "Belongs to" (parent) and "In X diagrams" references in object sidebar
+    completed: 2026-04-16T11:19
   - id: node-customization-001
     title: Add node resize handles (drag corners to resize)
     completed: 2026-04-16T11:17
@@ -24,16 +27,13 @@ context:
   - id: edge-details-002
     title: Add edge shape customization (curved/straight/step/smoothstep)
     completed: 2026-04-16T11:15
-  - id: edge-details-003
-    title: Add edge label size slider and multi-line label rendering
-    completed: 2026-04-16T11:15
   next_up: []
   stats:
     total: 29
-    done: 17
+    done: 18
     in_progress: 1
     in_review: 0
-    todo: 11
+    todo: 10
     blocked: 0
     archived: 21
   active_phase:
@@ -41,10 +41,10 @@ context:
     name: C4 Zoom + Diagrams
     stats:
       total: 22
-      todo: 4
+      todo: 3
       in-progress: 1
       in-review: 0
-      done: 17
+      done: 18
       blocked: 0
       archived: 0
     target_date: null
@@ -521,17 +521,17 @@ epics:
     phase: collaboration
   - id: detail-sidebar-006
     title: Add "Belongs to" (parent) and "In X diagrams" references in object sidebar
-    status: in-progress
+    status: done
     priority: medium
     created: 2026-04-16T11:08
-    last_referenced: 2026-04-16T11:18
+    last_referenced: 2026-04-16T11:19
     notes: 'Extend cross-references: show parent object name (clickable to navigate),
       list of diagrams this object is used in (with links). Needs backend endpoint
       to query diagrams containing an object.'
     estimate: S
     phase: c4-zoom
     started: 2026-04-16T11:18
-    locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
+    completed: 2026-04-16T11:19
   - id: detail-sidebar-007
     title: Add "note" comment type alongside question/inaccurate/idea
     status: todo
@@ -678,10 +678,10 @@ epics:
   tasks:
   - id: c4-drill-down-001
     title: 'Add C4 drill-down: click zoom icon on node to enter child diagram'
-    status: todo
+    status: in-progress
     priority: high
     created: 2026-04-16T11:08
-    last_referenced: 2026-04-16T11:08
+    last_referenced: 2026-04-16T11:19
     notes: 'IcePanel: objects that have sub-diagrams show magnifying glass icon. Click
       opens popup "Level N - App diagram" with list of child diagrams + "+ New diagram"
       button. Parent-child relationship between diagrams via scope_object_id. Backend:
@@ -689,6 +689,8 @@ epics:
       update.'
     estimate: L
     phase: c4-zoom
+    started: 2026-04-16T11:19
+    locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
   - id: c4-drill-down-002
     title: Show zoom indicator badge on nodes that have child diagrams
     status: todo
