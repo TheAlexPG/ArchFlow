@@ -1,9 +1,17 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useConnections, useDeleteObject, useObject, useObjects, useUpdateObject } from '../../hooks/use-api'
+import {
+  useConnections,
+  useDeleteObject,
+  useObject,
+  useObjectHistory,
+  useObjects,
+  useUpdateObject,
+  type ActivityLogEntry,
+} from '../../hooks/use-api'
 import { useObjectDiagrams } from '../../hooks/use-diagrams'
 import { useCanvasStore } from '../../stores/canvas-store'
-import type { ObjectScope, ObjectStatus, ObjectType } from '../../types/model'
+import type { ObjectScope, ObjectStatus } from '../../types/model'
 import { STATUS_COLORS, TYPE_LABELS } from '../canvas/node-utils'
 import { RichTextEditor } from '../common/RichTextEditor'
 
@@ -198,11 +206,7 @@ export function ObjectSidebar() {
           <ConnectionsTab objectId={obj.id} />
         )}
 
-        {sidebarTab === 'history' && (
-          <div className="text-sm text-neutral-500 italic">
-            History will be available after versioning is enabled.
-          </div>
-        )}
+        {sidebarTab === 'history' && <HistoryTab objectId={obj.id} />}
       </div>
     </div>
   )
@@ -310,6 +314,137 @@ function ConnectionsTab({ objectId }: { objectId: string }) {
           <div className="text-xs text-neutral-600 italic">None</div>
         )}
       </div>
+    </div>
+  )
+}
+
+function HistoryTab({ objectId }: { objectId: string }) {
+  const { data: entries = [], isLoading } = useObjectHistory(objectId)
+
+  if (isLoading) {
+    return <div className="text-xs text-neutral-500">Loading…</div>
+  }
+  if (entries.length === 0) {
+    return (
+      <div className="text-xs text-neutral-500 italic">
+        No changes recorded yet.
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      {entries.map((e) => (
+        <HistoryEntry key={e.id} entry={e} />
+      ))}
+    </div>
+  )
+}
+
+// Fields that should never surface in the history diff (noise for the user).
+const HIDDEN_CHANGE_FIELDS = new Set(['metadata_'])
+
+function HistoryEntry({ entry }: { entry: ActivityLogEntry }) {
+  const date = new Date(entry.created_at)
+  const when = date.toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+
+  if (entry.action === 'created') {
+    const snap = (entry.changes || {}) as Record<string, unknown>
+    return (
+      <EntryShell when={when} action="Created" color="#22c55e">
+        {typeof snap.name === 'string' && (
+          <div className="text-xs text-neutral-300">
+            Name: <span className="font-medium">{snap.name}</span>
+          </div>
+        )}
+      </EntryShell>
+    )
+  }
+
+  if (entry.action === 'deleted') {
+    return <EntryShell when={when} action="Deleted" color="#ef4444" />
+  }
+
+  // updated
+  const changes = (entry.changes || {}) as Record<
+    string,
+    { before: unknown; after: unknown }
+  >
+  const fields = Object.keys(changes).filter((k) => !HIDDEN_CHANGE_FIELDS.has(k))
+  if (fields.length === 0) {
+    return <EntryShell when={when} action="Updated" color="#3b82f6" />
+  }
+
+  return (
+    <EntryShell when={when} action="Updated" color="#3b82f6">
+      <div className="space-y-1">
+        {fields.map((field) => (
+          <FieldDiff
+            key={field}
+            field={field}
+            before={changes[field]?.before}
+            after={changes[field]?.after}
+          />
+        ))}
+      </div>
+    </EntryShell>
+  )
+}
+
+function EntryShell({
+  when,
+  action,
+  color,
+  children,
+}: {
+  when: string
+  action: string
+  color: string
+  children?: React.ReactNode
+}) {
+  return (
+    <div className="border-l-2 pl-3" style={{ borderColor: color }}>
+      <div className="flex items-center gap-2 mb-1">
+        <span
+          className="text-[10px] uppercase tracking-wide font-medium"
+          style={{ color }}
+        >
+          {action}
+        </span>
+        <span className="text-[10px] text-neutral-500">{when}</span>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function formatValue(v: unknown): string {
+  if (v === null || v === undefined) return '—'
+  if (Array.isArray(v)) return v.length === 0 ? '—' : v.join(', ')
+  if (typeof v === 'object') return JSON.stringify(v)
+  return String(v)
+}
+
+function FieldDiff({
+  field,
+  before,
+  after,
+}: {
+  field: string
+  before: unknown
+  after: unknown
+}) {
+  return (
+    <div className="text-xs text-neutral-300">
+      <span className="text-neutral-500">{field}: </span>
+      <span className="line-through text-neutral-500 mr-1">{formatValue(before)}</span>
+      <span className="text-neutral-200">→ {formatValue(after)}</span>
     </div>
   )
 }

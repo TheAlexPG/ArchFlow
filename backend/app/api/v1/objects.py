@@ -4,9 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.models.activity_log import ActivityTargetType
+from app.schemas.activity import ActivityLogResponse
 from app.schemas.diagram import DiagramResponse
 from app.schemas.object import ObjectCreate, ObjectResponse, ObjectUpdate
-from app.services import diagram_service, object_service
+from app.services import activity_service, diagram_service, object_service
 
 router = APIRouter(prefix="/objects", tags=["objects"])
 
@@ -78,6 +80,24 @@ async def get_object_diagrams(
     if not obj:
         raise HTTPException(status_code=404, detail="Object not found")
     return await diagram_service.get_diagrams_containing_object(db, object_id)
+
+
+@router.get(
+    "/{object_id}/history",
+    response_model=list[ActivityLogResponse],
+)
+async def get_object_history(
+    object_id: uuid.UUID,
+    limit: int = Query(100, ge=1, le=500),
+    db: AsyncSession = Depends(get_db),
+):
+    obj = await object_service.get_object(db, object_id)
+    if not obj:
+        raise HTTPException(status_code=404, detail="Object not found")
+    entries = await activity_service.get_history(
+        db, ActivityTargetType.OBJECT, object_id, limit=limit
+    )
+    return [ActivityLogResponse.model_validate(e) for e in entries]
 
 
 @router.get("/{object_id}/dependencies")

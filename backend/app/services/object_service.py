@@ -4,9 +4,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.models.activity_log import ActivityTargetType
 from app.models.connection import Connection
 from app.models.object import ModelObject
 from app.schemas.object import ObjectCreate, ObjectUpdate
+from app.services import activity_service
 
 
 async def get_objects(
@@ -49,12 +51,14 @@ async def create_object(db: AsyncSession, data: ObjectCreate) -> ModelObject:
     db.add(obj)
     await db.flush()
     await db.refresh(obj)
+    await activity_service.log_created(db, ActivityTargetType.OBJECT, obj)
     return obj
 
 
 async def update_object(
     db: AsyncSession, obj: ModelObject, data: ObjectUpdate
 ) -> ModelObject:
+    before = activity_service.snapshot(obj)
     update_data = data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         if field == "metadata_" and value and obj.metadata_:
@@ -65,10 +69,15 @@ async def update_object(
             setattr(obj, field, value)
     await db.flush()
     await db.refresh(obj)
+    after = activity_service.snapshot(obj)
+    await activity_service.log_updated(
+        db, ActivityTargetType.OBJECT, obj.id, before, after
+    )
     return obj
 
 
 async def delete_object(db: AsyncSession, obj: ModelObject) -> None:
+    await activity_service.log_deleted(db, ActivityTargetType.OBJECT, obj)
     await db.delete(obj)
     await db.flush()
 

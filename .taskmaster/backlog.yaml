@@ -2,47 +2,40 @@ meta:
   project: ArchFlow
   updated: '2026-04-16'
 context:
-  active_epic: auth
-  in_progress: []
+  active_epic: detail-sidebar
+  in_progress:
+  - id: detail-sidebar-004
+    title: Implement per-object history tab (change log scoped to selected object)
+    epic: detail-sidebar
+    branch: ''
+    locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
   blocked: []
   recent_completed:
-  - id: edge-details-004
-    title: Add "Via" support — connections passing through intermediate objects
-    completed: 2026-04-16T11:23
-  - id: popup-picker-001
-    title: Build popup object picker replacing left sidebar tree
-    completed: 2026-04-16T11:22
-  - id: c4-drill-down-002
-    title: Show zoom indicator badge on nodes that have child diagrams
-    completed: 2026-04-16T11:21
-  - id: c4-drill-down-001
-    title: 'Add C4 drill-down: click zoom icon on node to enter child diagram'
-    completed: 2026-04-16T11:20
-  - id: detail-sidebar-006
-    title: Add "Belongs to" (parent) and "In X diagrams" references in object sidebar
-    completed: 2026-04-16T11:19
+  - id: frontend-canvas-011
+    title: Implement "View dependencies" visual overlay (highlight upstream/downstream)
+    completed: 2026-04-16T12:59
   next_up: []
   stats:
-    total: 31
-    done: 22
-    in_progress: 0
+    total: 9
+    done: 1
+    in_progress: 1
     in_review: 0
-    todo: 9
+    todo: 7
     blocked: 0
-    archived: 21
+    archived: 43
   active_phase:
-    id: c4-zoom
-    name: C4 Zoom + Diagrams
+    id: drafts-versioning
+    name: Drafts + Versioning
     stats:
-      total: 22
+      total: 1
       todo: 0
-      in-progress: 0
+      in-progress: 1
       in-review: 0
-      done: 22
+      done: 0
       blocked: 0
       archived: 0
     target_date: null
-    start_date: '2026-04-15'
+    start_date: '2026-04-16'
   stale: []
 epics:
 - id: project-setup
@@ -288,7 +281,7 @@ epics:
     archived: 2026-04-15T14:34
   - id: frontend-canvas-007
     title: Build canvas toolbar with Tags/Technology/Status/Teams filter tabs
-    status: done
+    status: archived
     priority: high
     created: 2026-04-15T11:43
     last_referenced: 2026-04-15T14:43
@@ -300,6 +293,8 @@ epics:
     phase: c4-zoom
     started: 2026-04-15T14:42
     completed: 2026-04-15T14:43
+    archive_reason: done
+    archived: 2026-04-16T12:59
   - id: frontend-canvas-008
     title: Implement color-coding overlays based on active filter (tag/tech/status/team)
     status: todo
@@ -334,16 +329,18 @@ epics:
     phase: overlays-flows
   - id: frontend-canvas-011
     title: Implement "View dependencies" visual overlay (highlight upstream/downstream)
-    status: todo
+    status: done
     priority: medium
     created: 2026-04-16T11:30
-    last_referenced: 2026-04-16T11:30
+    last_referenced: 2026-04-16T12:59
     notes: 'IcePanel: context menu "View dependencies" highlights all upstream/downstream
       connected objects on canvas, dims others. Backend API /objects/{id}/dependencies
       already exists. Need: visual overlay with dim/highlight states, configurable
       depth (1/2/n hops).'
     estimate: M
     phase: overlays-flows
+    started: 2026-04-16T12:59
+    completed: 2026-04-16T12:59
   - id: frontend-canvas-012
     title: Implement "Get insights" AI feature for object analysis
     status: todo
@@ -426,7 +423,7 @@ epics:
     archived: 2026-04-15T14:34
   - id: import-export-003
     title: Add canvas screenshot/export button (PNG snapshot of current view)
-    status: done
+    status: archived
     priority: low
     created: 2026-04-15T11:50
     last_referenced: 2026-04-15T14:46
@@ -436,6 +433,8 @@ epics:
     phase: c4-zoom
     started: 2026-04-15T14:45
     completed: 2026-04-15T14:46
+    archive_reason: done
+    archived: 2026-04-16T12:59
 - id: object-tree
   name: Model Objects Tree Panel
   status: planned
@@ -481,7 +480,7 @@ epics:
   tasks:
   - id: detail-sidebar-001
     title: 'Refactor sidebar to tabbed layout: Details / Connections / History'
-    status: done
+    status: archived
     priority: high
     created: 2026-04-15T11:49
     last_referenced: 2026-04-15T14:41
@@ -492,9 +491,11 @@ epics:
     phase: c4-zoom
     started: 2026-04-15T14:40
     completed: 2026-04-15T14:41
+    archive_reason: done
+    archived: 2026-04-16T12:59
   - id: detail-sidebar-002
     title: Show cross-references in sidebar (contains count, in X diagrams, in X flows)
-    status: done
+    status: archived
     priority: medium
     created: 2026-04-15T11:49
     last_referenced: 2026-04-15T14:42
@@ -504,9 +505,11 @@ epics:
     phase: c4-zoom
     started: 2026-04-15T14:41
     completed: 2026-04-15T14:42
+    archive_reason: done
+    archived: 2026-04-16T12:59
   - id: detail-sidebar-003
     title: Implement rich text (WYSIWYG) editor for object descriptions
-    status: done
+    status: archived
     priority: medium
     created: 2026-04-15T11:49
     last_referenced: 2026-04-15T14:45
@@ -516,16 +519,20 @@ epics:
     phase: c4-zoom
     started: 2026-04-15T14:44
     completed: 2026-04-15T14:45
+    archive_reason: done
+    archived: 2026-04-16T12:59
   - id: detail-sidebar-004
     title: Implement per-object history tab (change log scoped to selected object)
-    status: todo
+    status: in-progress
     priority: medium
     created: 2026-04-15T11:49
-    last_referenced: 2026-04-15T11:49
+    last_referenced: 2026-04-16T12:59
     notes: 'IcePanel: History tab in sidebar shows changes for the selected object
       specifically, not the global activity log. Filter activity_log by target_id.'
     estimate: M
     phase: drafts-versioning
+    started: 2026-04-16T12:59
+    locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
   - id: detail-sidebar-005
     title: Implement typed comments (question, inaccuracy, idea) with icons
     status: todo
@@ -539,7 +546,7 @@ epics:
     phase: collaboration
   - id: detail-sidebar-006
     title: Add "Belongs to" (parent) and "In X diagrams" references in object sidebar
-    status: done
+    status: archived
     priority: medium
     created: 2026-04-16T11:08
     last_referenced: 2026-04-16T11:19
@@ -550,6 +557,8 @@ epics:
     phase: c4-zoom
     started: 2026-04-16T11:18
     completed: 2026-04-16T11:19
+    archive_reason: done
+    archived: 2026-04-16T12:59
   - id: detail-sidebar-007
     title: Add "note" comment type alongside question/inaccurate/idea
     status: todo
@@ -569,7 +578,7 @@ epics:
   tasks:
   - id: groups-001
     title: Implement Group object type with visual bounding box on canvas
-    status: done
+    status: archived
     priority: high
     created: 2026-04-15T11:50
     last_referenced: 2026-04-15T14:44
@@ -580,6 +589,8 @@ epics:
     phase: c4-zoom
     started: 2026-04-15T14:43
     completed: 2026-04-15T14:44
+    archive_reason: done
+    archived: 2026-04-16T12:59
   - id: groups-002
     title: Add groups as layout containers with drag-to-reorganize chips at canvas
       bottom
@@ -600,7 +611,7 @@ epics:
   tasks:
   - id: global-search-001
     title: Build breadcrumb navigation bar (Home → Diagrams → Current Diagram)
-    status: done
+    status: archived
     priority: high
     created: 2026-04-15T11:50
     last_referenced: 2026-04-15T14:40
@@ -610,9 +621,11 @@ epics:
     phase: c4-zoom
     started: 2026-04-15T14:38
     completed: 2026-04-15T14:40
+    archive_reason: done
+    archived: 2026-04-16T12:59
   - id: global-search-002
     title: Implement Cmd+K global search modal (objects, diagrams, flows)
-    status: done
+    status: archived
     priority: high
     created: 2026-04-15T11:50
     last_referenced: 2026-04-15T14:40
@@ -622,6 +635,8 @@ epics:
     phase: c4-zoom
     started: 2026-04-15T14:40
     completed: 2026-04-15T14:40
+    archive_reason: done
+    archived: 2026-04-16T12:59
 - id: overview-page
   name: Home / Overview Page
   status: planned
@@ -631,7 +646,7 @@ epics:
   tasks:
   - id: overview-page-001
     title: Build overview/home page with sidebar navigation and pinned diagrams grid
-    status: done
+    status: archived
     priority: high
     created: 2026-04-15T14:31
     last_referenced: 2026-04-15T14:37
@@ -643,9 +658,11 @@ epics:
     phase: c4-zoom
     started: 2026-04-15T14:36
     completed: 2026-04-15T14:37
+    archive_reason: done
+    archived: 2026-04-16T12:59
   - id: overview-page-002
     title: Build diagrams list page with categories (Context/App/Component) and search
-    status: done
+    status: archived
     priority: high
     created: 2026-04-15T14:31
     last_referenced: 2026-04-15T14:37
@@ -656,9 +673,11 @@ epics:
     phase: c4-zoom
     started: 2026-04-15T14:37
     completed: 2026-04-15T14:37
+    archive_reason: done
+    archived: 2026-04-16T12:59
   - id: overview-page-003
     title: Implement diagram CRUD API (create, list, update, delete diagrams)
-    status: done
+    status: archived
     priority: high
     created: 2026-04-15T14:32
     last_referenced: 2026-04-15T14:36
@@ -668,6 +687,8 @@ epics:
     phase: c4-zoom
     started: 2026-04-15T14:34
     completed: 2026-04-15T14:36
+    archive_reason: done
+    archived: 2026-04-16T12:59
 - id: popup-picker
   name: Popup Object Picker
   status: planned
@@ -677,7 +698,7 @@ epics:
   tasks:
   - id: popup-picker-001
     title: Build popup object picker replacing left sidebar tree
-    status: done
+    status: archived
     priority: high
     created: 2026-04-16T11:08
     last_referenced: 2026-04-16T11:22
@@ -689,6 +710,8 @@ epics:
     phase: c4-zoom
     started: 2026-04-16T11:21
     completed: 2026-04-16T11:22
+    archive_reason: done
+    archived: 2026-04-16T12:59
 - id: c4-drill-down
   name: C4 Zoom Drill-Down Navigation
   status: planned
@@ -698,7 +721,7 @@ epics:
   tasks:
   - id: c4-drill-down-001
     title: 'Add C4 drill-down: click zoom icon on node to enter child diagram'
-    status: done
+    status: archived
     priority: high
     created: 2026-04-16T11:08
     last_referenced: 2026-04-16T11:20
@@ -711,9 +734,11 @@ epics:
     phase: c4-zoom
     started: 2026-04-16T11:19
     completed: 2026-04-16T11:20
+    archive_reason: done
+    archived: 2026-04-16T12:59
   - id: c4-drill-down-002
     title: Show zoom indicator badge on nodes that have child diagrams
-    status: done
+    status: archived
     priority: medium
     created: 2026-04-16T11:08
     last_referenced: 2026-04-16T11:21
@@ -724,6 +749,8 @@ epics:
     phase: c4-zoom
     started: 2026-04-16T11:21
     completed: 2026-04-16T11:21
+    archive_reason: done
+    archived: 2026-04-16T12:59
 - id: edge-details
   name: Edge Details & Customization
   status: planned
@@ -733,7 +760,7 @@ epics:
   tasks:
   - id: edge-details-001
     title: Build edge details sidebar (Sender/Receiver/Via/Direction/Shape/Label)
-    status: done
+    status: archived
     priority: high
     created: 2026-04-16T11:08
     last_referenced: 2026-04-16T11:15
@@ -745,9 +772,11 @@ epics:
     phase: c4-zoom
     started: 2026-04-16T11:11
     completed: 2026-04-16T11:15
+    archive_reason: done
+    archived: 2026-04-16T12:59
   - id: edge-details-002
     title: Add edge shape customization (curved/straight/step/smoothstep)
-    status: done
+    status: archived
     priority: medium
     created: 2026-04-16T11:08
     last_referenced: 2026-04-16T11:15
@@ -757,9 +786,11 @@ epics:
     phase: c4-zoom
     started: 2026-04-16T11:15
     completed: 2026-04-16T11:15
+    archive_reason: done
+    archived: 2026-04-16T12:59
   - id: edge-details-003
     title: Add edge label size slider and multi-line label rendering
-    status: done
+    status: archived
     priority: medium
     created: 2026-04-16T11:08
     last_referenced: 2026-04-16T11:15
@@ -769,9 +800,11 @@ epics:
     phase: c4-zoom
     started: 2026-04-16T11:15
     completed: 2026-04-16T11:15
+    archive_reason: done
+    archived: 2026-04-16T12:59
   - id: edge-details-004
     title: Add "Via" support — connections passing through intermediate objects
-    status: done
+    status: archived
     priority: medium
     created: 2026-04-16T11:08
     last_referenced: 2026-04-16T11:23
@@ -781,9 +814,11 @@ epics:
     phase: c4-zoom
     started: 2026-04-16T11:22
     completed: 2026-04-16T11:23
+    archive_reason: done
+    archived: 2026-04-16T12:59
   - id: edge-details-005
     title: Add Direction Flip button and bidirectional edge rendering
-    status: done
+    status: archived
     priority: low
     created: 2026-04-16T11:08
     last_referenced: 2026-04-16T11:15
@@ -793,6 +828,8 @@ epics:
     phase: c4-zoom
     started: 2026-04-16T11:15
     completed: 2026-04-16T11:15
+    archive_reason: done
+    archived: 2026-04-16T12:59
 - id: node-customization
   name: Node Customization & Styling
   status: planned
@@ -802,7 +839,7 @@ epics:
   tasks:
   - id: node-customization-001
     title: Add node resize handles (drag corners to resize)
-    status: done
+    status: archived
     priority: medium
     created: 2026-04-16T11:08
     last_referenced: 2026-04-16T11:17
@@ -812,10 +849,12 @@ epics:
     phase: c4-zoom
     started: 2026-04-16T11:16
     completed: 2026-04-16T11:17
+    archive_reason: done
+    archived: 2026-04-16T12:59
   - id: node-customization-002
     title: Improve visual styling per object type (actor/system/external distinct
       looks)
-    status: done
+    status: archived
     priority: medium
     created: 2026-04-16T11:08
     last_referenced: 2026-04-16T11:16
@@ -826,6 +865,8 @@ epics:
     phase: c4-zoom
     started: 2026-04-16T11:15
     completed: 2026-04-16T11:16
+    archive_reason: done
+    archived: 2026-04-16T12:59
 phases:
 - id: core-model
   name: Core Model + Canvas
@@ -838,19 +879,21 @@ phases:
   completed: 2026-04-15T14:34
 - id: c4-zoom
   name: C4 Zoom + Diagrams
-  status: active
+  status: done
   description: C4 level navigation, multiple diagram types, semantic zoom, diagram
     CRUD, SVG/PNG export
   order: 2
   created: 2026-04-15T11:34
   start_date: '2026-04-15'
+  completed: 2026-04-16T12:59
 - id: drafts-versioning
   name: Drafts + Versioning
-  status: planned
+  status: active
   description: Draft lifecycle (create, edit, merge), version snapshots, diff view,
     conflict detection, activity log
   order: 3
   created: 2026-04-15T11:34
+  start_date: '2026-04-16'
 - id: collaboration
   name: Collaboration
   status: planned

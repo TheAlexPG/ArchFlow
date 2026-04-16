@@ -44,6 +44,27 @@ export function useObject(id: string | null) {
   })
 }
 
+export interface ActivityLogEntry {
+  id: string
+  target_type: 'object' | 'connection' | 'diagram'
+  target_id: string
+  action: 'created' | 'updated' | 'deleted'
+  changes: Record<string, { before: unknown; after: unknown }> | Record<string, unknown> | null
+  user_id: string | null
+  created_at: string
+}
+
+export function useObjectHistory(id: string | null) {
+  return useQuery({
+    queryKey: ['objects', id, 'history'],
+    queryFn: async () => {
+      const { data } = await api.get<ActivityLogEntry[]>(`/objects/${id}/history`)
+      return data
+    },
+    enabled: !!id,
+  })
+}
+
 export function useCreateObject() {
   const qc = useQueryClient()
   return useMutation({

@@ -8,29 +8,34 @@
 |-----------|--------|----------|---------------|
 | Project Setup & Infrastructure | Active | 0/0 | — |
 | Backend API Foundation | Active | 0/0 | — |
-| Frontend Canvas | Active | 1/6 | — |
+| Frontend Canvas | Active | 1/5 | — |
 | Basic Authentication | Active | 0/0 | — |
-| JSON Import/Export | Active | 1/1 | — |
+| JSON Import/Export | Active | 0/0 | — |
 | Model Objects Tree Panel | Planned | 0/0 | — |
-| Object Detail Sidebar (Tabbed) | Planned | 4/7 | — |
-| Groups & Visual Grouping | Planned | 1/2 | — |
-| Global Search & Navigation | Planned | 2/2 | — |
-| Home / Overview Page | Planned | 3/3 | — |
-| Popup Object Picker | Planned | 1/1 | — |
-| C4 Zoom Drill-Down Navigation | Planned | 2/2 | — |
-| Edge Details & Customization | Planned | 5/5 | — |
-| Node Customization & Styling | Planned | 2/2 | — |
+| Object Detail Sidebar (Tabbed) | Planned | 0/3 | Implement per-object history tab (change log scoped to selected object) |
+| Groups & Visual Grouping | Planned | 0/1 | — |
+| Global Search & Navigation | Planned | 0/0 | — |
+| Home / Overview Page | Planned | 0/0 | — |
+| Popup Object Picker | Planned | 0/0 | — |
+| C4 Zoom Drill-Down Navigation | Planned | 0/0 | — |
+| Edge Details & Customization | Planned | 0/0 | — |
+| Node Customization & Styling | Planned | 0/0 | — |
 
-**Active Phase:** C4 Zoom + Diagrams (22/22 done)
-**Phases:** done Core Model + Canvas | >> C4 Zoom + Diagrams | ... Drafts + Versioning | ... Collaboration | ... API + MCP | ... AI Features | ... Overlays + Flows | ... Polish + Enterprise
+**Active Phase:** Drafts + Versioning (0/1 done)
+**Phases:** done Core Model + Canvas | done C4 Zoom + Diagrams | >> Drafts + Versioning | ... Collaboration | ... API + MCP | ... AI Features | ... Overlays + Flows | ... Polish + Enterprise
 
-**In Progress:** —
+**In Progress:** detail-sidebar-004 Implement per-object history tab (change log scoped to selected object)
 **Blocked:** —
 **Next Up:** —
 
 ---
 
 ## Changelog
+
+### 2026-04-16 — auto
+Implemented in commit 41caf9a: canvas-store dependenciesFocus state, ArchFlowCanvas dims non-neighbor nodes/edges via opacity 0.15, banner with Clear/ESC, ObjectContextMenu wires the overlay on click. Direct neighbors only for v1; transitive depth can come later.
+Tasks touched: 
+
 
 ### 2026-04-16 — Work session
 **Done:**
