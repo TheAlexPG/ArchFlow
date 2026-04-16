@@ -12,7 +12,12 @@ const TABS: { id: Exclude<FilterDim, 'none'>; icon: string; label: string }[] = 
 
 export function FilterToolbar() {
   const { data: objects = [] } = useObjects()
-  const { activeFilter, setActiveFilter } = useCanvasStore()
+  const {
+    activeFilter,
+    activeFilterValue,
+    setActiveFilter,
+    setActiveFilterValue,
+  } = useCanvasStore()
 
   const legend = useMemo(
     () => collectLegend(objects, activeFilter as FilterDim),
@@ -36,7 +41,17 @@ export function FilterToolbar() {
             </span>
           ) : (
             legend.map(({ value, color, count }) => (
-              <Chip key={value} label={value} count={count} color={color} />
+              <Chip
+                key={value}
+                label={value}
+                count={count}
+                color={color}
+                active={activeFilterValue === value}
+                dimmed={!!activeFilterValue && activeFilterValue !== value}
+                onClick={() =>
+                  setActiveFilterValue(activeFilterValue === value ? null : value)
+                }
+              />
             ))
           )}
         </div>
@@ -70,18 +85,45 @@ export function FilterToolbar() {
   )
 }
 
-function Chip({ label, count, color }: { label: string; count: number; color: string }) {
+function Chip({
+  label,
+  count,
+  color,
+  active,
+  dimmed,
+  onClick,
+}: {
+  label: string
+  count: number
+  color: string
+  active?: boolean
+  dimmed?: boolean
+  onClick?: () => void
+}) {
   return (
-    <span
+    <button
+      onClick={onClick}
       style={{
         fontSize: 11, padding: '2px 8px', borderRadius: 12,
-        background: `${color}22`, color,
-        border: `1px solid ${color}66`,
+        background: active ? color : `${color}22`,
+        color: active ? '#0a0a0a' : color,
+        border: `1px solid ${active ? color : `${color}66`}`,
         display: 'inline-flex', alignItems: 'center', gap: 6,
+        cursor: onClick ? 'pointer' : 'default',
+        opacity: dimmed ? 0.4 : 1,
+        fontWeight: active ? 600 : 400,
       }}
     >
       {label}
-      <span style={{ color: '#737373', fontSize: 10 }}>{count}</span>
-    </span>
+      <span
+        style={{
+          color: active ? '#0a0a0a' : '#737373',
+          fontSize: 10,
+          opacity: active ? 0.7 : 1,
+        }}
+      >
+        {count}
+      </span>
+    </button>
   )
 }

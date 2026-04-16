@@ -13,7 +13,7 @@
 | JSON Import/Export | Active | 0/0 | — |
 | Model Objects Tree Panel | Planned | 0/0 | — |
 | Object Detail Sidebar (Tabbed) | Planned | 0/3 | Implement per-object history tab (change log scoped to selected object) |
-| Groups & Visual Grouping | Planned | 0/1 | — |
+| Groups & Visual Grouping | Planned | 0/1 | Add groups as layout containers with drag-to-reorganize chips at canvas bottom |
 | Global Search & Navigation | Planned | 0/0 | — |
 | Home / Overview Page | Planned | 0/0 | — |
 | Popup Object Picker | Planned | 0/0 | — |
@@ -24,13 +24,23 @@
 **Active Phase:** Overlays + Flows (1/5 done)
 **Phases:** done Core Model + Canvas | done C4 Zoom + Diagrams | done Drafts + Versioning | done Collaboration | done API + MCP | done AI Features | >> Overlays + Flows | ... Polish + Enterprise
 
-**In Progress:** frontend-canvas-008 Implement color-coding overlays based on active filter (tag/tech/status/team), frontend-canvas-009 Add flow alternative paths (branching) support, frontend-canvas-012 Implement "Get insights" AI feature for object analysis, detail-sidebar-004 Implement per-object history tab (change log scoped to selected object), detail-sidebar-005 Implement typed comments (question, inaccuracy, idea) with icons, detail-sidebar-007 Add "note" comment type alongside question/inaccurate/idea
+**In Progress:** frontend-canvas-008 Implement color-coding overlays based on active filter (tag/tech/status/team), frontend-canvas-009 Add flow alternative paths (branching) support, frontend-canvas-010 Show numbered step labels on canvas connections during flow playback, frontend-canvas-012 Implement "Get insights" AI feature for object analysis, detail-sidebar-004 Implement per-object history tab (change log scoped to selected object), detail-sidebar-005 Implement typed comments (question, inaccuracy, idea) with icons, detail-sidebar-007 Add "note" comment type alongside question/inaccurate/idea, groups-002 Add groups as layout containers with drag-to-reorganize chips at canvas bottom
 **Blocked:** —
-**Next Up:** frontend-canvas-010 Show numbered step labels on canvas connections during flow playback (medium)
+**Next Up:** —
 
 ---
 
 ## Changelog
+
+### 2026-04-16 — auto
+Included in afc24d7: C4Edge renders a numbered circular badge above the label for every step in the active branch. Currently-playing step turns green, others stay blue.
+Tasks touched: 
+
+
+### 2026-04-16 — auto
+17 files / +999 / -31 — Flow model/schemas/service/migration/API, FlowsPanel + FlowEditor with per-step branch tag, FlowPlaybackBar with branch selector. Covers -009 (alt paths via step branch tag) and -010 (numbered step badges on edges) together.
+Tasks touched: 
+
 
 ### 2026-04-16 — auto
 5 files / +248 / -154 — overlay-utils helpers, node outline styling via canvas-store.activeFilter, FilterToolbar wired to store with legend strip

@@ -33,7 +33,7 @@ import { ActorNode } from './ActorNode'
 import { C4Node, type C4NodeData } from './C4Node'
 import { ExternalSystemNode } from './ExternalSystemNode'
 import { GroupNode } from './GroupNode'
-import { collectLegend, overlayStyleFor, type FilterDim } from './overlay-utils'
+import { collectLegend, extractFilterValue, overlayStyleFor, type FilterDim } from './overlay-utils'
 
 const nodeTypes: NodeTypes = {
   c4: C4Node as unknown as NodeTypes['c4'],
@@ -83,11 +83,26 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     dependenciesFocusId,
     setDependenciesFocus,
     activeFilter,
+    activeFilterValue,
     playingFlowId,
     playingStepIdx,
     activeBranch,
   } = useCanvasStore()
   const filterDim = activeFilter as FilterDim
+
+  // For the tag/technology filter dims an object can carry multiple values;
+  // a node matches the chip if any of its values equal the selected value.
+  // status/teams dims reuse the single-value extractor.
+  const matchesFilterValue = useCallback(
+    (obj: ModelObject): boolean => {
+      if (!activeFilterValue) return true
+      if (filterDim === 'tags') return obj.tags?.includes(activeFilterValue) ?? false
+      if (filterDim === 'technology')
+        return obj.technology?.includes(activeFilterValue) ?? false
+      return extractFilterValue(obj, filterDim) === activeFilterValue
+    },
+    [activeFilterValue, filterDim],
+  )
   const { data: flows = [] } = useFlows(diagramId)
 
   // Map edgeId → step number (1-based) for the currently active flow branch,
@@ -181,8 +196,11 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     const currentNodes = getNodes()
     const merged = nodes.map((n) => {
       const existing = currentNodes.find((cn) => cn.id === n.id)
-      const opacity = dependencyChain && !dependencyChain.nodes.has(n.id) ? 0.15 : 1
       const obj = (n.data as C4NodeData).object
+      const dimForChain =
+        dependencyChain && !dependencyChain.nodes.has(n.id)
+      const dimForChip = !matchesFilterValue(obj)
+      const opacity = dimForChain || dimForChip ? 0.15 : 1
       const overlay = overlayStyleFor(obj, filterDim)
       const baseStyle = { ...(overlay ?? {}), opacity }
       if (existing) {
@@ -206,6 +224,7 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     getNodes,
     dependencyChain,
     filterDim,
+    matchesFilterValue,
   ])
 
   // Filter connections to only those between objects in this diagram
@@ -262,6 +281,9 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
         currentNodes.map((n) => {
           const obj = (n.data as C4NodeData).object
           const overlay = overlayStyleFor(obj, filterDim)
+          const dimForChain =
+            dependencyChain && !dependencyChain.nodes.has(n.id)
+          const dimForChip = !matchesFilterValue(obj)
           return {
             ...n,
             style: {
@@ -269,7 +291,7 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
               // Overlay outline — clear it when no filter is active.
               outline: overlay?.outline ?? undefined,
               outlineOffset: overlay?.outlineOffset ?? undefined,
-              opacity: dependencyChain && !dependencyChain.nodes.has(n.id) ? 0.15 : 1,
+              opacity: dimForChain || dimForChip ? 0.15 : 1,
             },
           }
         }),
@@ -300,7 +322,7 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
         }),
       )
     }
-  }, [dependencyChain, filterDim, flowPlayback, getNodes, setNodes, getEdges, setEdges])
+  }, [dependencyChain, filterDim, flowPlayback, matchesFilterValue, getNodes, setNodes, getEdges, setEdges])
 
   // ESC clears the dependencies focus overlay.
   useEffect(() => {

@@ -6,6 +6,10 @@ interface CanvasState {
   sidebarOpen: boolean
   sidebarTab: 'details' | 'connections' | 'history'
   activeFilter: 'none' | 'tags' | 'technology' | 'status' | 'teams'
+  // When set, only objects whose activeFilter value equals this are kept
+  // at full opacity; others dim. Like IcePanel's group chips — click a
+  // chip to scope the canvas to that slice of the model.
+  activeFilterValue: string | null
   addingObjectType: string | null
   treeOpen: boolean
   // When set, canvas dims all nodes/edges that aren't directly connected
@@ -25,6 +29,7 @@ interface CanvasState {
   toggleSidebar: (open?: boolean) => void
   setSidebarTab: (tab: 'details' | 'connections' | 'history') => void
   setActiveFilter: (filter: 'none' | 'tags' | 'technology' | 'status' | 'teams') => void
+  setActiveFilterValue: (value: string | null) => void
   setAddingObjectType: (type: string | null) => void
   toggleTree: () => void
   setDependenciesFocus: (id: string | null) => void
@@ -40,6 +45,7 @@ export const useCanvasStore = create<CanvasState>((set) => ({
   sidebarOpen: false,
   sidebarTab: 'details',
   activeFilter: 'none',
+  activeFilterValue: null,
   addingObjectType: null,
   treeOpen: false,
   dependenciesFocusId: null,
@@ -54,7 +60,10 @@ export const useCanvasStore = create<CanvasState>((set) => ({
   toggleSidebar: (open) =>
     set((state) => ({ sidebarOpen: open ?? !state.sidebarOpen })),
   setSidebarTab: (tab) => set({ sidebarTab: tab }),
-  setActiveFilter: (filter) => set({ activeFilter: filter }),
+  // Switching dimensions invalidates any previous chip selection, so reset.
+  setActiveFilter: (filter) =>
+    set({ activeFilter: filter, activeFilterValue: null }),
+  setActiveFilterValue: (value) => set({ activeFilterValue: value }),
   setAddingObjectType: (type) => set({ addingObjectType: type }),
   toggleTree: () => set((state) => ({ treeOpen: !state.treeOpen })),
   setDependenciesFocus: (id) => set({ dependenciesFocusId: id }),

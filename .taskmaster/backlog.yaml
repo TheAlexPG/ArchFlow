@@ -2,7 +2,7 @@ meta:
   project: ArchFlow
   updated: '2026-04-16'
 context:
-  active_epic: detail-sidebar
+  active_epic: frontend-canvas
   in_progress:
   - id: frontend-canvas-008
     title: Implement color-coding overlays based on active filter (tag/tech/status/team)
@@ -12,7 +12,10 @@ context:
     title: Add flow alternative paths (branching) support
     epic: frontend-canvas
     branch: ''
-    locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
+  - id: frontend-canvas-010
+    title: Show numbered step labels on canvas connections during flow playback
+    epic: frontend-canvas
+    branch: ''
   - id: frontend-canvas-012
     title: Implement "Get insights" AI feature for object analysis
     epic: frontend-canvas
@@ -29,22 +32,24 @@ context:
     title: Add "note" comment type alongside question/inaccurate/idea
     epic: detail-sidebar
     branch: ''
+  - id: groups-002
+    title: Add groups as layout containers with drag-to-reorganize chips at canvas
+      bottom
+    epic: groups
+    branch: ''
+    locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
   blocked: []
   recent_completed:
   - id: frontend-canvas-011
     title: Implement "View dependencies" visual overlay (highlight upstream/downstream)
     completed: 2026-04-16T12:59
-  next_up:
-  - id: frontend-canvas-010
-    title: Show numbered step labels on canvas connections during flow playback
-    priority: medium
-    epic: frontend-canvas
+  next_up: []
   stats:
     total: 9
     done: 1
     in_progress: 1
-    in_review: 5
-    todo: 2
+    in_review: 7
+    todo: 0
     blocked: 0
     archived: 43
   active_phase:
@@ -52,9 +57,9 @@ context:
     name: Overlays + Flows
     stats:
       total: 5
-      todo: 2
+      todo: 0
       in-progress: 1
-      in-review: 1
+      in-review: 3
       done: 1
       blocked: 0
       archived: 0
@@ -333,27 +338,27 @@ epics:
     started: 2026-04-16T13:14
   - id: frontend-canvas-009
     title: Add flow alternative paths (branching) support
-    status: in-progress
+    status: in-review
     priority: medium
     created: 2026-04-15T11:50
-    last_referenced: 2026-04-16T13:16
+    last_referenced: 2026-04-16T13:21
     notes: 'IcePanel: flows can have alternative paths (e.g. "Google OAuth alternative").
       A branch point in the flow with a different sequence. Needs flow_branches table
       or parent_step_id for branching.'
     estimate: L
     phase: overlays-flows
     started: 2026-04-16T13:16
-    locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
   - id: frontend-canvas-010
     title: Show numbered step labels on canvas connections during flow playback
-    status: todo
+    status: in-review
     priority: medium
     created: 2026-04-15T11:50
-    last_referenced: 2026-04-15T11:50
+    last_referenced: 2026-04-16T13:21
     notes: 'IcePanel: when a flow is active, connections show numbered labels (1,
       2, 3...) with step descriptions. Active step is highlighted.'
     estimate: M
     phase: overlays-flows
+    started: 2026-04-16T13:21
   - id: frontend-canvas-011
     title: Implement "View dependencies" visual overlay (highlight upstream/downstream)
     status: done
@@ -623,15 +628,17 @@ epics:
   - id: groups-002
     title: Add groups as layout containers with drag-to-reorganize chips at canvas
       bottom
-    status: todo
+    status: in-progress
     priority: low
     created: 2026-04-16T11:08
-    last_referenced: 2026-04-16T11:08
+    last_referenced: 2026-04-16T13:21
     notes: 'IcePanel: bottom canvas area shows group chips (Layer 4, Domain 5) with
       drag handles. Click to filter canvas by group. "+ New group" creates group overlay.
       Different from visual Group object type — this is filter/overlay mode.'
     estimate: L
     phase: overlays-flows
+    started: 2026-04-16T13:21
+    locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
 - id: global-search
   name: Global Search & Navigation
   status: planned
