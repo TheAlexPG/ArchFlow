@@ -20,13 +20,14 @@
 | C4 Zoom Drill-Down Navigation | Planned | 0/0 | — |
 | Edge Details & Customization | Planned | 0/0 | — |
 | Node Customization & Styling | Planned | 0/0 | — |
+| Phase 8 Polish + Enterprise | Active | 0/5 | Canvas performance: onlyRenderVisibleElements + lazy children |
 
-**Active Phase:** Polish + Enterprise (0/0 done)
+**Active Phase:** Polish + Enterprise (0/5 done)
 **Phases:** done Core Model + Canvas | done C4 Zoom + Diagrams | done Drafts + Versioning | done Collaboration | done API + MCP | done AI Features | done Overlays + Flows | >> Polish + Enterprise
 
-**In Progress:** frontend-canvas-008 Implement color-coding overlays based on active filter (tag/tech/status/team), frontend-canvas-009 Add flow alternative paths (branching) support, frontend-canvas-010 Show numbered step labels on canvas connections during flow playback, frontend-canvas-012 Implement "Get insights" AI feature for object analysis, detail-sidebar-004 Implement per-object history tab (change log scoped to selected object), detail-sidebar-005 Implement typed comments (question, inaccuracy, idea) with icons, detail-sidebar-007 Add "note" comment type alongside question/inaccurate/idea, groups-002 Add groups as layout containers with drag-to-reorganize chips at canvas bottom
+**In Progress:** frontend-canvas-008 Implement color-coding overlays based on active filter (tag/tech/status/team), frontend-canvas-009 Add flow alternative paths (branching) support, frontend-canvas-010 Show numbered step labels on canvas connections during flow playback, frontend-canvas-012 Implement "Get insights" AI feature for object analysis, detail-sidebar-004 Implement per-object history tab (change log scoped to selected object), detail-sidebar-005 Implement typed comments (question, inaccuracy, idea) with icons, detail-sidebar-007 Add "note" comment type alongside question/inaccurate/idea, groups-002 Add groups as layout containers with drag-to-reorganize chips at canvas bottom, phase8-polish-004 Canvas performance: onlyRenderVisibleElements + lazy children
 **Blocked:** —
-**Next Up:** —
+**Next Up:** phase8-polish-001 Import Structurizr DSL — parse objects + relationships (medium), phase8-polish-002 Import Mermaid flowchart / C4 diagrams (medium), phase8-polish-003 Global activity feed page (audit log view) (medium)
 
 ---
 

@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthPage } from './components/auth/AuthPage'
+import { ActivityPage } from './pages/ActivityPage'
 import { OverviewPage } from './pages/OverviewPage'
 import { DiagramPage } from './pages/DiagramPage'
 import { useAuthStore } from './stores/auth-store'
@@ -45,6 +46,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <DiagramPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/activity"
+            element={
+              <ProtectedRoute>
+                <ActivityPage />
               </ProtectedRoute>
             }
           />

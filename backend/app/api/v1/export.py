@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi import APIRouter, Body, Depends, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,6 +8,7 @@ from app.models.connection import Connection
 from app.models.object import ModelObject
 from app.schemas.connection import ConnectionResponse
 from app.schemas.object import ObjectResponse
+from app.services import mermaid_service, structurizr_service
 
 router = APIRouter(tags=["import-export"])
 
@@ -104,3 +105,27 @@ async def import_model(file: UploadFile, db: AsyncSession = Depends(get_db)):
         "created_objects": created_objects,
         "created_connections": created_connections,
     }
+
+
+@router.post("/import/structurizr", status_code=201)
+async def import_structurizr(
+    dsl: str = Body(..., media_type="text/plain"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Bulk-import a Structurizr DSL blob. Body is the raw DSL text."""
+    try:
+        return await structurizr_service.import_dsl(db, dsl)
+    except structurizr_service.StructurizrParseError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@router.post("/import/mermaid", status_code=201)
+async def import_mermaid(
+    src: str = Body(..., media_type="text/plain"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Bulk-import a Mermaid flowchart or C4 diagram. Body is the raw source."""
+    try:
+        return await mermaid_service.import_mermaid(db, src)
+    except mermaid_service.MermaidParseError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e

@@ -1,0 +1,14 @@
+apiVersion: v2
+name: archflow
+description: Self-hosted C4 architecture modeling platform
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/alexandrbasiuk/ArchFlow
+keywords:
+  - architecture
+  - c4
+  - modeling
+  - diagrams
+maintainers:
+  - name: Alexandr Basiuk

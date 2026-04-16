@@ -1,0 +1,56 @@
+## Default values for the archflow chart.
+## Override with `-f custom-values.yaml` or `--set` flags.
+
+# Image references — override with your registry + tag pinned per release.
+image:
+  backend:
+    repository: ghcr.io/alexandrbasiuk/archflow-backend
+    tag: latest
+    pullPolicy: IfNotPresent
+  frontend:
+    repository: ghcr.io/alexandrbasiuk/archflow-frontend
+    tag: latest
+    pullPolicy: IfNotPresent
+
+replicaCount:
+  backend: 1
+  frontend: 1
+
+service:
+  backend:
+    port: 8000
+  frontend:
+    port: 80
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  host: archflow.example.com
+  tls: false
+
+# ── Secrets / config ────────────────────────────────────────
+config:
+  # JWT signing secret. MUST be overridden for any non-dev deployment.
+  jwtSecret: "change-me-in-production"
+  # Populate these to enable AI insights.
+  anthropicApiKey: ""
+  anthropicModel: "claude-sonnet-4-5-20250929"
+  corsOrigins: "https://archflow.example.com"
+
+# ── Postgres ───────────────────────────────────────────────
+postgres:
+  enabled: true
+  image: postgres:16-alpine
+  persistence:
+    size: 20Gi
+    storageClass: ""
+  auth:
+    username: archflow
+    password: archflow-change-me
+    database: archflow
+
+# ── Redis ──────────────────────────────────────────────────
+redis:
+  enabled: true
+  image: redis:7-alpine

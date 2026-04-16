@@ -72,6 +72,26 @@ export function useObjectHistory(id: string | null) {
   })
 }
 
+export function useGlobalActivity(params: {
+  target_type?: 'object' | 'connection' | 'diagram' | null
+  limit?: number
+  offset?: number
+}) {
+  return useQuery({
+    queryKey: ['activity', params],
+    queryFn: async () => {
+      const { data } = await api.get<ActivityLogEntry[]>('/activity', {
+        params: {
+          target_type: params.target_type || undefined,
+          limit: params.limit ?? 100,
+          offset: params.offset ?? 0,
+        },
+      })
+      return data
+    },
+  })
+}
+
 export function useCreateObject() {
   const qc = useQueryClient()
   return useMutation({

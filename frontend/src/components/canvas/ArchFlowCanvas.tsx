@@ -522,6 +522,12 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
        * this leaves the entire canvas rasterized blurry until the next pan.
        */
       elevateNodesOnSelect={false}
+      /*
+       * Performance: skip painting off-screen nodes/edges. Biggest win on
+       * dense diagrams (100+ nodes) where most of them sit outside the
+       * current viewport while the user is zoomed in on a subsection.
+       */
+      onlyRenderVisibleElements
       fitView
       snapToGrid
       snapGrid={[20, 20]}
