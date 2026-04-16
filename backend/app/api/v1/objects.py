@@ -8,7 +8,7 @@ from app.models.activity_log import ActivityTargetType
 from app.schemas.activity import ActivityLogResponse
 from app.schemas.diagram import DiagramResponse
 from app.schemas.object import ObjectCreate, ObjectResponse, ObjectUpdate
-from app.services import activity_service, diagram_service, object_service
+from app.services import activity_service, ai_service, diagram_service, object_service
 
 router = APIRouter(prefix="/objects", tags=["objects"])
 
@@ -98,6 +98,27 @@ async def get_object_history(
         db, ActivityTargetType.OBJECT, object_id, limit=limit
     )
     return [ActivityLogResponse.model_validate(e) for e in entries]
+
+
+@router.post("/{object_id}/insights")
+async def get_object_insights(
+    object_id: uuid.UUID, db: AsyncSession = Depends(get_db)
+):
+    obj = await object_service.get_object(db, object_id)
+    if not obj:
+        raise HTTPException(status_code=404, detail="Object not found")
+    if not ai_service.is_available():
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "AI features are disabled. Set ANTHROPIC_API_KEY in the backend "
+                "environment to enable Get insights."
+            ),
+        )
+    try:
+        return await ai_service.get_insights(db, object_id)
+    except Exception as e:  # noqa: BLE001 — surface upstream errors to the UI
+        raise HTTPException(status_code=502, detail=f"AI call failed: {e}") from e
 
 
 @router.get("/{object_id}/dependencies")

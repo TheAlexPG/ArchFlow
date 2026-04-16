@@ -8,7 +8,7 @@
 |-----------|--------|----------|---------------|
 | Project Setup & Infrastructure | Active | 0/0 | — |
 | Backend API Foundation | Active | 0/0 | — |
-| Frontend Canvas | Active | 1/5 | — |
+| Frontend Canvas | Active | 1/5 | Implement "Get insights" AI feature for object analysis |
 | Basic Authentication | Active | 0/0 | — |
 | JSON Import/Export | Active | 0/0 | — |
 | Model Objects Tree Panel | Planned | 0/0 | — |
@@ -21,16 +21,26 @@
 | Edge Details & Customization | Planned | 0/0 | — |
 | Node Customization & Styling | Planned | 0/0 | — |
 
-**Active Phase:** Collaboration (0/2 done)
-**Phases:** done Core Model + Canvas | done C4 Zoom + Diagrams | done Drafts + Versioning | >> Collaboration | ... API + MCP | ... AI Features | ... Overlays + Flows | ... Polish + Enterprise
+**Active Phase:** AI Features (0/1 done)
+**Phases:** done Core Model + Canvas | done C4 Zoom + Diagrams | done Drafts + Versioning | done Collaboration | done API + MCP | >> AI Features | ... Overlays + Flows | ... Polish + Enterprise
 
-**In Progress:** detail-sidebar-004 Implement per-object history tab (change log scoped to selected object), detail-sidebar-005 Implement typed comments (question, inaccuracy, idea) with icons
+**In Progress:** frontend-canvas-012 Implement "Get insights" AI feature for object analysis, detail-sidebar-004 Implement per-object history tab (change log scoped to selected object), detail-sidebar-005 Implement typed comments (question, inaccuracy, idea) with icons, detail-sidebar-007 Add "note" comment type alongside question/inaccurate/idea
 **Blocked:** —
 **Next Up:** —
 
 ---
 
 ## Changelog
+
+### 2026-04-16 — auto
+Included in d76ab0b alongside detail-sidebar-005: note type was added to the CommentType enum from day one — the backend enum is {question, inaccuracy, idea, note} and the composer surfaces all four with their own icons/colors (❓🚩💡📝).
+Tasks touched: 
+
+
+### 2026-04-16 — auto
+13 files / +631 / -16 — comments table+migration+CRUD service+API, CommentsSection UI with typed composer (Q/Inaccuracy/Idea/Note), inline edit/resolve/delete, resolved collapse. Covers both detail-sidebar-005 and detail-sidebar-007 (note type included).
+Tasks touched: 
+
 
 ### 2026-04-16 — auto
 11 files / +573 / -80 — activity_log model/service/schema/migration, object CRUD hooks, GET /objects/{id}/history, frontend useObjectHistory hook and History tab UI

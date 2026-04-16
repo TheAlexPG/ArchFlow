@@ -292,3 +292,20 @@ export function useDeleteComment() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['comments'] }),
   })
 }
+
+// ─── AI Insights ─────────────────────────────────────────
+
+export interface ObjectInsights {
+  summary: string
+  observations: string[]
+  recommendations: string[]
+}
+
+export function useGetInsights() {
+  return useMutation({
+    mutationFn: async (objectId: string) => {
+      const { data } = await api.post<ObjectInsights>(`/objects/${objectId}/insights`)
+      return data
+    },
+  })
+}

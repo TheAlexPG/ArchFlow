@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     # CORS
     backend_cors_origins: str = "http://localhost:5173"
 
+    # AI features (opt-in)
+    anthropic_api_key: str | None = None
+    # Default to the latest Claude model the user selects in their .env.
+    anthropic_model: str = "claude-sonnet-4-5-20250929"
+
     @property
     def cors_origins(self) -> list[str]:
         return [origin.strip() for origin in self.backend_cors_origins.split(",")]

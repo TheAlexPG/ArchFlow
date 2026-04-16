@@ -9,6 +9,7 @@ import {
 import { useObjectDiagrams } from '../../hooks/use-diagrams'
 import { useCanvasStore } from '../../stores/canvas-store'
 import type { ModelObject } from '../../types/model'
+import { InsightsModal } from './InsightsModal'
 
 interface ObjectContextMenuProps {
   object: ModelObject
@@ -18,6 +19,7 @@ interface ObjectContextMenuProps {
 export function ObjectContextMenu({ object, diagramId }: ObjectContextMenuProps) {
   const [open, setOpen] = useState(false)
   const [coords, setCoords] = useState<{ top: number; left: number } | null>(null)
+  const [insightsOpen, setInsightsOpen] = useState(false)
   const btnRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
@@ -116,6 +118,9 @@ export function ObjectContextMenu({ object, diagramId }: ObjectContextMenuProps)
 
   return (
     <>
+      {insightsOpen && (
+        <InsightsModal object={object} onClose={() => setInsightsOpen(false)} />
+      )}
       <button
         ref={btnRef}
         onClick={handleClick}
@@ -160,7 +165,14 @@ export function ObjectContextMenu({ object, diagramId }: ObjectContextMenuProps)
             }}
           />
           <MenuItem icon="⧉" label="Duplicate object" onClick={handleDuplicate} />
-          <MenuItem icon="✨" label="Get insights" onClick={() => { alert('Coming in Phase 6 (AI Features)'); setOpen(false) }} />
+          <MenuItem
+            icon="✨"
+            label="Get insights"
+            onClick={() => {
+              setInsightsOpen(true)
+              setOpen(false)
+            }}
+          />
           <div style={{ height: 1, background: '#333', margin: '4px 0' }} />
           <MenuItem
             icon="🗑"

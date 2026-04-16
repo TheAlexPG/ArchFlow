@@ -4,6 +4,11 @@ meta:
 context:
   active_epic: detail-sidebar
   in_progress:
+  - id: frontend-canvas-012
+    title: Implement "Get insights" AI feature for object analysis
+    epic: frontend-canvas
+    branch: ''
+    locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
   - id: detail-sidebar-004
     title: Implement per-object history tab (change log scoped to selected object)
     epic: detail-sidebar
@@ -12,7 +17,10 @@ context:
     title: Implement typed comments (question, inaccuracy, idea) with icons
     epic: detail-sidebar
     branch: ''
-    locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
+  - id: detail-sidebar-007
+    title: Add "note" comment type alongside question/inaccurate/idea
+    epic: detail-sidebar
+    branch: ''
   blocked: []
   recent_completed:
   - id: frontend-canvas-011
@@ -23,16 +31,16 @@ context:
     total: 9
     done: 1
     in_progress: 1
-    in_review: 1
-    todo: 6
+    in_review: 3
+    todo: 4
     blocked: 0
     archived: 43
   active_phase:
-    id: collaboration
-    name: Collaboration
+    id: ai-features
+    name: AI Features
     stats:
-      total: 2
-      todo: 1
+      total: 1
+      todo: 0
       in-progress: 1
       in-review: 0
       done: 0
@@ -347,16 +355,18 @@ epics:
     completed: 2026-04-16T12:59
   - id: frontend-canvas-012
     title: Implement "Get insights" AI feature for object analysis
-    status: todo
+    status: in-progress
     priority: low
     created: 2026-04-16T11:30
-    last_referenced: 2026-04-16T11:30
+    last_referenced: 2026-04-16T13:11
     notes: 'IcePanel: context menu "Get insights" triggers AI analysis of object —
       generates description, suggests related objects, detects potential issues. Backend
       needs LLM integration (per spec section 8). Frontend modal/panel with streaming
       AI response.'
     estimate: M
     phase: ai-features
+    started: 2026-04-16T13:11
+    locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
 - id: auth
   name: Basic Authentication
   status: active
@@ -538,17 +548,16 @@ epics:
     started: 2026-04-16T12:59
   - id: detail-sidebar-005
     title: Implement typed comments (question, inaccuracy, idea) with icons
-    status: in-progress
+    status: in-review
     priority: medium
     created: 2026-04-15T11:50
-    last_referenced: 2026-04-16T13:07
+    last_referenced: 2026-04-16T13:10
     notes: 'IcePanel: comments have types — Ask question (?), Mark inaccurate (flag),
       Add idea (lightbulb). Add comment_type enum to comments table. FAB button on
       canvas opens type selector.'
     estimate: M
     phase: collaboration
     started: 2026-04-16T13:07
-    locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
   - id: detail-sidebar-006
     title: Add "Belongs to" (parent) and "In X diagrams" references in object sidebar
     status: archived
@@ -566,14 +575,15 @@ epics:
     archived: 2026-04-16T12:59
   - id: detail-sidebar-007
     title: Add "note" comment type alongside question/inaccurate/idea
-    status: todo
+    status: in-review
     priority: low
     created: 2026-04-16T11:08
-    last_referenced: 2026-04-16T11:08
+    last_referenced: 2026-04-16T13:11
     notes: 'Extend comment_type enum: question, inaccurate, idea, note. Each with
       distinct icon and color. IcePanel has 3, user wants 4.'
     estimate: S
     phase: collaboration
+    started: 2026-04-16T13:11
 - id: groups
   name: Groups & Visual Grouping
   status: planned
@@ -902,26 +912,30 @@ phases:
   completed: 2026-04-16T13:07
 - id: collaboration
   name: Collaboration
-  status: active
+  status: done
   description: Multi-user, orgs/workspaces, roles/permissions, teams, comments, real-time
     cursor sync, notifications
   order: 4
   created: 2026-04-15T11:34
   start_date: '2026-04-16'
+  completed: 2026-04-16T13:11
 - id: api-mcp
   name: API + MCP
-  status: planned
+  status: done
   description: REST API (OpenAPI spec), MCP server (read + write tools), API keys,
     webhooks, rate limiting
   order: 5
   created: 2026-04-15T11:34
+  start_date: '2026-04-16'
+  completed: 2026-04-16T13:11
 - id: ai-features
   name: AI Features
-  status: planned
+  status: active
   description: Description generation, architecture summary, impact analysis, text-to-diagram,
     inaccuracy detection
   order: 6
   created: 2026-04-15T11:34
+  start_date: '2026-04-16'
 - id: overlays-flows
   name: Overlays + Flows
   status: planned
