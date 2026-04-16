@@ -159,6 +159,22 @@ export function useSaveDiagramPosition() {
   })
 }
 
+export function useSaveDiagramSize() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({
+      diagramId, objectId, width, height,
+    }: { diagramId: string; objectId: string; width: number; height: number }) => {
+      await api.put(`/diagrams/${diagramId}/objects/${objectId}`, {
+        width, height,
+      })
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['diagram-objects', vars.diagramId] })
+    },
+  })
+}
+
 export function useRemoveObjectFromDiagram() {
   const qc = useQueryClient()
   return useMutation({

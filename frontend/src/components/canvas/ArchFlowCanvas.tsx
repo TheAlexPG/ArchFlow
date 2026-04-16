@@ -112,7 +112,7 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
       .map((dObj) => {
         const obj = objectMap.get(dObj.object_id)
         if (!obj) return null
-        return {
+        const node: Node = {
           id: obj.id,
           type:
             obj.type === 'group'
@@ -124,15 +124,23 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
                   : 'c4',
           position: { x: dObj.position_x, y: dObj.position_y },
           data: { object: obj } satisfies C4NodeData,
-        } as Node
+        }
+        // Restore persisted node size from the diagram_objects row so the
+        // resized dimensions survive page reloads.
+        if (dObj.width != null && dObj.height != null) {
+          node.width = dObj.width
+          node.height = dObj.height
+        }
+        return node
       })
       .filter(Boolean) as Node[]
 
-    // Include updated_at so node re-renders when object data changes
+    // Include updated_at + persisted size in key so nodes re-render when
+    // any of these change.
     const key = nodes
       .map((n) => {
         const obj = (n.data as C4NodeData).object
-        return `${n.id}:${n.position.x}:${n.position.y}:${obj.updated_at}:${n.type}`
+        return `${n.id}:${n.position.x}:${n.position.y}:${n.width ?? ''}:${n.height ?? ''}:${obj.updated_at}:${n.type}`
       })
       .join(',')
     if (key === prevKeyRef.current) return

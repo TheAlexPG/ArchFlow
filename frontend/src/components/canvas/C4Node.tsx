@@ -1,6 +1,8 @@
-import { Handle, NodeResizer, Position, type NodeProps } from '@xyflow/react'
-import { useNavigate } from 'react-router-dom'
+import { Handle, NodeResizer, Position, useNodeId, type NodeProps } from '@xyflow/react'
+import { useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 import type { ModelObject } from '../../types/model'
+import { useSaveDiagramSize } from '../../hooks/use-api'
 import { useDiagrams } from '../../hooks/use-diagrams'
 import { STATUS_COLORS, TYPE_BORDER_COLORS, TYPE_ICONS, stripHtml } from './node-utils'
 
@@ -13,16 +15,19 @@ export function C4Node({ data, selected }: NodeProps) {
   const borderColor = TYPE_BORDER_COLORS[obj.type]
   const statusColor = STATUS_COLORS[obj.status]
   const navigate = useNavigate()
+  const params = useParams<{ diagramId?: string }>()
+  const nodeId = useNodeId()
+  const saveSize = useSaveDiagramSize()
   const { data: childDiagrams = [] } = useDiagrams(obj.id)
   const hasChildren = childDiagrams.length > 0
+  const [drillPickerOpen, setDrillPickerOpen] = useState(false)
 
   const handleDrillDown = (e: React.MouseEvent) => {
     e.stopPropagation()
     if (childDiagrams.length === 1) {
       navigate(`/diagram/${childDiagrams[0].id}`)
     } else if (childDiagrams.length > 1) {
-      // TODO: popup selector — for now go to first
-      navigate(`/diagram/${childDiagrams[0].id}`)
+      setDrillPickerOpen((v) => !v)
     }
   }
 
@@ -46,6 +51,16 @@ export function C4Node({ data, selected }: NodeProps) {
         isVisible
         minWidth={160}
         minHeight={60}
+        onResizeEnd={(_e, params_) => {
+          if (params.diagramId && nodeId) {
+            saveSize.mutate({
+              diagramId: params.diagramId,
+              objectId: nodeId,
+              width: params_.width,
+              height: params_.height,
+            })
+          }
+        }}
       />
       {/* With connectionMode="loose" these work as both source and target */}
       <Handle type="source" position={Position.Top} id="top" className="!bg-neutral-500 !w-2 !h-2" />
@@ -62,14 +77,64 @@ export function C4Node({ data, selected }: NodeProps) {
 
       {/* Drill-down zoom icon */}
       {hasChildren && (
-        <button
-          onClick={handleDrillDown}
-          onMouseDown={(e) => e.stopPropagation()}
-          className="nodrag absolute -top-2 -left-2 bg-blue-600 hover:bg-blue-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold shadow-lg border border-blue-700"
-          title={`Zoom into (${childDiagrams.length} diagram${childDiagrams.length > 1 ? 's' : ''})`}
-        >
-          🔍
-        </button>
+        <div className="absolute -top-2 -left-2">
+          <button
+            onClick={handleDrillDown}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="nodrag bg-blue-600 hover:bg-blue-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold shadow-lg border border-blue-700"
+            title={`Zoom into (${childDiagrams.length} diagram${childDiagrams.length > 1 ? 's' : ''})`}
+          >
+            🔍
+          </button>
+          {drillPickerOpen && (
+            <div
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+              className="nodrag"
+              style={{
+                position: 'absolute',
+                top: 22,
+                left: 0,
+                minWidth: 180,
+                background: '#1a1a1a',
+                border: '1px solid #333',
+                borderRadius: 6,
+                boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+                padding: 4,
+                zIndex: 100,
+              }}
+            >
+              <div style={{ fontSize: 10, color: '#737373', padding: '4px 8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Open diagram
+              </div>
+              {childDiagrams.map((d) => (
+                <button
+                  key={d.id}
+                  onClick={() => {
+                    setDrillPickerOpen(false)
+                    navigate(`/diagram/${d.id}`)
+                  }}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    textAlign: 'left',
+                    padding: '6px 10px',
+                    background: 'transparent',
+                    border: 'none',
+                    borderRadius: 4,
+                    color: '#d4d4d4',
+                    fontSize: 12,
+                    cursor: 'pointer',
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = '#262626')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                >
+                  {d.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       {/* Type icon + Name */}

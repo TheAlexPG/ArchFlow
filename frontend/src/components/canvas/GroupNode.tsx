@@ -1,9 +1,14 @@
-import { Handle, NodeResizer, Position, type NodeProps } from '@xyflow/react'
+import { Handle, NodeResizer, Position, useNodeId, type NodeProps } from '@xyflow/react'
+import { useParams } from 'react-router-dom'
 import type { C4NodeData } from './C4Node'
+import { useSaveDiagramSize } from '../../hooks/use-api'
 import { stripHtml } from './node-utils'
 
 export function GroupNode({ data, selected }: NodeProps) {
   const obj = (data as C4NodeData).object
+  const params = useParams<{ diagramId?: string }>()
+  const nodeId = useNodeId()
+  const saveSize = useSaveDiagramSize()
 
   return (
     <div
@@ -24,6 +29,16 @@ export function GroupNode({ data, selected }: NodeProps) {
         isVisible
         minWidth={200}
         minHeight={120}
+        onResizeEnd={(_e, p) => {
+          if (params.diagramId && nodeId) {
+            saveSize.mutate({
+              diagramId: params.diagramId,
+              objectId: nodeId,
+              width: p.width,
+              height: p.height,
+            })
+          }
+        }}
       />
       <Handle type="source" position={Position.Top} id="top" className="!bg-neutral-500 !w-2 !h-2" />
       <Handle type="source" position={Position.Bottom} id="bottom" className="!bg-neutral-500 !w-2 !h-2" />
