@@ -6,6 +6,7 @@ const NAV_ITEMS = [
   { label: 'Diagrams', icon: '▦', path: '/diagrams' },
   { label: 'Model Objects', icon: '☰', path: '/objects' },
   { label: 'Connections', icon: '⇄', path: '/connections' },
+  { label: 'Drafts', icon: '✎', path: '/drafts' },
   { label: 'Activity', icon: '⏱', path: '/activity' },
 ]
 

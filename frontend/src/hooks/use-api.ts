@@ -8,6 +8,10 @@ import type {
   Connection,
   ConnectionCreate,
   ConnectionUpdate,
+  Draft,
+  DraftCreate,
+  DraftItem,
+  DraftItemCreate,
   Flow,
   FlowCreate,
   FlowUpdate,
@@ -377,5 +381,117 @@ export function useDeleteFlow() {
       await api.delete(`/flows/${id}`)
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['flows'] }),
+  })
+}
+
+// ─── Drafts ──────────────────────────────────────────────
+
+export function useDrafts() {
+  return useQuery({
+    queryKey: ['drafts'],
+    queryFn: async () => {
+      const { data } = await api.get<Draft[]>('/drafts')
+      return data
+    },
+  })
+}
+
+export function useDraft(id: string | null) {
+  return useQuery({
+    queryKey: ['drafts', id],
+    queryFn: async () => {
+      const { data } = await api.get<Draft>(`/drafts/${id}`)
+      return data
+    },
+    enabled: !!id,
+  })
+}
+
+export function useCreateDraft() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (data: DraftCreate) => {
+      const { data: result } = await api.post<Draft>('/drafts', data)
+      return result
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['drafts'] }),
+  })
+}
+
+export function useDeleteDraft() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await api.delete(`/drafts/${id}`)
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['drafts'] }),
+  })
+}
+
+export function useAddDraftItem() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ draftId, ...data }: DraftItemCreate & { draftId: string }) => {
+      const { data: result } = await api.post<DraftItem>(`/drafts/${draftId}/items`, data)
+      return result
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['drafts', vars.draftId] })
+      qc.invalidateQueries({ queryKey: ['drafts'] })
+    },
+  })
+}
+
+export function useUpdateDraftItem() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({
+      draftId, itemId, proposed_state,
+    }: { draftId: string; itemId: string; proposed_state: Record<string, unknown> }) => {
+      const { data } = await api.put<DraftItem>(`/drafts/${draftId}/items/${itemId}`, {
+        proposed_state,
+      })
+      return data
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['drafts', vars.draftId] })
+    },
+  })
+}
+
+export function useDeleteDraftItem() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ draftId, itemId }: { draftId: string; itemId: string }) => {
+      await api.delete(`/drafts/${draftId}/items/${itemId}`)
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['drafts', vars.draftId] })
+    },
+  })
+}
+
+export function useApplyDraft() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (draftId: string) => {
+      const { data } = await api.post(`/drafts/${draftId}/apply`)
+      return data
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['drafts'] })
+      qc.invalidateQueries({ queryKey: ['objects'] })
+    },
+  })
+}
+
+export function useDiscardDraft() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (draftId: string) => {
+      const { data } = await api.post<Draft>(`/drafts/${draftId}/discard`)
+      return data
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['drafts'] }),
   })
 }

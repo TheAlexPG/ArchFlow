@@ -4,6 +4,8 @@ import { AuthPage } from './components/auth/AuthPage'
 import { ActivityPage } from './pages/ActivityPage'
 import { ConnectionsPage } from './pages/ConnectionsPage'
 import { DiagramPage } from './pages/DiagramPage'
+import { DraftDetailPage } from './pages/DraftDetailPage'
+import { DraftsPage } from './pages/DraftsPage'
 import { ObjectsPage } from './pages/ObjectsPage'
 import { OverviewPage } from './pages/OverviewPage'
 import { useAuthStore } from './stores/auth-store'
@@ -72,6 +74,22 @@ function App() {
             element={
               <ProtectedRoute>
                 <ConnectionsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/drafts"
+            element={
+              <ProtectedRoute>
+                <DraftsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/drafts/:draftId"
+            element={
+              <ProtectedRoute>
+                <DraftDetailPage />
               </ProtectedRoute>
             }
           />
