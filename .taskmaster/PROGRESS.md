@@ -18,19 +18,34 @@
 | Home / Overview Page | Planned | 3/3 | — |
 | Popup Object Picker | Planned | 1/1 | — |
 | C4 Zoom Drill-Down Navigation | Planned | 2/2 | — |
-| Edge Details & Customization | Planned | 4/5 | Add "Via" support — connections passing through intermediate objects |
+| Edge Details & Customization | Planned | 5/5 | — |
 | Node Customization & Styling | Planned | 2/2 | — |
 
-**Active Phase:** C4 Zoom + Diagrams (21/22 done)
+**Active Phase:** C4 Zoom + Diagrams (22/22 done)
 **Phases:** done Core Model + Canvas | >> C4 Zoom + Diagrams | ... Drafts + Versioning | ... Collaboration | ... API + MCP | ... AI Features | ... Overlays + Flows | ... Polish + Enterprise
 
-**In Progress:** edge-details-004 Add "Via" support — connections passing through intermediate objects
+**In Progress:** —
 **Blocked:** —
 **Next Up:** —
 
 ---
 
 ## Changelog
+
+### 2026-04-16 — Work session
+**Done:**
+- ViaSelector UI in EdgeSidebar for selecting pass-through objects. Stores via_object_ids in backend.
+
+**Decisions:**
+- None
+
+**Issues:**
+- Visual routing through waypoints deferred — just stores selection for now. Full path rendering requires custom edge geometry (Phase 7 candidate).
+
+**Tasks touched:** N/A
+
+---
+
 
 ### 2026-04-16 — Work session
 **Done:**

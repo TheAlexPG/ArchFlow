@@ -105,7 +105,13 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
       })
       .filter(Boolean) as Node[]
 
-    const key = nodes.map((n) => `${n.id}:${n.position.x}:${n.position.y}`).join(',')
+    // Include updated_at so node re-renders when object data changes
+    const key = nodes
+      .map((n) => {
+        const obj = (n.data as C4NodeData).object
+        return `${n.id}:${n.position.x}:${n.position.y}:${obj.updated_at}:${n.type}`
+      })
+      .join(',')
     if (key === prevKeyRef.current) return
     prevKeyRef.current = key
 
@@ -125,7 +131,13 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     const filtered = connections.filter(
       (c) => objectIds.has(c.source_id) && objectIds.has(c.target_id),
     )
-    const key = filtered.map((c) => c.id).join(',')
+    // Include all visual fields in key so edge re-renders when they change
+    const key = filtered
+      .map(
+        (c) =>
+          `${c.id}:${c.shape}:${c.label_size}:${c.direction}:${c.label ?? ''}:${c.protocol ?? ''}:${c.source_handle ?? ''}:${c.target_handle ?? ''}`,
+      )
+      .join(',')
     if (key === prevConnsRef.current) return
     prevConnsRef.current = key
     setEdges(filtered.map(connectionToEdge))

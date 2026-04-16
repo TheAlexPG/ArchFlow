@@ -8,6 +8,7 @@ import {
 import { useCanvasStore } from '../../stores/canvas-store'
 import type { ModelObject, ObjectType } from '../../types/model'
 import { TYPE_ICONS, TYPE_LABELS } from '../canvas/node-utils'
+import { ObjectContextMenu } from '../common/ObjectContextMenu'
 
 interface TreeNode {
   object: ModelObject
@@ -236,6 +237,9 @@ function TreeNodeItem({
         {diagramId && inDiagram && (
           <span className="text-[9px] text-neutral-600" title="In this diagram">●</span>
         )}
+        <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+          <ObjectContextMenu object={node.object} diagramId={diagramId} />
+        </div>
       </div>
       {isExpanded &&
         node.children.map((child) => (
@@ -298,6 +302,9 @@ function TreeItem({
       {diagramId && inDiagram && (
         <span className="text-[9px] text-neutral-600">●</span>
       )}
+      <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+        <ObjectContextMenu object={obj} diagramId={diagramId} />
+      </div>
     </div>
   )
 }

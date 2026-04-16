@@ -2,15 +2,13 @@ meta:
   project: ArchFlow
   updated: '2026-04-16'
 context:
-  active_epic: edge-details
-  in_progress:
-  - id: edge-details-004
-    title: Add "Via" support — connections passing through intermediate objects
-    epic: edge-details
-    branch: ''
-    locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
+  active_epic: auth
+  in_progress: []
   blocked: []
   recent_completed:
+  - id: edge-details-004
+    title: Add "Via" support — connections passing through intermediate objects
+    completed: 2026-04-16T11:23
   - id: popup-picker-001
     title: Build popup object picker replacing left sidebar tree
     completed: 2026-04-16T11:22
@@ -23,14 +21,11 @@ context:
   - id: detail-sidebar-006
     title: Add "Belongs to" (parent) and "In X diagrams" references in object sidebar
     completed: 2026-04-16T11:19
-  - id: node-customization-001
-    title: Add node resize handles (drag corners to resize)
-    completed: 2026-04-16T11:17
   next_up: []
   stats:
     total: 29
-    done: 21
-    in_progress: 1
+    done: 22
+    in_progress: 0
     in_review: 0
     todo: 7
     blocked: 0
@@ -41,9 +36,9 @@ context:
     stats:
       total: 22
       todo: 0
-      in-progress: 1
+      in-progress: 0
       in-review: 0
-      done: 21
+      done: 22
       blocked: 0
       archived: 0
     target_date: null
@@ -752,16 +747,16 @@ epics:
     completed: 2026-04-16T11:15
   - id: edge-details-004
     title: Add "Via" support — connections passing through intermediate objects
-    status: in-progress
+    status: done
     priority: medium
     created: 2026-04-16T11:08
-    last_referenced: 2026-04-16T11:22
+    last_referenced: 2026-04-16T11:23
     notes: 'IcePanel: connection can route through "Via" objects. Stored as ordered
       array of object IDs. Visual edge routes via those waypoints.'
     estimate: M
     phase: c4-zoom
     started: 2026-04-16T11:22
-    locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
+    completed: 2026-04-16T11:23
   - id: edge-details-005
     title: Add Direction Flip button and bidirectional edge rendering
     status: done

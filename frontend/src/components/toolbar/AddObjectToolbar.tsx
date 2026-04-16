@@ -7,6 +7,7 @@ import {
 } from '../../hooks/use-api'
 import type { ObjectType } from '../../types/model'
 import { TYPE_ICONS, TYPE_LABELS } from '../canvas/node-utils'
+import { ObjectContextMenu } from '../common/ObjectContextMenu'
 
 const QUICK_TYPES: ObjectType[] = ['system', 'actor', 'external_system', 'app', 'store', 'group']
 
@@ -130,26 +131,36 @@ export function AddObjectToolbar({ diagramId }: AddObjectToolbarProps) {
                 </div>
               ) : (
                 filtered.map((obj) => (
-                  <button
+                  <div
                     key={obj.id}
-                    onClick={() => handleAddExisting(obj.id)}
                     style={{
-                      display: 'flex', alignItems: 'center', gap: 8, width: '100%',
-                      padding: '6px 12px', background: 'transparent', border: 'none',
-                      color: '#d4d4d4', cursor: 'pointer', fontSize: 12, textAlign: 'left',
+                      display: 'flex', alignItems: 'center', gap: 4,
+                      padding: '2px 12px 2px 0',
                     }}
+                    className="group"
                     onMouseEnter={(e) => (e.currentTarget.style.background = '#262626')}
                     onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                    title={`${TYPE_LABELS[obj.type]}${obj.technology ? ` — ${obj.technology.join(', ')}` : ''}`}
                   >
-                    <span style={{ opacity: 0.5 }}>{TYPE_ICONS[obj.type]}</span>
-                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {obj.name}
-                    </span>
-                    <span style={{ fontSize: 10, color: '#525252' }}>
-                      {TYPE_LABELS[obj.type]}
-                    </span>
-                  </button>
+                    <button
+                      onClick={() => handleAddExisting(obj.id)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 8,
+                        flex: 1, padding: '6px 12px',
+                        background: 'transparent', border: 'none',
+                        color: '#d4d4d4', cursor: 'pointer', fontSize: 12, textAlign: 'left',
+                      }}
+                      title={`${TYPE_LABELS[obj.type]}${obj.technology ? ` — ${obj.technology.join(', ')}` : ''}`}
+                    >
+                      <span style={{ opacity: 0.5 }}>{TYPE_ICONS[obj.type]}</span>
+                      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {obj.name}
+                      </span>
+                      <span style={{ fontSize: 10, color: '#525252' }}>
+                        {TYPE_LABELS[obj.type]}
+                      </span>
+                    </button>
+                    <ObjectContextMenu object={obj} diagramId={diagramId} />
+                  </div>
                 ))
               )}
             </div>
