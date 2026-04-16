@@ -8,6 +8,10 @@ interface CanvasState {
   activeFilter: 'none' | 'tags' | 'technology' | 'status' | 'teams'
   addingObjectType: string | null
   treeOpen: boolean
+  // When set, canvas dims all nodes/edges that aren't directly connected
+  // to this object (upstream or downstream) so the user can trace its
+  // dependencies visually. Triggered from the object context menu.
+  dependenciesFocusId: string | null
 
   selectNode: (id: string | null) => void
   selectEdge: (id: string | null) => void
@@ -16,6 +20,7 @@ interface CanvasState {
   setActiveFilter: (filter: 'none' | 'tags' | 'technology' | 'status' | 'teams') => void
   setAddingObjectType: (type: string | null) => void
   toggleTree: () => void
+  setDependenciesFocus: (id: string | null) => void
 }
 
 export const useCanvasStore = create<CanvasState>((set) => ({
@@ -26,6 +31,7 @@ export const useCanvasStore = create<CanvasState>((set) => ({
   activeFilter: 'none',
   addingObjectType: null,
   treeOpen: false,
+  dependenciesFocusId: null,
 
   selectNode: (id) =>
     set({ selectedNodeId: id, selectedEdgeId: null, sidebarOpen: id !== null }),
@@ -37,4 +43,5 @@ export const useCanvasStore = create<CanvasState>((set) => ({
   setActiveFilter: (filter) => set({ activeFilter: filter }),
   setAddingObjectType: (type) => set({ addingObjectType: type }),
   toggleTree: () => set((state) => ({ treeOpen: !state.treeOpen })),
+  setDependenciesFocus: (id) => set({ dependenciesFocusId: id }),
 }))

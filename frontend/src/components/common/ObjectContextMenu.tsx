@@ -25,7 +25,7 @@ export function ObjectContextMenu({ object, diagramId }: ObjectContextMenuProps)
   const createObject = useCreateObject()
   const addToDiagram = useAddObjectToDiagram()
   const deleteObject = useDeleteObject()
-  const { selectNode } = useCanvasStore()
+  const { selectNode, setDependenciesFocus } = useCanvasStore()
 
   // Position menu near button, flip if near edges
   useLayoutEffect(() => {
@@ -151,7 +151,14 @@ export function ObjectContextMenu({ object, diagramId }: ObjectContextMenuProps)
           }}
         >
           <MenuItem icon="🎯" label="View in model" onClick={handleViewInModel} />
-          <MenuItem icon="🔗" label="View dependencies" onClick={() => { alert('Coming in Phase 7 (Overlays + Flows)'); setOpen(false) }} />
+          <MenuItem
+            icon="🔗"
+            label="View dependencies"
+            onClick={() => {
+              setDependenciesFocus(object.id)
+              setOpen(false)
+            }}
+          />
           <MenuItem icon="⧉" label="Duplicate object" onClick={handleDuplicate} />
           <MenuItem icon="✨" label="Get insights" onClick={() => { alert('Coming in Phase 6 (AI Features)'); setOpen(false) }} />
           <div style={{ height: 1, background: '#333', margin: '4px 0' }} />

@@ -15,7 +15,7 @@ import {
   type OnSelectionChangeParams,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 
 import {
   useConnections,
@@ -75,10 +75,33 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
   const createConnection = useCreateConnection()
   const deleteConnection = useDeleteConnection()
   const saveDiagramPosition = useSaveDiagramPosition()
-  const { selectNode, selectEdge } = useCanvasStore()
+  const { selectNode, selectEdge, dependenciesFocusId, setDependenciesFocus } = useCanvasStore()
   const { setNodes, setEdges, getNodes, getEdges } = useReactFlow()
   const prevKeyRef = useRef<string>('')
   const prevConnsRef = useRef<string>('')
+
+  // Direct-neighbor dependency chain for the "View dependencies" overlay.
+  // Focused node + every object with an incoming/outgoing edge to it within
+  // this diagram. Nodes/edges outside the chain are dimmed on the canvas.
+  // Declared before the node/edge build effects because they reference it
+  // in their deps array (would hit TDZ otherwise).
+  const dependencyChain = useMemo(() => {
+    if (!dependenciesFocusId) return null
+    const inDiagram = new Set(diagramObjects.map((d) => d.object_id))
+    if (!inDiagram.has(dependenciesFocusId)) return null
+    const chain = new Set<string>([dependenciesFocusId])
+    const connectedEdgeIds = new Set<string>()
+    for (const c of connections) {
+      if (c.source_id === dependenciesFocusId && inDiagram.has(c.target_id)) {
+        chain.add(c.target_id)
+        connectedEdgeIds.add(c.id)
+      } else if (c.target_id === dependenciesFocusId && inDiagram.has(c.source_id)) {
+        chain.add(c.source_id)
+        connectedEdgeIds.add(c.id)
+      }
+    }
+    return { nodes: chain, edges: connectedEdgeIds }
+  }, [dependenciesFocusId, connections, diagramObjects])
 
   // Build nodes from diagram objects (scoped to this diagram)
   useEffect(() => {
@@ -115,10 +138,12 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     if (key === prevKeyRef.current) return
     prevKeyRef.current = key
 
-    // Preserve dragged positions, selection state, and size from NodeResizer
+    // Preserve dragged positions, selection state, and size from NodeResizer.
+    // Also carry over the opacity hint from dependencies overlay, if active.
     const currentNodes = getNodes()
     const merged = nodes.map((n) => {
       const existing = currentNodes.find((cn) => cn.id === n.id)
+      const opacity = dependencyChain && !dependencyChain.nodes.has(n.id) ? 0.15 : 1
       if (existing) {
         return {
           ...n,
@@ -126,13 +151,13 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
           selected: existing.selected,
           width: existing.width,
           height: existing.height,
-          style: existing.style,
+          style: { ...existing.style, opacity },
         }
       }
-      return n
+      return { ...n, style: { opacity } }
     })
     setNodes(merged)
-  }, [diagramId, allObjects, diagramObjects, setNodes, getNodes])
+  }, [diagramId, allObjects, diagramObjects, setNodes, getNodes, dependencyChain])
 
   // Filter connections to only those between objects in this diagram
   useEffect(() => {
@@ -149,15 +174,61 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
       .join(',')
     if (key === prevConnsRef.current) return
     prevConnsRef.current = key
-    // Preserve selection state across re-renders
+    // Preserve selection state across re-renders + apply overlay opacity.
     const currentEdges = getEdges()
     setEdges(
       filtered.map(connectionToEdge).map((e) => {
         const existing = currentEdges.find((ce) => ce.id === e.id)
-        return existing?.selected ? { ...e, selected: true } : e
+        const opacity = dependencyChain && !dependencyChain.edges.has(e.id) ? 0.15 : 1
+        const withStyle = { ...e, style: { ...e.style, opacity } }
+        return existing?.selected ? { ...withStyle, selected: true } : withStyle
       }),
     )
-  }, [connections, diagramObjects, setEdges, getEdges])
+  }, [connections, diagramObjects, setEdges, getEdges, dependencyChain])
+
+  // Apply dimming to existing nodes/edges whenever the dependency focus
+  // changes. For nodes added later (new drops), dimming is also re-applied
+  // in the main nodes/edges build effects below via `dependencyChain`.
+  useEffect(() => {
+    const currentNodes = getNodes()
+    if (currentNodes.length > 0) {
+      setNodes(
+        currentNodes.map((n) => ({
+          ...n,
+          style: {
+            ...n.style,
+            opacity: dependencyChain && !dependencyChain.nodes.has(n.id) ? 0.15 : 1,
+          },
+        })),
+      )
+    }
+    const currentEdges = getEdges()
+    if (currentEdges.length > 0) {
+      setEdges(
+        currentEdges.map((e) => ({
+          ...e,
+          style: {
+            ...e.style,
+            opacity: dependencyChain && !dependencyChain.edges.has(e.id) ? 0.15 : 1,
+          },
+        })),
+      )
+    }
+  }, [dependencyChain, getNodes, setNodes, getEdges, setEdges])
+
+  // ESC clears the dependencies focus overlay.
+  useEffect(() => {
+    if (!dependenciesFocusId) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setDependenciesFocus(null)
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [dependenciesFocusId, setDependenciesFocus])
+
+  const focusObject = dependenciesFocusId
+    ? allObjects.find((o) => o.id === dependenciesFocusId)
+    : null
 
   const onNodeDragStop = useCallback(
     (_event: NodeDragEvent, node: Node) => {
@@ -207,7 +278,50 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
   )
 
   return (
-    <ReactFlow
+    <>
+      {focusObject && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 12,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 20,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            padding: '8px 14px',
+            background: '#171717',
+            border: '1px solid #3b82f6',
+            borderRadius: 8,
+            color: '#e5e5e5',
+            fontSize: 12,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+          }}
+        >
+          <span style={{ color: '#60a5fa' }}>🔗</span>
+          <span>
+            Dependencies of{' '}
+            <span style={{ fontWeight: 600, color: '#f5f5f5' }}>{focusObject.name}</span>
+          </span>
+          <button
+            onClick={() => setDependenciesFocus(null)}
+            style={{
+              background: 'transparent',
+              border: '1px solid #404040',
+              color: '#a3a3a3',
+              borderRadius: 4,
+              padding: '2px 8px',
+              cursor: 'pointer',
+              fontSize: 11,
+            }}
+            title="Clear (Esc)"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+      <ReactFlow
       defaultNodes={[]}
       defaultEdges={[]}
       connectionMode={ConnectionMode.Loose}
@@ -243,6 +357,7 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
         style={{ background: '#171717', border: '1px solid #333' }}
       />
     </ReactFlow>
+    </>
   )
 }
 
