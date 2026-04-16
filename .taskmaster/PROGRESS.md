@@ -18,19 +18,94 @@
 | Home / Overview Page | Planned | 3/3 | — |
 | Popup Object Picker | Planned | 0/1 | — |
 | C4 Zoom Drill-Down Navigation | Planned | 0/2 | — |
-| Edge Details & Customization | Planned | 0/5 | Build edge details sidebar (Sender/Receiver/Via/Direction/Shape/Label) |
-| Node Customization & Styling | Planned | 0/2 | — |
+| Edge Details & Customization | Planned | 4/5 | — |
+| Node Customization & Styling | Planned | 1/2 | Add node resize handles (drag corners to resize) |
 
-**Active Phase:** C4 Zoom + Diagrams (11/22 done)
+**Active Phase:** C4 Zoom + Diagrams (16/22 done)
 **Phases:** done Core Model + Canvas | >> C4 Zoom + Diagrams | ... Drafts + Versioning | ... Collaboration | ... API + MCP | ... AI Features | ... Overlays + Flows | ... Polish + Enterprise
 
-**In Progress:** edge-details-001 Build edge details sidebar (Sender/Receiver/Via/Direction/Shape/Label)
+**In Progress:** node-customization-001 Add node resize handles (drag corners to resize)
 **Blocked:** —
 **Next Up:** —
 
 ---
 
 ## Changelog
+
+### 2026-04-16 — Work session
+**Done:**
+- Distinct ActorNode (circle with person icon, name below) and ExternalSystemNode (dashed rounded rect with cloud icon). Different node types routed based on object.type.
+
+**Decisions:**
+- None
+
+**Issues:**
+- None
+
+**Tasks touched:** N/A
+
+---
+
+
+### 2026-04-16 — Work session
+**Done:**
+- Flip button in EdgeSidebar toggles direction. Bidirectional edges render markerStart arrow on both ends.
+
+**Decisions:**
+- None
+
+**Issues:**
+- None
+
+**Tasks touched:** N/A
+
+---
+
+
+### 2026-04-16 — Work session
+**Done:**
+- label_size field (8-20px) with slider. C4Edge renders configurable font size. Multi-line support via whitespace-pre-wrap and max-width 220px.
+
+**Decisions:**
+- None
+
+**Issues:**
+- None
+
+**Tasks touched:** N/A
+
+---
+
+
+### 2026-04-16 — Work session
+**Done:**
+- Shape selector with 4 options (curved/straight/step/smoothstep), correct path rendering in C4Edge
+
+**Decisions:**
+- None
+
+**Issues:**
+- None
+
+**Tasks touched:** N/A
+
+---
+
+
+### 2026-04-16 — Work session
+**Done:**
+- EdgeSidebar component with Sender/Receiver, Direction+Flip, Shape selector, Label, Label size slider, Protocol, Delete
+
+**Decisions:**
+- None
+
+**Issues:**
+- None
+
+**Tasks touched:** N/A
+
+---
+
 
 ### 2026-04-15 — Work session
 **Done:**

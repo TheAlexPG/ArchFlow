@@ -28,12 +28,16 @@ import {
 import { useCanvasStore } from '../../stores/canvas-store'
 import type { ModelObject, Connection } from '../../types/model'
 import { C4Edge } from './C4Edge'
+import { ActorNode } from './ActorNode'
 import { C4Node, type C4NodeData } from './C4Node'
+import { ExternalSystemNode } from './ExternalSystemNode'
 import { GroupNode } from './GroupNode'
 
 const nodeTypes: NodeTypes = {
   c4: C4Node as unknown as NodeTypes['c4'],
   group: GroupNode as unknown as NodeTypes['group'],
+  actor: ActorNode as unknown as NodeTypes['actor'],
+  external: ExternalSystemNode as unknown as NodeTypes['external'],
 }
 
 const edgeTypes: EdgeTypes = {
@@ -87,7 +91,14 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
         if (!obj) return null
         return {
           id: obj.id,
-          type: obj.type === 'group' ? 'group' : 'c4',
+          type:
+            obj.type === 'group'
+              ? 'group'
+              : obj.type === 'actor'
+                ? 'actor'
+                : obj.type === 'external_system'
+                  ? 'external'
+                  : 'c4',
           position: { x: dObj.position_x, y: dObj.position_y },
           data: { object: obj } satisfies C4NodeData,
         } as Node
@@ -133,6 +144,7 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     },
     [diagramId, saveDiagramPosition],
   )
+
 
   const onConnect = useCallback(
     (params: RFConnection) => {

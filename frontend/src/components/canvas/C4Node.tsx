@@ -1,4 +1,4 @@
-import { Handle, Position, type NodeProps } from '@xyflow/react'
+import { Handle, NodeResizer, Position, type NodeProps } from '@xyflow/react'
 import type { ModelObject } from '../../types/model'
 import { STATUS_COLORS, TYPE_BORDER_COLORS, TYPE_ICONS } from './node-utils'
 
@@ -20,6 +20,12 @@ export function C4Node({ data, selected }: NodeProps) {
       `}
       style={{ borderColor }}
     >
+      <NodeResizer
+        color="#3b82f6"
+        isVisible={selected}
+        minWidth={120}
+        minHeight={60}
+      />
       {/* With connectionMode="loose" these work as both source and target */}
       <Handle type="source" position={Position.Top} id="top" className="!bg-neutral-500 !w-2 !h-2" />
       <Handle type="source" position={Position.Bottom} id="bottom" className="!bg-neutral-500 !w-2 !h-2" />

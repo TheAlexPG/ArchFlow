@@ -2,37 +2,38 @@ meta:
   project: ArchFlow
   updated: '2026-04-16'
 context:
-  active_epic: edge-details
+  active_epic: node-customization
   in_progress:
-  - id: edge-details-001
-    title: Build edge details sidebar (Sender/Receiver/Via/Direction/Shape/Label)
-    epic: edge-details
+  - id: node-customization-001
+    title: Add node resize handles (drag corners to resize)
+    epic: node-customization
     branch: ''
     locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
   blocked: []
   recent_completed:
-  - id: import-export-003
-    title: Add canvas screenshot/export button (PNG snapshot of current view)
-    completed: 2026-04-15T14:46
-  - id: detail-sidebar-003
-    title: Implement rich text (WYSIWYG) editor for object descriptions
-    completed: 2026-04-15T14:45
-  - id: groups-001
-    title: Implement Group object type with visual bounding box on canvas
-    completed: 2026-04-15T14:44
-  - id: frontend-canvas-007
-    title: Build canvas toolbar with Tags/Technology/Status/Teams filter tabs
-    completed: 2026-04-15T14:43
-  - id: detail-sidebar-002
-    title: Show cross-references in sidebar (contains count, in X diagrams, in X flows)
-    completed: 2026-04-15T14:42
+  - id: node-customization-002
+    title: Improve visual styling per object type (actor/system/external distinct
+      looks)
+    completed: 2026-04-16T11:16
+  - id: edge-details-001
+    title: Build edge details sidebar (Sender/Receiver/Via/Direction/Shape/Label)
+    completed: 2026-04-16T11:15
+  - id: edge-details-002
+    title: Add edge shape customization (curved/straight/step/smoothstep)
+    completed: 2026-04-16T11:15
+  - id: edge-details-003
+    title: Add edge label size slider and multi-line label rendering
+    completed: 2026-04-16T11:15
+  - id: edge-details-005
+    title: Add Direction Flip button and bidirectional edge rendering
+    completed: 2026-04-16T11:15
   next_up: []
   stats:
     total: 29
-    done: 11
+    done: 16
     in_progress: 1
     in_review: 0
-    todo: 17
+    todo: 12
     blocked: 0
     archived: 21
   active_phase:
@@ -40,10 +41,10 @@ context:
     name: C4 Zoom + Diagrams
     stats:
       total: 22
-      todo: 10
+      todo: 5
       in-progress: 1
       in-review: 0
-      done: 11
+      done: 16
       blocked: 0
       archived: 0
     target_date: null
@@ -706,10 +707,10 @@ epics:
   tasks:
   - id: edge-details-001
     title: Build edge details sidebar (Sender/Receiver/Via/Direction/Shape/Label)
-    status: in-progress
+    status: done
     priority: high
     created: 2026-04-16T11:08
-    last_referenced: 2026-04-16T11:11
+    last_referenced: 2026-04-16T11:15
     notes: 'IcePanel: click edge → sidebar with Sender (source), Receiver (target),
       Via (pass-through objects), Status, Direction with Flip button, Shape dropdown
       (Curved/Straight/Step), Label size slider, Tags, Technology, rich description.
@@ -717,27 +718,31 @@ epics:
     estimate: L
     phase: c4-zoom
     started: 2026-04-16T11:11
-    locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
+    completed: 2026-04-16T11:15
   - id: edge-details-002
     title: Add edge shape customization (curved/straight/step/smoothstep)
-    status: todo
+    status: done
     priority: medium
     created: 2026-04-16T11:08
-    last_referenced: 2026-04-16T11:08
+    last_referenced: 2026-04-16T11:15
     notes: Store edge shape in metadata or new column. React Flow supports bezier
       (curved), straight, step, smoothstep path types. Per-edge selection in sidebar.
     estimate: M
     phase: c4-zoom
+    started: 2026-04-16T11:15
+    completed: 2026-04-16T11:15
   - id: edge-details-003
     title: Add edge label size slider and multi-line label rendering
-    status: todo
+    status: done
     priority: medium
     created: 2026-04-16T11:08
-    last_referenced: 2026-04-16T11:08
+    last_referenced: 2026-04-16T11:15
     notes: 'IcePanel: edge labels support multi-line text with good positioning. Slider
       to control label font size. Store as JSON in metadata: {label_size, label_position}.'
     estimate: M
     phase: c4-zoom
+    started: 2026-04-16T11:15
+    completed: 2026-04-16T11:15
   - id: edge-details-004
     title: Add "Via" support — connections passing through intermediate objects
     status: todo
@@ -750,14 +755,16 @@ epics:
     phase: c4-zoom
   - id: edge-details-005
     title: Add Direction Flip button and bidirectional edge rendering
-    status: todo
+    status: done
     priority: low
     created: 2026-04-16T11:08
-    last_referenced: 2026-04-16T11:08
+    last_referenced: 2026-04-16T11:15
     notes: One-click flip source↔target. Bidirectional edges render with arrows on
       both ends.
     estimate: S
     phase: c4-zoom
+    started: 2026-04-16T11:15
+    completed: 2026-04-16T11:15
 - id: node-customization
   name: Node Customization & Styling
   status: planned
@@ -767,26 +774,30 @@ epics:
   tasks:
   - id: node-customization-001
     title: Add node resize handles (drag corners to resize)
-    status: todo
+    status: in-progress
     priority: medium
     created: 2026-04-16T11:08
-    last_referenced: 2026-04-16T11:08
+    last_referenced: 2026-04-16T11:16
     notes: React Flow NodeResizer component. Store width/height in diagram_objects.width/height.
       Useful for groups and large labels.
     estimate: M
     phase: c4-zoom
+    started: 2026-04-16T11:16
+    locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
   - id: node-customization-002
     title: Improve visual styling per object type (actor/system/external distinct
       looks)
-    status: todo
+    status: done
     priority: medium
     created: 2026-04-16T11:08
-    last_referenced: 2026-04-16T11:08
+    last_referenced: 2026-04-16T11:16
     notes: 'IcePanel: Actor shown as person icon with label below, External System
       with cloud icon, System as rounded rect, App as square. Match IcePanel aesthetic
       for each type.'
     estimate: M
     phase: c4-zoom
+    started: 2026-04-16T11:15
+    completed: 2026-04-16T11:16
 phases:
 - id: core-model
   name: Core Model + Canvas
