@@ -21,16 +21,21 @@
 | Edge Details & Customization | Planned | 0/0 | — |
 | Node Customization & Styling | Planned | 0/0 | — |
 
-**Active Phase:** Drafts + Versioning (0/1 done)
-**Phases:** done Core Model + Canvas | done C4 Zoom + Diagrams | >> Drafts + Versioning | ... Collaboration | ... API + MCP | ... AI Features | ... Overlays + Flows | ... Polish + Enterprise
+**Active Phase:** Collaboration (0/2 done)
+**Phases:** done Core Model + Canvas | done C4 Zoom + Diagrams | done Drafts + Versioning | >> Collaboration | ... API + MCP | ... AI Features | ... Overlays + Flows | ... Polish + Enterprise
 
-**In Progress:** detail-sidebar-004 Implement per-object history tab (change log scoped to selected object)
+**In Progress:** detail-sidebar-004 Implement per-object history tab (change log scoped to selected object), detail-sidebar-005 Implement typed comments (question, inaccuracy, idea) with icons
 **Blocked:** —
 **Next Up:** —
 
 ---
 
 ## Changelog
+
+### 2026-04-16 — auto
+11 files / +573 / -80 — activity_log model/service/schema/migration, object CRUD hooks, GET /objects/{id}/history, frontend useObjectHistory hook and History tab UI
+Tasks touched: 
+
 
 ### 2026-04-16 — auto
 Implemented in commit 41caf9a: canvas-store dependenciesFocus state, ArchFlowCanvas dims non-neighbor nodes/edges via opacity 0.15, banner with Clear/ESC, ObjectContextMenu wires the overlay on click. Direct neighbors only for v1; transitive depth can come later.

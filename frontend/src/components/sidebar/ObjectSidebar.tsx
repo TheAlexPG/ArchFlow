@@ -13,6 +13,7 @@ import { useObjectDiagrams } from '../../hooks/use-diagrams'
 import { useCanvasStore } from '../../stores/canvas-store'
 import type { ObjectScope, ObjectStatus } from '../../types/model'
 import { STATUS_COLORS, TYPE_LABELS } from '../canvas/node-utils'
+import { CommentsSection } from '../common/CommentsSection'
 import { RichTextEditor } from '../common/RichTextEditor'
 
 export function ObjectSidebar() {
@@ -191,6 +192,9 @@ export function ObjectSidebar() {
                 placeholder="Team name..."
               />
             </Field>
+
+            {/* Comments */}
+            <CommentsSection targetType="object" targetId={obj.id} />
 
             {/* Delete */}
             <button

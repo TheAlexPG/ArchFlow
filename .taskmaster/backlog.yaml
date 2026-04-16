@@ -8,6 +8,10 @@ context:
     title: Implement per-object history tab (change log scoped to selected object)
     epic: detail-sidebar
     branch: ''
+  - id: detail-sidebar-005
+    title: Implement typed comments (question, inaccuracy, idea) with icons
+    epic: detail-sidebar
+    branch: ''
     locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
   blocked: []
   recent_completed:
@@ -19,16 +23,16 @@ context:
     total: 9
     done: 1
     in_progress: 1
-    in_review: 0
-    todo: 7
+    in_review: 1
+    todo: 6
     blocked: 0
     archived: 43
   active_phase:
-    id: drafts-versioning
-    name: Drafts + Versioning
+    id: collaboration
+    name: Collaboration
     stats:
-      total: 1
-      todo: 0
+      total: 2
+      todo: 1
       in-progress: 1
       in-review: 0
       done: 0
@@ -523,27 +527,28 @@ epics:
     archived: 2026-04-16T12:59
   - id: detail-sidebar-004
     title: Implement per-object history tab (change log scoped to selected object)
-    status: in-progress
+    status: in-review
     priority: medium
     created: 2026-04-15T11:49
-    last_referenced: 2026-04-16T12:59
+    last_referenced: 2026-04-16T13:04
     notes: 'IcePanel: History tab in sidebar shows changes for the selected object
       specifically, not the global activity log. Filter activity_log by target_id.'
     estimate: M
     phase: drafts-versioning
     started: 2026-04-16T12:59
-    locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
   - id: detail-sidebar-005
     title: Implement typed comments (question, inaccuracy, idea) with icons
-    status: todo
+    status: in-progress
     priority: medium
     created: 2026-04-15T11:50
-    last_referenced: 2026-04-15T11:50
+    last_referenced: 2026-04-16T13:07
     notes: 'IcePanel: comments have types — Ask question (?), Mark inaccurate (flag),
       Add idea (lightbulb). Add comment_type enum to comments table. FAB button on
       canvas opens type selector.'
     estimate: M
     phase: collaboration
+    started: 2026-04-16T13:07
+    locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
   - id: detail-sidebar-006
     title: Add "Belongs to" (parent) and "In X diagrams" references in object sidebar
     status: archived
@@ -888,19 +893,21 @@ phases:
   completed: 2026-04-16T12:59
 - id: drafts-versioning
   name: Drafts + Versioning
-  status: active
+  status: done
   description: Draft lifecycle (create, edit, merge), version snapshots, diff view,
     conflict detection, activity log
   order: 3
   created: 2026-04-15T11:34
   start_date: '2026-04-16'
+  completed: 2026-04-16T13:07
 - id: collaboration
   name: Collaboration
-  status: planned
+  status: active
   description: Multi-user, orgs/workspaces, roles/permissions, teams, comments, real-time
     cursor sync, notifications
   order: 4
   created: 2026-04-15T11:34
+  start_date: '2026-04-16'
 - id: api-mcp
   name: API + MCP
   status: planned

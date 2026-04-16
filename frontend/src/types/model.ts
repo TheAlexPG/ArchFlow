@@ -127,3 +127,32 @@ export interface ConnectionCreate {
   source_handle?: string | null
   target_handle?: string | null
 }
+
+export type CommentTargetType = 'object' | 'connection' | 'diagram'
+export type CommentType = 'question' | 'inaccuracy' | 'idea' | 'note'
+
+export interface Comment {
+  id: string
+  target_type: CommentTargetType
+  target_id: string
+  comment_type: CommentType
+  body: string
+  author_id: string | null
+  author: { id: string; email: string } | null
+  resolved: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface CommentCreate {
+  target_type: CommentTargetType
+  target_id: string
+  comment_type?: CommentType
+  body: string
+}
+
+export interface CommentUpdate {
+  comment_type?: CommentType
+  body?: string
+  resolved?: boolean
+}

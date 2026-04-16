@@ -1,6 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
 import type {
+  Comment,
+  CommentCreate,
+  CommentTargetType,
+  CommentUpdate,
   Connection,
   ConnectionCreate,
   ConnectionUpdate,
@@ -237,5 +241,54 @@ export function useUpdateConnection() {
       return result
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['connections'] }),
+  })
+}
+
+// ─── Comments ────────────────────────────────────────────
+
+export function useComments(targetType: CommentTargetType, targetId: string | null) {
+  return useQuery({
+    queryKey: ['comments', targetType, targetId],
+    queryFn: async () => {
+      const { data } = await api.get<Comment[]>('/comments', {
+        params: { target_type: targetType, target_id: targetId },
+      })
+      return data
+    },
+    enabled: !!targetId,
+  })
+}
+
+export function useCreateComment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (data: CommentCreate) => {
+      const { data: result } = await api.post<Comment>('/comments', data)
+      return result
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['comments', vars.target_type, vars.target_id] })
+    },
+  })
+}
+
+export function useUpdateComment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, ...data }: CommentUpdate & { id: string }) => {
+      const { data: result } = await api.put<Comment>(`/comments/${id}`, data)
+      return result
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['comments'] }),
+  })
+}
+
+export function useDeleteComment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await api.delete(`/comments/${id}`)
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['comments'] }),
   })
 }

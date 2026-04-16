@@ -1,5 +1,6 @@
 from app.models.activity_log import ActivityAction, ActivityLog, ActivityTargetType
 from app.models.base import Base
+from app.models.comment import Comment, CommentTargetType, CommentType
 from app.models.connection import Connection, ConnectionDirection
 from app.models.diagram import Diagram, DiagramObject, DiagramType
 from app.models.object import ModelObject, ObjectScope, ObjectStatus, ObjectType
@@ -10,6 +11,9 @@ __all__ = [
     "ActivityLog",
     "ActivityTargetType",
     "Base",
+    "Comment",
+    "CommentTargetType",
+    "CommentType",
     "Connection",
     "ConnectionDirection",
     "Diagram",
