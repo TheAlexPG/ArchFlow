@@ -37,30 +37,26 @@ context:
       bottom
     epic: groups
     branch: ''
-    locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
   blocked: []
-  recent_completed:
-  - id: frontend-canvas-011
-    title: Implement "View dependencies" visual overlay (highlight upstream/downstream)
-    completed: 2026-04-16T12:59
+  recent_completed: []
   next_up: []
   stats:
-    total: 9
-    done: 1
-    in_progress: 1
-    in_review: 7
+    total: 8
+    done: 0
+    in_progress: 0
+    in_review: 8
     todo: 0
     blocked: 0
-    archived: 43
+    archived: 44
   active_phase:
-    id: overlays-flows
-    name: Overlays + Flows
+    id: enterprise
+    name: Polish + Enterprise
     stats:
-      total: 5
+      total: 0
       todo: 0
-      in-progress: 1
-      in-review: 3
-      done: 1
+      in-progress: 0
+      in-review: 0
+      done: 0
       blocked: 0
       archived: 0
     target_date: null
@@ -361,7 +357,7 @@ epics:
     started: 2026-04-16T13:21
   - id: frontend-canvas-011
     title: Implement "View dependencies" visual overlay (highlight upstream/downstream)
-    status: done
+    status: archived
     priority: medium
     created: 2026-04-16T11:30
     last_referenced: 2026-04-16T12:59
@@ -373,6 +369,8 @@ epics:
     phase: overlays-flows
     started: 2026-04-16T12:59
     completed: 2026-04-16T12:59
+    archive_reason: done
+    archived: 2026-04-16T13:24
   - id: frontend-canvas-012
     title: Implement "Get insights" AI feature for object analysis
     status: in-review
@@ -628,17 +626,16 @@ epics:
   - id: groups-002
     title: Add groups as layout containers with drag-to-reorganize chips at canvas
       bottom
-    status: in-progress
+    status: in-review
     priority: low
     created: 2026-04-16T11:08
-    last_referenced: 2026-04-16T13:21
+    last_referenced: 2026-04-16T13:24
     notes: 'IcePanel: bottom canvas area shows group chips (Layer 4, Domain 5) with
       drag handles. Click to filter canvas by group. "+ New group" creates group overlay.
       Different from visual Group object type — this is filter/overlay mode.'
     estimate: L
     phase: overlays-flows
     started: 2026-04-16T13:21
-    locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
 - id: global-search
   name: Global Search & Navigation
   status: planned
@@ -960,16 +957,18 @@ phases:
   completed: 2026-04-16T13:13
 - id: overlays-flows
   name: Overlays + Flows
-  status: active
+  status: done
   description: Tag overlays, perspectives, dependency highlighting, flow step-through,
     flow CRUD
   order: 7
   created: 2026-04-15T11:34
   start_date: '2026-04-16'
+  completed: 2026-04-16T13:24
 - id: enterprise
   name: Polish + Enterprise
-  status: planned
+  status: active
   description: SSO/SAML, audit logs, scheduled versions, Structurizr/Mermaid import,
     performance optimization, Helm chart
   order: 8
   created: 2026-04-15T11:34
+  start_date: '2026-04-16'

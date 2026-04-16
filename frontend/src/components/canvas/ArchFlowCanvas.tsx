@@ -19,6 +19,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react'
 
 import {
   useConnections,
+  useCreateComment,
   useCreateConnection,
   useDeleteConnection,
   useDiagramObjects,
@@ -31,6 +32,7 @@ import type { ModelObject, Connection } from '../../types/model'
 import { C4Edge } from './C4Edge'
 import { ActorNode } from './ActorNode'
 import { C4Node, type C4NodeData } from './C4Node'
+import { CanvasComments } from './CanvasComments'
 import { ExternalSystemNode } from './ExternalSystemNode'
 import { GroupNode } from './GroupNode'
 import { collectLegend, extractFilterValue, overlayStyleFor, type FilterDim } from './overlay-utils'
@@ -87,6 +89,8 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     playingFlowId,
     playingStepIdx,
     activeBranch,
+    commentComposeType,
+    setCommentComposeType,
   } = useCanvasStore()
   const filterDim = activeFilter as FilterDim
 
@@ -104,6 +108,7 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     [activeFilterValue, filterDim],
   )
   const { data: flows = [] } = useFlows(diagramId)
+  const createComment = useCreateComment()
 
   // Map edgeId → step number (1-based) for the currently active flow branch,
   // plus the id of the "current" step being played. Drives edge highlighting
@@ -120,7 +125,7 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     const currentConnId = branchSteps[playingStepIdx]?.connection_id ?? null
     return { stepNumbers, currentConnId }
   }, [playingFlowId, playingStepIdx, activeBranch, flows])
-  const { setNodes, setEdges, getNodes, getEdges } = useReactFlow()
+  const { setNodes, setEdges, getNodes, getEdges, screenToFlowPosition } = useReactFlow()
   const prevKeyRef = useRef<string>('')
   const prevConnsRef = useRef<string>('')
 
@@ -376,6 +381,36 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     [selectNode, selectEdge],
   )
 
+  // Drop a canvas comment pin where the user just clicked, when a compose
+   // mode is active. Plays well with pan/zoom because we translate screen
+   // coords to the viewport's flow-space coords.
+  const onPaneClick = useCallback(
+    (event: React.MouseEvent) => {
+      if (!commentComposeType || !diagramId) return
+      const pos = screenToFlowPosition({ x: event.clientX, y: event.clientY })
+      createComment.mutate({
+        target_type: 'diagram',
+        target_id: diagramId,
+        comment_type: commentComposeType,
+        body: '',
+        position_x: pos.x,
+        position_y: pos.y,
+      })
+      setCommentComposeType(null)
+    },
+    [commentComposeType, diagramId, createComment, screenToFlowPosition, setCommentComposeType],
+  )
+
+  // ESC cancels a pending comment compose.
+  useEffect(() => {
+    if (!commentComposeType) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setCommentComposeType(null)
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [commentComposeType, setCommentComposeType])
+
   const onEdgesDelete = useCallback(
     (edges: Edge[]) => {
       for (const edge of edges) {
@@ -387,6 +422,44 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
 
   return (
     <>
+      {commentComposeType && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 12,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 25,
+            padding: '6px 12px',
+            background: '#171717',
+            border: '1px solid #3b82f6',
+            borderRadius: 8,
+            fontSize: 12,
+            color: '#e5e5e5',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+          }}
+        >
+          <span>Click on the canvas to place a {commentComposeType} pin</span>
+          <button
+            onClick={() => setCommentComposeType(null)}
+            style={{
+              background: 'transparent',
+              border: '1px solid #404040',
+              color: '#a3a3a3',
+              borderRadius: 4,
+              padding: '2px 8px',
+              cursor: 'pointer',
+              fontSize: 11,
+            }}
+            title="Cancel (Esc)"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
       {focusObject && (
         <div
           style={{
@@ -437,6 +510,7 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
       onConnect={onConnect}
       onSelectionChange={onSelectionChange}
       onEdgesDelete={onEdgesDelete}
+      onPaneClick={onPaneClick}
       deleteKeyCode={['Backspace', 'Delete']}
       nodeTypes={nodeTypes}
       edgeTypes={edgeTypes}
@@ -455,7 +529,10 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
         type: 'c4',
         markerEnd: { type: MarkerType.ArrowClosed, color: '#525252' },
       }}
-      style={{ background: '#0a0a0a' }}
+      style={{
+        background: '#0a0a0a',
+        cursor: commentComposeType ? 'crosshair' : undefined,
+      }}
     >
       <Background color="#333" gap={20} size={1} />
       <Controls />
@@ -464,6 +541,7 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
         maskColor="rgba(0, 0, 0, 0.7)"
         style={{ background: '#171717', border: '1px solid #333' }}
       />
+      {diagramId && <CanvasComments diagramId={diagramId} />}
     </ReactFlow>
     </>
   )

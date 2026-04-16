@@ -8,7 +8,7 @@
 |-----------|--------|----------|---------------|
 | Project Setup & Infrastructure | Active | 0/0 | — |
 | Backend API Foundation | Active | 0/0 | — |
-| Frontend Canvas | Active | 1/5 | Implement color-coding overlays based on active filter (tag/tech/status/team) |
+| Frontend Canvas | Active | 0/4 | Implement color-coding overlays based on active filter (tag/tech/status/team) |
 | Basic Authentication | Active | 0/0 | — |
 | JSON Import/Export | Active | 0/0 | — |
 | Model Objects Tree Panel | Planned | 0/0 | — |
@@ -21,8 +21,8 @@
 | Edge Details & Customization | Planned | 0/0 | — |
 | Node Customization & Styling | Planned | 0/0 | — |
 
-**Active Phase:** Overlays + Flows (1/5 done)
-**Phases:** done Core Model + Canvas | done C4 Zoom + Diagrams | done Drafts + Versioning | done Collaboration | done API + MCP | done AI Features | >> Overlays + Flows | ... Polish + Enterprise
+**Active Phase:** Polish + Enterprise (0/0 done)
+**Phases:** done Core Model + Canvas | done C4 Zoom + Diagrams | done Drafts + Versioning | done Collaboration | done API + MCP | done AI Features | done Overlays + Flows | >> Polish + Enterprise
 
 **In Progress:** frontend-canvas-008 Implement color-coding overlays based on active filter (tag/tech/status/team), frontend-canvas-009 Add flow alternative paths (branching) support, frontend-canvas-010 Show numbered step labels on canvas connections during flow playback, frontend-canvas-012 Implement "Get insights" AI feature for object analysis, detail-sidebar-004 Implement per-object history tab (change log scoped to selected object), detail-sidebar-005 Implement typed comments (question, inaccuracy, idea) with icons, detail-sidebar-007 Add "note" comment type alongside question/inaccurate/idea, groups-002 Add groups as layout containers with drag-to-reorganize chips at canvas bottom
 **Blocked:** —
@@ -31,6 +31,11 @@
 ---
 
 ## Changelog
+
+### 2026-04-16 — auto
+5 files / +124 / -34 — activeFilterValue in canvas-store, chip click-to-filter in FilterToolbar, matchesFilterValue dimming in ArchFlowCanvas. Reuses legend strip as group chip bar. Drag-to-reorganize deferred.
+Tasks touched: 
+
 
 ### 2026-04-16 — auto
 Included in afc24d7: C4Edge renders a numbered circular badge above the label for every step in the active branch. Currently-playing step turns green, others stay blue.

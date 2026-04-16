@@ -23,6 +23,9 @@ interface CanvasState {
   playingFlowId: string | null
   playingStepIdx: number
   activeBranch: string | null
+  // When set, the next click on empty canvas drops a comment pin of this
+  // type at the click position. Cleared after placing one, or on ESC.
+  commentComposeType: 'question' | 'inaccuracy' | 'idea' | 'note' | null
 
   selectNode: (id: string | null) => void
   selectEdge: (id: string | null) => void
@@ -37,6 +40,7 @@ interface CanvasState {
   stopFlow: () => void
   setFlowStep: (idx: number) => void
   setFlowBranch: (branch: string | null) => void
+  setCommentComposeType: (t: 'question' | 'inaccuracy' | 'idea' | 'note' | null) => void
 }
 
 export const useCanvasStore = create<CanvasState>((set) => ({
@@ -52,6 +56,7 @@ export const useCanvasStore = create<CanvasState>((set) => ({
   playingFlowId: null,
   playingStepIdx: 0,
   activeBranch: null,
+  commentComposeType: null,
 
   selectNode: (id) =>
     set({ selectedNodeId: id, selectedEdgeId: null, sidebarOpen: id !== null }),
@@ -74,4 +79,5 @@ export const useCanvasStore = create<CanvasState>((set) => ({
   setFlowStep: (idx) => set({ playingStepIdx: idx }),
   setFlowBranch: (branch) =>
     set({ activeBranch: branch, playingStepIdx: 0 }),
+  setCommentComposeType: (t) => set({ commentComposeType: t }),
 }))

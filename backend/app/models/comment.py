@@ -43,6 +43,11 @@ class Comment(Base, UUIDMixin, TimestampMixin):
         default=None,
     )
     resolved: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Canvas pin coordinates — set when the comment is placed as a floating
+    # pin on the diagram (target_type=diagram). Null for per-object comments
+    # that render inside the object sidebar.
+    position_x: Mapped[float | None] = mapped_column(default=None)
+    position_y: Mapped[float | None] = mapped_column(default=None)
 
     author = relationship("User", foreign_keys=[author_id])
 

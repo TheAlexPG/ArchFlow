@@ -44,6 +44,8 @@ async def create_comment(
         target_id=data.target_id,
         comment_type=data.comment_type,
         body=data.body,
+        position_x=data.position_x,
+        position_y=data.position_y,
         author_id=author_id,
     )
     db.add(comment)

@@ -140,6 +140,8 @@ export interface Comment {
   author_id: string | null
   author: { id: string; email: string } | null
   resolved: boolean
+  position_x: number | null
+  position_y: number | null
   created_at: string
   updated_at: string
 }
@@ -149,12 +151,16 @@ export interface CommentCreate {
   target_id: string
   comment_type?: CommentType
   body: string
+  position_x?: number | null
+  position_y?: number | null
 }
 
 export interface CommentUpdate {
   comment_type?: CommentType
   body?: string
   resolved?: boolean
+  position_x?: number | null
+  position_y?: number | null
 }
 
 export interface FlowStep {

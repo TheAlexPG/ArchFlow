@@ -5,11 +5,21 @@ import {
   useDiagramObjects,
   useObjects,
 } from '../../hooks/use-api'
-import type { ObjectType } from '../../types/model'
+import { useCanvasStore } from '../../stores/canvas-store'
+import type { CommentType, ObjectType } from '../../types/model'
 import { TYPE_ICONS, TYPE_LABELS } from '../canvas/node-utils'
 import { ObjectContextMenu } from '../common/ObjectContextMenu'
 
 const QUICK_TYPES: ObjectType[] = ['system', 'actor', 'external_system', 'app', 'store', 'group']
+
+// Canvas comment types — dropping one of these enters compose mode; the
+// next click on empty canvas places the pin at that position.
+const COMMENT_TYPES: { value: CommentType; icon: string; label: string }[] = [
+  { value: 'question', icon: '❓', label: 'Question' },
+  { value: 'inaccuracy', icon: '🚩', label: 'Inaccuracy' },
+  { value: 'idea', icon: '💡', label: 'Idea' },
+  { value: 'note', icon: '📝', label: 'Note' },
+]
 
 interface AddObjectToolbarProps {
   diagramId?: string
@@ -22,6 +32,12 @@ export function AddObjectToolbar({ diagramId }: AddObjectToolbarProps) {
   const { data: diagramObjects = [] } = useDiagramObjects(diagramId)
   const createObject = useCreateObject()
   const addToDiagram = useAddObjectToDiagram()
+  const { setCommentComposeType } = useCanvasStore()
+
+  const handleStartCommentCompose = (type: CommentType) => {
+    setCommentComposeType(type)
+    setIsOpen(false)
+  }
 
   const inDiagramIds = useMemo(
     () => new Set(diagramObjects.map((d) => d.object_id)),
@@ -211,6 +227,42 @@ export function AddObjectToolbar({ diagramId }: AddObjectToolbarProps) {
                     {TYPE_LABELS[type]}
                   </button>
                 ))}
+              </div>
+            </div>
+
+            {/* Add comment — enters compose mode; next canvas click drops the pin */}
+            <div style={{ borderTop: '1px solid #262626', padding: '8px 12px' }}>
+              <div style={{ fontSize: 10, color: '#737373', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Add comment
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                {COMMENT_TYPES.map((c) => (
+                  <button
+                    key={c.value}
+                    onClick={() => handleStartCommentCompose(c.value)}
+                    style={{
+                      fontSize: 11, padding: '3px 8px', borderRadius: 4,
+                      background: '#262626', border: '1px solid #333',
+                      color: '#a3a3a3', cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', gap: 4,
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = '#333'
+                      e.currentTarget.style.color = '#f5f5f5'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = '#262626'
+                      e.currentTarget.style.color = '#a3a3a3'
+                    }}
+                    title={`Drop a ${c.label.toLowerCase()} on the canvas`}
+                  >
+                    <span>{c.icon}</span>
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+              <div style={{ fontSize: 10, color: '#525252', marginTop: 4 }}>
+                Then click on the canvas to place the pin.
               </div>
             </div>
           </div>
