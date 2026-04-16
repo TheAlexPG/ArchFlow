@@ -8,6 +8,7 @@ from app.core.database import get_db
 from app.models.user import User
 from app.schemas.draft import (
     DraftCreate,
+    DraftDiffResponse,
     DraftFromDiagram,
     DraftResponse,
     DraftUpdate,
@@ -68,6 +69,17 @@ async def apply_draft(draft_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Draft not found")
     try:
         return await draft_service.apply_draft(db, draft)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@router.get("/{draft_id}/diff", response_model=DraftDiffResponse)
+async def get_draft_diff(draft_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    draft = await draft_service.get_draft(db, draft_id)
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    try:
+        return await draft_service.compute_diff(db, draft)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 

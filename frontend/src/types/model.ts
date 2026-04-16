@@ -217,3 +217,28 @@ export interface DraftFromDiagram {
   name: string
   description?: string | null
 }
+
+export type DraftDiffStatusSource = 'unchanged' | 'modified' | 'deleted'
+export type DraftDiffStatusFork = 'unchanged' | 'modified' | 'new'
+
+export interface DraftDiffSummary {
+  added_objects: number
+  modified_objects: number
+  deleted_objects: number
+  added_connections: number
+  modified_connections: number
+  deleted_connections: number
+  moved_objects: number
+  resized_objects: number
+}
+
+export interface DraftDiff {
+  summary: DraftDiffSummary
+  source_objects: Record<string, DraftDiffStatusSource>
+  fork_objects: Record<string, DraftDiffStatusFork>
+  source_connections: Record<string, DraftDiffStatusSource>
+  fork_connections: Record<string, DraftDiffStatusFork>
+  moved_on_fork: string[]
+  resized_on_fork: string[]
+  object_names: Record<string, string>
+}

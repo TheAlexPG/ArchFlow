@@ -1,7 +1,8 @@
-import { useCallback, useState, useRef } from 'react'
+import { useCallback, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ReactFlowProvider } from '@xyflow/react'
 import { ArchFlowCanvas } from '../components/canvas/ArchFlowCanvas'
+import { CreateDraftModal } from '../components/drafts/CreateDraftModal'
 import { AddObjectToolbar } from '../components/toolbar/AddObjectToolbar'
 import { FilterToolbar } from '../components/toolbar/FilterToolbar'
 import { FlowPlaybackBar } from '../components/toolbar/FlowPlaybackBar'
@@ -28,6 +29,7 @@ export function DiagramPage() {
   const { logout } = useAuthStore()
   const { selectedEdgeId, treeOpen, toggleTree } = useCanvasStore()
   const [searchOpen, setSearchOpen] = useState(false)
+  const [draftModalOpen, setDraftModalOpen] = useState(false)
 
   // ── Draft context ──────────────────────────────────────────
   // This diagram is forked if it carries a draft_id. We fetch the draft
@@ -50,15 +52,15 @@ export function DiagramPage() {
   const isForkedDiagram = !!diagram?.draft_id
   const isLiveDiagram = !!diagram && !diagram.draft_id
 
-  const handleStartDraft = () => {
+  const handleStartDraft = () => setDraftModalOpen(true)
+
+  const submitDraft = (name: string, description: string | null) => {
     if (!diagramId) return
-    const name = prompt('Draft name (e.g. "Add payments service"):')
-    if (!name?.trim()) return
-    const description = prompt('Why this draft? (optional)') || undefined
     forkDraft.mutate(
-      { diagramId, name: name.trim(), description: description?.trim() || null },
+      { diagramId, name, description },
       {
         onSuccess: (draft) => {
+          setDraftModalOpen(false)
           if (draft.forked_diagram_id) {
             navigate(`/diagram/${draft.forked_diagram_id}`)
           }
@@ -276,11 +278,41 @@ export function DiagramPage() {
         {/* Canvas area */}
         <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
           {treeOpen && <ObjectTree diagramId={diagramId} />}
-          <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
+          <div
+            style={{
+              flex: 1,
+              position: 'relative',
+              minWidth: 0,
+              // Visual "you're inside a fork" frame. The canvas fills the
+              // inset so the user sees a tinted viewport boundary at all times.
+              boxShadow: isForkedDiagram
+                ? 'inset 0 0 0 3px rgba(59, 130, 246, 0.55)'
+                : undefined,
+            }}
+          >
             <AddObjectToolbar diagramId={diagramId} />
             <div style={{ position: 'absolute', inset: 0 }}>
               <ArchFlowCanvas diagramId={diagramId} />
             </div>
+            {isForkedDiagram && (
+              <div
+                style={{
+                  position: 'absolute',
+                  right: 14,
+                  bottom: 14,
+                  zIndex: 5,
+                  pointerEvents: 'none',
+                  fontSize: 44,
+                  fontWeight: 800,
+                  letterSpacing: '0.18em',
+                  color: 'rgba(59, 130, 246, 0.08)',
+                  textTransform: 'uppercase',
+                  userSelect: 'none',
+                }}
+              >
+                Draft
+              </div>
+            )}
             {diagramId && <FlowsPanel diagramId={diagramId} />}
             {diagramId && <FlowPlaybackBar diagramId={diagramId} />}
             <FilterToolbar />
@@ -290,6 +322,13 @@ export function DiagramPage() {
       </div>
 
       <SearchModal open={searchOpen} onClose={toggleSearch} />
+      <CreateDraftModal
+        open={draftModalOpen}
+        onClose={() => setDraftModalOpen(false)}
+        onSubmit={submitDraft}
+        submitting={forkDraft.isPending}
+        sourceName={diagram?.name}
+      />
     </ReactFlowProvider>
   )
 }

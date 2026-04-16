@@ -10,6 +10,7 @@ import type {
   ConnectionUpdate,
   Draft,
   DraftCreate,
+  DraftDiff,
   DraftFromDiagram,
   Flow,
   FlowCreate,
@@ -472,6 +473,22 @@ export function useApplyDraft() {
       qc.invalidateQueries({ queryKey: ['connections'] })
       qc.invalidateQueries({ queryKey: ['diagrams'] })
     },
+  })
+}
+
+/**
+ * Row-level diff between the source diagram and the forked draft. Powers
+ * the coloured badges on the side-by-side compare canvases and the summary
+ * strip above them.
+ */
+export function useDraftDiff(draftId: string | null) {
+  return useQuery({
+    queryKey: ['drafts', draftId, 'diff'],
+    queryFn: async () => {
+      const { data } = await api.get<DraftDiff>(`/drafts/${draftId}/diff`)
+      return data
+    },
+    enabled: !!draftId,
   })
 }
 

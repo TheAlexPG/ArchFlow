@@ -61,14 +61,15 @@ export function DraftsPage() {
             <DraftCard
               key={d.id}
               draft={d}
-              onOpen={() => {
-                // Open drafts take you straight to the forked diagram canvas.
-                if (d.status === 'open' && d.forked_diagram_id) {
-                  navigate(`/diagram/${d.forked_diagram_id}`)
-                } else {
-                  navigate(`/drafts/${d.id}`)
-                }
-              }}
+              // Clicking the card takes you to the compare view — that's
+              // where the diff is visible. Editing the fork is a separate
+              // action on the card for open drafts.
+              onOpen={() => navigate(`/drafts/${d.id}`)}
+              onEdit={
+                d.status === 'open' && d.forked_diagram_id
+                  ? () => navigate(`/diagram/${d.forked_diagram_id}`)
+                  : undefined
+              }
               onDelete={() => {
                 if (confirm(`Delete draft "${d.name}" (and its fork)?`))
                   deleteDraft.mutate(d.id)
@@ -84,10 +85,12 @@ export function DraftsPage() {
 function DraftCard({
   draft,
   onOpen,
+  onEdit,
   onDelete,
 }: {
   draft: Draft
   onOpen: () => void
+  onEdit?: () => void
   onDelete: () => void
 }) {
   const meta = STATUS_STYLE[draft.status]
@@ -119,18 +122,31 @@ function DraftCard({
       <div className="text-[10px] text-neutral-600 flex items-center justify-between">
         <span>
           {draft.status === 'open'
-            ? 'Click to open the forked diagram'
+            ? 'Click to compare with source'
             : `Archived ${new Date(draft.updated_at).toLocaleDateString()}`}
         </span>
-        <button
-          onClick={(e) => {
-            e.stopPropagation()
-            onDelete()
-          }}
-          className="text-neutral-600 hover:text-red-400"
-        >
-          Delete
-        </button>
+        <div className="flex items-center gap-2">
+          {onEdit && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onEdit()
+              }}
+              className="text-neutral-400 hover:text-blue-400"
+            >
+              ✎ Edit fork
+            </button>
+          )}
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              onDelete()
+            }}
+            className="text-neutral-600 hover:text-red-400"
+          >
+            Delete
+          </button>
+        </div>
       </div>
     </div>
   )

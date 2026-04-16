@@ -35,3 +35,34 @@ class DraftResponse(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+# ─── Diff ────────────────────────────────────────────────────
+# Shape of the diff the frontend uses to paint change badges on
+# the side-by-side compare canvases.
+
+class DraftDiffSummary(BaseModel):
+    added_objects: int
+    modified_objects: int
+    deleted_objects: int
+    added_connections: int
+    modified_connections: int
+    deleted_connections: int
+    moved_objects: int
+    resized_objects: int
+
+
+class DraftDiffResponse(BaseModel):
+    summary: DraftDiffSummary
+    # Per-side status maps — the key is the id of the row as it lives on
+    # that side (live id on source, forked id on fork).
+    source_objects: dict[str, str]  # id -> "unchanged" | "modified" | "deleted"
+    fork_objects: dict[str, str]    # id -> "unchanged" | "modified" | "new"
+    source_connections: dict[str, str]
+    fork_connections: dict[str, str]
+    # Which objects on the fork have been moved/resized vs. source. Keyed
+    # by forked ModelObject id.
+    moved_on_fork: list[str]
+    resized_on_fork: list[str]
+    # Names keyed by id — handy for the summary strip.
+    object_names: dict[str, str]

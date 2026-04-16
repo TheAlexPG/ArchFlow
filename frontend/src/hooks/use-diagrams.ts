@@ -18,6 +18,7 @@ export interface Diagram {
   scope_object_id: string | null
   settings: Record<string, unknown> | null
   pinned: boolean
+  draft_id: string | null
   created_at: string
   updated_at: string
 }

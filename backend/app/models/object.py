@@ -79,8 +79,18 @@ class ModelObject(Base, UUIDMixin, TimestampMixin):
     )
 
     # Relationships
-    parent = relationship("ModelObject", remote_side="ModelObject.id", back_populates="children")
-    children = relationship("ModelObject", back_populates="parent", cascade="all, delete-orphan")
+    parent = relationship(
+        "ModelObject",
+        remote_side="ModelObject.id",
+        foreign_keys=[parent_id],
+        back_populates="children",
+    )
+    children = relationship(
+        "ModelObject",
+        foreign_keys=[parent_id],
+        back_populates="parent",
+        cascade="all, delete-orphan",
+    )
     source_connections = relationship(
         "Connection",
         foreign_keys="Connection.source_id",

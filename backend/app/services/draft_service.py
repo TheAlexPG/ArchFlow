@@ -415,6 +415,221 @@ async def apply_draft(db: AsyncSession, draft: Draft) -> dict:
     }
 
 
+def _object_fields_equal(a: ModelObject, b: ModelObject) -> bool:
+    """True iff the two objects have identical editable fields."""
+    for field in _OBJECT_EDITABLE_FIELDS:
+        if getattr(a, field) != getattr(b, field):
+            return False
+    return True
+
+
+def _connection_fields_equal(a: Connection, b: Connection) -> bool:
+    for field in _CONNECTION_EDITABLE_FIELDS:
+        if getattr(a, field) != getattr(b, field):
+            return False
+    return True
+
+
+async def compute_diff(db: AsyncSession, draft: Draft) -> dict:
+    """Compute a per-row status map used by the compare UI.
+
+    On the source canvas every live row is either ``unchanged``, ``modified``,
+    or ``deleted`` (the fork has no forked clone for it). On the fork canvas
+    every forked row is either ``unchanged``, ``modified``, or ``new``.
+    """
+    if not draft.forked_diagram_id or not draft.source_diagram_id:
+        raise ValueError("Draft has no fork to diff")
+
+    # ── Placements on each side, for "which live objects live on the source
+    #    diagram" and "which forked rows live on the fork diagram".
+    source_placements = (
+        await db.execute(
+            select(DiagramObject).where(
+                DiagramObject.diagram_id == draft.source_diagram_id
+            )
+        )
+    ).scalars().all()
+    fork_placements = (
+        await db.execute(
+            select(DiagramObject).where(
+                DiagramObject.diagram_id == draft.forked_diagram_id
+            )
+        )
+    ).scalars().all()
+
+    source_object_ids = {p.object_id for p in source_placements}
+    fork_object_ids = {p.object_id for p in fork_placements}
+
+    # Live objects on the source diagram (by id).
+    live_objects_by_id: dict[uuid.UUID, ModelObject] = {}
+    if source_object_ids:
+        rows = (
+            await db.execute(
+                select(ModelObject).where(ModelObject.id.in_(source_object_ids))
+            )
+        ).scalars().all()
+        live_objects_by_id = {o.id: o for o in rows}
+
+    # Forked objects that appear on the fork diagram (by id).
+    forked_objects_by_id: dict[uuid.UUID, ModelObject] = {}
+    if fork_object_ids:
+        rows = (
+            await db.execute(
+                select(ModelObject).where(ModelObject.id.in_(fork_object_ids))
+            )
+        ).scalars().all()
+        forked_objects_by_id = {o.id: o for o in rows}
+
+    # For each forked obj placed on the fork diagram, what's its live source?
+    fork_source_ids: set[uuid.UUID] = set()
+    source_objects = {}
+    fork_objects = {}
+    moved_on_fork: list[str] = []
+    resized_on_fork: list[str] = []
+    added = 0
+    modified_objs = 0
+
+    # Index placements for quick position/size lookup.
+    src_pos: dict[uuid.UUID, DiagramObject] = {p.object_id: p for p in source_placements}
+    fork_pos: dict[uuid.UUID, DiagramObject] = {p.object_id: p for p in fork_placements}
+
+    for fid, fobj in forked_objects_by_id.items():
+        if fobj.source_object_id is None:
+            fork_objects[str(fid)] = "new"
+            added += 1
+            continue
+        live = live_objects_by_id.get(fobj.source_object_id)
+        fork_source_ids.add(fobj.source_object_id)
+        if live is None:
+            fork_objects[str(fid)] = "new"
+            added += 1
+            continue
+        if _object_fields_equal(live, fobj):
+            fork_objects[str(fid)] = "unchanged"
+        else:
+            fork_objects[str(fid)] = "modified"
+            modified_objs += 1
+        # Position / size compared through the pairing.
+        sp = src_pos.get(fobj.source_object_id)
+        fp = fork_pos.get(fid)
+        if sp and fp:
+            if (sp.position_x, sp.position_y) != (fp.position_x, fp.position_y):
+                moved_on_fork.append(str(fid))
+            if (sp.width, sp.height) != (fp.width, fp.height):
+                resized_on_fork.append(str(fid))
+
+    deleted = 0
+    for lid, lobj in live_objects_by_id.items():
+        if lid in fork_source_ids:
+            # Matched — find the forked entry's status and mirror for source.
+            # Find forked obj with source_object_id == lid.
+            matched_status = "unchanged"
+            for fid, fobj in forked_objects_by_id.items():
+                if fobj.source_object_id == lid:
+                    matched_status = fork_objects[str(fid)]
+                    break
+            source_objects[str(lid)] = (
+                "modified" if matched_status == "modified" else "unchanged"
+            )
+        else:
+            source_objects[str(lid)] = "deleted"
+            deleted += 1
+
+    # ── Connections ────────────────────────────────────────────
+    # Only connections actually renderable on each diagram. A connection
+    # renders when both endpoints are placed on the diagram.
+    source_conns = (
+        await db.execute(
+            select(Connection).where(
+                Connection.source_id.in_(source_object_ids or [uuid.uuid4()]),
+                Connection.target_id.in_(source_object_ids or [uuid.uuid4()]),
+                Connection.draft_id.is_(None),
+            )
+        )
+    ).scalars().all()
+    fork_conns = (
+        await db.execute(
+            select(Connection).where(
+                Connection.draft_id == draft.id,
+            )
+        )
+    ).scalars().all()
+    # Fork connections may reference forked objects (normal case) or live
+    # objects (if the user wired a fresh connection to a live object they
+    # also added). For rendering, both endpoints must be on the fork diagram.
+    fork_conns = [
+        c for c in fork_conns
+        if c.source_id in fork_object_ids and c.target_id in fork_object_ids
+    ]
+
+    source_connections: dict[str, str] = {}
+    fork_connections: dict[str, str] = {}
+    added_conn = 0
+    modified_conn = 0
+
+    live_conns_by_id = {c.id: c for c in source_conns}
+    matched_source_conn_ids: set[uuid.UUID] = set()
+
+    for fc in fork_conns:
+        if fc.source_connection_id is None:
+            fork_connections[str(fc.id)] = "new"
+            added_conn += 1
+            continue
+        live = live_conns_by_id.get(fc.source_connection_id)
+        if live is None:
+            fork_connections[str(fc.id)] = "new"
+            added_conn += 1
+            continue
+        matched_source_conn_ids.add(live.id)
+        if _connection_fields_equal(live, fc):
+            fork_connections[str(fc.id)] = "unchanged"
+        else:
+            fork_connections[str(fc.id)] = "modified"
+            modified_conn += 1
+
+    deleted_conn = 0
+    for sc in source_conns:
+        if sc.id in matched_source_conn_ids:
+            matched_status = "unchanged"
+            for fc in fork_conns:
+                if fc.source_connection_id == sc.id:
+                    matched_status = fork_connections[str(fc.id)]
+                    break
+            source_connections[str(sc.id)] = (
+                "modified" if matched_status == "modified" else "unchanged"
+            )
+        else:
+            source_connections[str(sc.id)] = "deleted"
+            deleted_conn += 1
+
+    # Names keyed by id — covers both sides for the summary strip.
+    object_names: dict[str, str] = {}
+    for lid, lo in live_objects_by_id.items():
+        object_names[str(lid)] = lo.name
+    for fid, fo in forked_objects_by_id.items():
+        object_names[str(fid)] = fo.name
+
+    return {
+        "summary": {
+            "added_objects": added,
+            "modified_objects": modified_objs,
+            "deleted_objects": deleted,
+            "added_connections": added_conn,
+            "modified_connections": modified_conn,
+            "deleted_connections": deleted_conn,
+            "moved_objects": len(moved_on_fork),
+            "resized_objects": len(resized_on_fork),
+        },
+        "source_objects": source_objects,
+        "fork_objects": fork_objects,
+        "source_connections": source_connections,
+        "fork_connections": fork_connections,
+        "moved_on_fork": moved_on_fork,
+        "resized_on_fork": resized_on_fork,
+        "object_names": object_names,
+    }
+
+
 async def discard_draft(db: AsyncSession, draft: Draft) -> Draft:
     # CASCADE on draft_id FKs removes the fork clone entirely when we
     # null out the marker; but we prefer to explicitly delete so stats
@@ -432,6 +647,7 @@ async def discard_draft(db: AsyncSession, draft: Draft) -> Draft:
     draft.status = DraftStatus.DISCARDED
     draft.forked_diagram_id = None
     await db.flush()
+    await db.refresh(draft)
     return draft
 
 
@@ -454,4 +670,10 @@ async def fork_existing_diagram(
 
     draft = await create_draft(db, draft_data, author_id=author_id)
     forked = await fork_diagram_into_draft(db, draft, source_diagram)
+    # Our mutations on draft (source_diagram_id, forked_diagram_id) update
+    # server-side timestamps via onupdate=func.now(); the Python attribute
+    # expires on flush and needs a SELECT to be refilled. Refresh so the
+    # response serializer doesn't trigger a lazy load on an already-
+    # committed session (which throws MissingGreenlet).
+    await db.refresh(draft)
     return draft, forked
