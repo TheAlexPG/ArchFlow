@@ -2,7 +2,7 @@ meta:
   project: ArchFlow
   updated: '2026-04-16'
 context:
-  active_epic: frontend-canvas
+  active_epic: phase8-polish
   in_progress:
   - id: frontend-canvas-008
     title: Implement color-coding overlays based on active filter (tag/tech/status/team)
@@ -37,32 +37,35 @@ context:
       bottom
     epic: groups
     branch: ''
+  - id: phase8-polish-001
+    title: Import Structurizr DSL — parse objects + relationships
+    epic: phase8-polish
+    branch: ''
+  - id: phase8-polish-002
+    title: Import Mermaid flowchart / C4 diagrams
+    epic: phase8-polish
+    branch: ''
+  - id: phase8-polish-003
+    title: Global activity feed page (audit log view)
+    epic: phase8-polish
+    branch: ''
   - id: phase8-polish-004
     title: 'Canvas performance: onlyRenderVisibleElements + lazy children'
     epic: phase8-polish
     branch: ''
-    locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
+  - id: phase8-polish-005
+    title: Helm chart skeleton for self-hosted deployment
+    epic: phase8-polish
+    branch: ''
   blocked: []
   recent_completed: []
-  next_up:
-  - id: phase8-polish-001
-    title: Import Structurizr DSL — parse objects + relationships
-    priority: medium
-    epic: phase8-polish
-  - id: phase8-polish-002
-    title: Import Mermaid flowchart / C4 diagrams
-    priority: medium
-    epic: phase8-polish
-  - id: phase8-polish-003
-    title: Global activity feed page (audit log view)
-    priority: medium
-    epic: phase8-polish
+  next_up: []
   stats:
     total: 13
     done: 0
-    in_progress: 1
-    in_review: 8
-    todo: 4
+    in_progress: 0
+    in_review: 13
+    todo: 0
     blocked: 0
     archived: 44
   active_phase:
@@ -70,9 +73,9 @@ context:
     name: Polish + Enterprise
     stats:
       total: 5
-      todo: 4
-      in-progress: 1
-      in-review: 0
+      todo: 0
+      in-progress: 0
+      in-review: 5
       done: 0
       blocked: 0
       archived: 0
@@ -925,57 +928,60 @@ epics:
   tasks:
   - id: phase8-polish-001
     title: Import Structurizr DSL — parse objects + relationships
-    status: todo
+    status: in-review
     priority: medium
     created: 2026-04-16T14:07
-    last_referenced: 2026-04-16T14:07
+    last_referenced: 2026-04-16T14:13
     notes: Parse Structurizr DSL `workspace { model { person/softwareSystem/container/component,
       -> relationships } }`. Create ModelObjects + Connections. New endpoint POST
       /import/structurizr with raw DSL body.
     estimate: M
     phase: enterprise
+    started: 2026-04-16T14:12
   - id: phase8-polish-002
     title: Import Mermaid flowchart / C4 diagrams
-    status: todo
+    status: in-review
     priority: medium
     created: 2026-04-16T14:07
-    last_referenced: 2026-04-16T14:07
+    last_referenced: 2026-04-16T14:13
     notes: Accept Mermaid source (flowchart or C4Context) and materialize objects
       + edges. Endpoint POST /import/mermaid.
     estimate: M
     phase: enterprise
+    started: 2026-04-16T14:13
   - id: phase8-polish-003
     title: Global activity feed page (audit log view)
-    status: todo
+    status: in-review
     priority: medium
     created: 2026-04-16T14:07
-    last_referenced: 2026-04-16T14:07
+    last_referenced: 2026-04-16T14:13
     notes: Reuse activity_log table. New page /activity listing all events across
       the workspace with filters by target_type + user. Backend endpoint GET /activity.
     estimate: S
     phase: enterprise
+    started: 2026-04-16T14:13
   - id: phase8-polish-004
     title: 'Canvas performance: onlyRenderVisibleElements + lazy children'
-    status: in-progress
+    status: in-review
     priority: low
     created: 2026-04-16T14:07
-    last_referenced: 2026-04-16T14:07
+    last_referenced: 2026-04-16T14:12
     notes: Enable React Flow onlyRenderVisibleElements, lazy-load children diagrams,
       memoize node components. Targets large diagrams (100+ nodes).
     estimate: S
     phase: enterprise
     started: 2026-04-16T14:07
-    locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
   - id: phase8-polish-005
     title: Helm chart skeleton for self-hosted deployment
-    status: todo
+    status: in-review
     priority: low
     created: 2026-04-16T14:07
-    last_referenced: 2026-04-16T14:07
+    last_referenced: 2026-04-16T14:13
     notes: charts/archflow/ with Deployment for backend, frontend (served by Caddy),
       Postgres StatefulSet, Redis, Ingress. Values for image tags + env.
     estimate: M
     phase: enterprise
+    started: 2026-04-16T14:13
 phases:
 - id: core-model
   name: Core Model + Canvas

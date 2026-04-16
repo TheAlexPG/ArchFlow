@@ -20,18 +20,43 @@
 | C4 Zoom Drill-Down Navigation | Planned | 0/0 | — |
 | Edge Details & Customization | Planned | 0/0 | — |
 | Node Customization & Styling | Planned | 0/0 | — |
-| Phase 8 Polish + Enterprise | Active | 0/5 | Canvas performance: onlyRenderVisibleElements + lazy children |
+| Phase 8 Polish + Enterprise | Active | 0/5 | Import Structurizr DSL — parse objects + relationships |
 
 **Active Phase:** Polish + Enterprise (0/5 done)
 **Phases:** done Core Model + Canvas | done C4 Zoom + Diagrams | done Drafts + Versioning | done Collaboration | done API + MCP | done AI Features | done Overlays + Flows | >> Polish + Enterprise
 
-**In Progress:** frontend-canvas-008 Implement color-coding overlays based on active filter (tag/tech/status/team), frontend-canvas-009 Add flow alternative paths (branching) support, frontend-canvas-010 Show numbered step labels on canvas connections during flow playback, frontend-canvas-012 Implement "Get insights" AI feature for object analysis, detail-sidebar-004 Implement per-object history tab (change log scoped to selected object), detail-sidebar-005 Implement typed comments (question, inaccuracy, idea) with icons, detail-sidebar-007 Add "note" comment type alongside question/inaccurate/idea, groups-002 Add groups as layout containers with drag-to-reorganize chips at canvas bottom, phase8-polish-004 Canvas performance: onlyRenderVisibleElements + lazy children
+**In Progress:** frontend-canvas-008 Implement color-coding overlays based on active filter (tag/tech/status/team), frontend-canvas-009 Add flow alternative paths (branching) support, frontend-canvas-010 Show numbered step labels on canvas connections during flow playback, frontend-canvas-012 Implement "Get insights" AI feature for object analysis, detail-sidebar-004 Implement per-object history tab (change log scoped to selected object), detail-sidebar-005 Implement typed comments (question, inaccuracy, idea) with icons, detail-sidebar-007 Add "note" comment type alongside question/inaccurate/idea, groups-002 Add groups as layout containers with drag-to-reorganize chips at canvas bottom, phase8-polish-001 Import Structurizr DSL — parse objects + relationships, phase8-polish-002 Import Mermaid flowchart / C4 diagrams, phase8-polish-003 Global activity feed page (audit log view), phase8-polish-004 Canvas performance: onlyRenderVisibleElements + lazy children, phase8-polish-005 Helm chart skeleton for self-hosted deployment
 **Blocked:** —
-**Next Up:** phase8-polish-001 Import Structurizr DSL — parse objects + relationships (medium), phase8-polish-002 Import Mermaid flowchart / C4 diagrams (medium), phase8-polish-003 Global activity feed page (audit log view) (medium)
+**Next Up:** —
 
 ---
 
 ## Changelog
+
+### 2026-04-16 — auto
+charts/archflow: Chart.yaml, values.yaml, templates for backend+frontend Deployments+Services, Postgres StatefulSet+headless Service, Redis, config Secret, optional Ingress
+Tasks touched: 
+
+
+### 2026-04-16 — auto
+GET /activity endpoint with target_type/user filters + pagination, /activity route + ActivityPage rendering color-coded timeline
+Tasks touched: 
+
+
+### 2026-04-16 — auto
+mermaid_service detects C4 vs flowchart flavour, parses Person/System/Container/Rel or A[label]-->B[label] with optional |pipe| labels. POST /import/mermaid endpoint.
+Tasks touched: 
+
+
+### 2026-04-16 — auto
+structurizr_service parser (workspace/model/person/softwareSystem/container/component + -> rels, nested braces = parent_id) and POST /import/structurizr
+Tasks touched: 
+
+
+### 2026-04-16 — auto
+1 line in ArchFlowCanvas: onlyRenderVisibleElements prop enabled on ReactFlow
+Tasks touched: 
+
 
 ### 2026-04-16 — auto
 5 files / +124 / -34 — activeFilterValue in canvas-store, chip click-to-filter in FilterToolbar, matchesFilterValue dimming in ArchFlowCanvas. Reuses legend strip as group chip bar. Drag-to-reorganize deferred.

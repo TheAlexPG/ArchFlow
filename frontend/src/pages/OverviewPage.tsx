@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useDiagrams, useCreateDiagram, useDeleteDiagram } from '../hooks/use-diagrams'
+import { AppSidebar } from '../components/nav/AppSidebar'
 import { SearchModal } from '../components/nav/SearchModal'
-import { useAuthStore } from '../stores/auth-store'
 
 const DIAGRAM_TYPE_LABELS: Record<string, string> = {
   system_landscape: 'L1 — System Landscape',
@@ -20,19 +20,11 @@ const DIAGRAM_TYPE_ICONS: Record<string, string> = {
   custom: '✦',
 }
 
-const NAV_ITEMS = [
-  { label: 'Overview', icon: '◉', path: '/' },
-  { label: 'Diagrams', icon: '▦', path: '/' },
-  { label: 'Model Objects', icon: '☰', path: '/' },
-  { label: 'Connections', icon: '⇄', path: '/' },
-]
-
 export function OverviewPage() {
   const { data: diagrams = [] } = useDiagrams()
   const createDiagram = useCreateDiagram()
   const deleteDiagram = useDeleteDiagram()
   const navigate = useNavigate()
-  const { logout } = useAuthStore()
   const [showCreate, setShowCreate] = useState(false)
   const [newName, setNewName] = useState('')
   const [newType, setNewType] = useState('system_landscape')
@@ -73,45 +65,7 @@ export function OverviewPage() {
 
   return (
     <div style={{ display: 'flex', height: '100vh', background: '#0a0a0a', color: '#f5f5f5' }}>
-      {/* Sidebar */}
-      <div style={{
-        width: 200, borderRight: '1px solid #262626', display: 'flex', flexDirection: 'column',
-        padding: '16px 0', background: '#111'
-      }}>
-        <div style={{ padding: '0 16px', marginBottom: 24 }}>
-          <div style={{ fontWeight: 700, fontSize: 16 }}>ArchFlow</div>
-        </div>
-
-        <nav style={{ flex: 1 }}>
-          {NAV_ITEMS.map((item) => (
-            <div
-              key={item.label}
-              style={{
-                padding: '8px 16px', fontSize: 13, cursor: 'pointer',
-                display: 'flex', alignItems: 'center', gap: 8,
-                color: item.label === 'Overview' ? '#f5f5f5' : '#737373',
-                background: item.label === 'Overview' ? '#1a1a1a' : 'transparent',
-              }}
-            >
-              <span style={{ opacity: 0.6 }}>{item.icon}</span>
-              {item.label}
-            </div>
-          ))}
-        </nav>
-
-        <div style={{ padding: '8px 16px', borderTop: '1px solid #262626' }}>
-          <button
-            onClick={logout}
-            style={{
-              background: 'none', border: 'none', color: '#737373', cursor: 'pointer',
-              fontSize: 12, padding: 0,
-            }}
-          >
-            Sign out
-          </button>
-        </div>
-      </div>
-
+      <AppSidebar />
       {/* Main content */}
       <div style={{ flex: 1, overflow: 'auto', padding: 32 }}>
         <div style={{

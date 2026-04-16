@@ -2,8 +2,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthPage } from './components/auth/AuthPage'
 import { ActivityPage } from './pages/ActivityPage'
-import { OverviewPage } from './pages/OverviewPage'
+import { ConnectionsPage } from './pages/ConnectionsPage'
 import { DiagramPage } from './pages/DiagramPage'
+import { ObjectsPage } from './pages/ObjectsPage'
+import { OverviewPage } from './pages/OverviewPage'
 import { useAuthStore } from './stores/auth-store'
 import './index.css'
 
@@ -46,6 +48,30 @@ function App() {
             element={
               <ProtectedRoute>
                 <DiagramPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/diagrams"
+            element={
+              <ProtectedRoute>
+                <OverviewPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/objects"
+            element={
+              <ProtectedRoute>
+                <ObjectsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/connections"
+            element={
+              <ProtectedRoute>
+                <ConnectionsPage />
               </ProtectedRoute>
             }
           />

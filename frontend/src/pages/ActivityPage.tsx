@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { AppSidebar } from '../components/nav/AppSidebar'
 import { useGlobalActivity, type ActivityLogEntry } from '../hooks/use-api'
 
 type TargetFilter = 'all' | 'object' | 'connection' | 'diagram'
@@ -11,7 +11,6 @@ const ACTION_COLORS = {
 } as const
 
 export function ActivityPage() {
-  const navigate = useNavigate()
   const [filter, setFilter] = useState<TargetFilter>('all')
   const { data: entries = [], isLoading } = useGlobalActivity({
     target_type: filter === 'all' ? null : filter,
@@ -19,39 +18,33 @@ export function ActivityPage() {
   })
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-neutral-200 flex flex-col">
-      <div className="border-b border-neutral-800 px-6 py-3 flex items-center gap-4">
-        <button
-          onClick={() => navigate('/')}
-          className="text-neutral-500 hover:text-neutral-200"
-        >
-          ← Back
-        </button>
-        <div className="text-sm font-medium">Activity</div>
-        <div className="flex-1" />
-        <div className="flex gap-1">
-          {(['all', 'object', 'connection', 'diagram'] as TargetFilter[]).map((f) => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={`text-xs px-3 py-1 rounded capitalize ${
-                filter === f
-                  ? 'bg-neutral-700 text-neutral-100'
-                  : 'text-neutral-500 hover:text-neutral-300'
-              }`}
-            >
-              {f}
-            </button>
-          ))}
+    <div className="flex h-screen bg-neutral-950 text-neutral-200">
+      <AppSidebar />
+      <div className="flex-1 overflow-y-auto p-8">
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-xl font-semibold">Activity</h1>
+          <div className="flex gap-1">
+            {(['all', 'object', 'connection', 'diagram'] as TargetFilter[]).map((f) => (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                className={`text-xs px-3 py-1 rounded capitalize ${
+                  filter === f
+                    ? 'bg-neutral-700 text-neutral-100'
+                    : 'text-neutral-500 hover:text-neutral-300'
+                }`}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
 
-      <div className="flex-1 overflow-y-auto p-6 max-w-4xl w-full mx-auto">
         {isLoading && <div className="text-sm text-neutral-500">Loading…</div>}
         {!isLoading && entries.length === 0 && (
           <div className="text-sm text-neutral-500 italic">No activity yet.</div>
         )}
-        <div className="space-y-3">
+        <div className="space-y-3 max-w-3xl">
           {entries.map((e) => (
             <Row key={e.id} entry={e} />
           ))}
