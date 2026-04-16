@@ -11,6 +11,13 @@ import { ObjectSidebar } from '../components/sidebar/ObjectSidebar'
 import { ObjectTree } from '../components/tree/ObjectTree'
 import { SearchModal } from '../components/nav/SearchModal'
 import { useDiagram } from '../hooks/use-diagrams'
+import {
+  useApplyDraft,
+  useCreateDraftFromDiagram,
+  useDiscardDraft,
+  useDraft,
+  useDrafts,
+} from '../hooks/use-api'
 import { useAuthStore } from '../stores/auth-store'
 import { useCanvasStore } from '../stores/canvas-store'
 
@@ -21,6 +28,72 @@ export function DiagramPage() {
   const { logout } = useAuthStore()
   const { selectedEdgeId, treeOpen, toggleTree } = useCanvasStore()
   const [searchOpen, setSearchOpen] = useState(false)
+
+  // ── Draft context ──────────────────────────────────────────
+  // This diagram is forked if it carries a draft_id. We fetch the draft
+  // metadata to show the banner (name + Apply/Discard controls). For live
+  // diagrams, we offer a "Draft" button that forks them into a new draft.
+  const forkDraft = useCreateDraftFromDiagram()
+  const applyDraft = useApplyDraft()
+  const discardDraft = useDiscardDraft()
+  const { data: currentDraft } = useDraft(diagram?.draft_id ?? null)
+  // For live diagrams we surface "already has an open draft" so the user
+  // can jump to it instead of forking another.
+  const { data: drafts = [] } = useDrafts()
+  const openDraftForThisDiagram = drafts.find(
+    (d) =>
+      d.status === 'open' &&
+      diagramId &&
+      d.source_diagram_id === diagramId,
+  )
+
+  const isForkedDiagram = !!diagram?.draft_id
+  const isLiveDiagram = !!diagram && !diagram.draft_id
+
+  const handleStartDraft = () => {
+    if (!diagramId) return
+    const name = prompt('Draft name (e.g. "Add payments service"):')
+    if (!name?.trim()) return
+    const description = prompt('Why this draft? (optional)') || undefined
+    forkDraft.mutate(
+      { diagramId, name: name.trim(), description: description?.trim() || null },
+      {
+        onSuccess: (draft) => {
+          if (draft.forked_diagram_id) {
+            navigate(`/diagram/${draft.forked_diagram_id}`)
+          }
+        },
+      },
+    )
+  }
+
+  const handleApply = () => {
+    if (!currentDraft) return
+    if (!confirm(`Apply "${currentDraft.name}" to the source diagram?`)) return
+    applyDraft.mutate(currentDraft.id, {
+      onSuccess: () => {
+        if (currentDraft.source_diagram_id) {
+          navigate(`/diagram/${currentDraft.source_diagram_id}`)
+        } else {
+          navigate('/drafts')
+        }
+      },
+    })
+  }
+
+  const handleDiscard = () => {
+    if (!currentDraft) return
+    if (!confirm('Discard this draft? The forked diagram will be deleted.')) return
+    discardDraft.mutate(currentDraft.id, {
+      onSuccess: () => {
+        if (currentDraft.source_diagram_id) {
+          navigate(`/diagram/${currentDraft.source_diagram_id}`)
+        } else {
+          navigate('/drafts')
+        }
+      },
+    })
+  }
 
   const toggleSearch = useCallback(() => setSearchOpen((v) => !v), [])
 
@@ -87,6 +160,35 @@ export function DiagramPage() {
                 ⌘K
               </span>
             </button>
+            {isLiveDiagram && (
+              openDraftForThisDiagram ? (
+                <button
+                  onClick={() =>
+                    openDraftForThisDiagram.forked_diagram_id &&
+                    navigate(`/diagram/${openDraftForThisDiagram.forked_diagram_id}`)
+                  }
+                  style={{
+                    background: '#1e3a5f', border: '1px solid #3b82f6', borderRadius: 6,
+                    color: '#93c5fd', cursor: 'pointer', fontSize: 12, padding: '4px 10px',
+                  }}
+                  title="Open existing draft for this diagram"
+                >
+                  ✎ Draft in progress: {openDraftForThisDiagram.name}
+                </button>
+              ) : (
+                <button
+                  onClick={handleStartDraft}
+                  disabled={forkDraft.isPending}
+                  style={{
+                    background: '#1a1a1a', border: '1px solid #3b82f6', borderRadius: 6,
+                    color: '#93c5fd', cursor: 'pointer', fontSize: 12, padding: '4px 10px',
+                  }}
+                  title="Start a draft forked from this diagram"
+                >
+                  ✎ Draft new feature
+                </button>
+              )
+            )}
             <button
               onClick={async () => {
                 const { toPng } = await import('html-to-image')
@@ -117,6 +219,59 @@ export function DiagramPage() {
             </button>
           </div>
         </div>
+
+        {/* Forked-diagram banner — live model is frozen; edits go to the draft */}
+        {isForkedDiagram && currentDraft && (
+          <div style={{
+            background: 'linear-gradient(to right, #1e3a5f, #0a0a0a 80%)',
+            borderBottom: '1px solid #3b82f6',
+            padding: '6px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            fontSize: 12,
+            color: '#93c5fd',
+          }}>
+            <span>✎</span>
+            <span>
+              Editing draft: <b style={{ color: '#f5f5f5' }}>{currentDraft.name}</b> —
+              edits stay on the fork; Apply merges them into the source diagram.
+            </span>
+            <span style={{ flex: 1 }} />
+            <button
+              onClick={() => navigate(`/drafts/${currentDraft.id}`)}
+              style={{
+                background: 'transparent', border: '1px solid #3b82f6',
+                borderRadius: 4, color: '#93c5fd', cursor: 'pointer',
+                fontSize: 11, padding: '3px 8px',
+              }}
+            >
+              Compare
+            </button>
+            <button
+              onClick={handleDiscard}
+              style={{
+                background: 'transparent', border: '1px solid #525252',
+                borderRadius: 4, color: '#a3a3a3', cursor: 'pointer',
+                fontSize: 11, padding: '3px 8px',
+              }}
+            >
+              Discard
+            </button>
+            <button
+              onClick={handleApply}
+              disabled={applyDraft.isPending}
+              style={{
+                background: '#16a34a', border: '1px solid #16a34a',
+                borderRadius: 4, color: 'white', cursor: 'pointer',
+                fontSize: 11, padding: '3px 10px',
+                opacity: applyDraft.isPending ? 0.5 : 1,
+              }}
+            >
+              Apply to source
+            </button>
+          </div>
+        )}
 
         {/* Canvas area */}
         <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>

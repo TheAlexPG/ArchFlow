@@ -64,6 +64,20 @@ class ModelObject(Base, UUIDMixin, TimestampMixin):
     external_links: Mapped[dict | None] = mapped_column(JSONB, default=None)
     metadata_: Mapped[dict | None] = mapped_column("metadata", JSONB, default=None)
 
+    # Draft ownership — set when this row is a forked clone living inside a
+    # draft. Live queries filter draft_id IS NULL by default; the fork is
+    # only visible when the caller explicitly asks for its draft.
+    draft_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("drafts.id", ondelete="CASCADE"),
+        default=None,
+    )
+    source_object_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("model_objects.id", ondelete="SET NULL"),
+        default=None,
+    )
+
     # Relationships
     parent = relationship("ModelObject", remote_side="ModelObject.id", back_populates="children")
     children = relationship("ModelObject", back_populates="parent", cascade="all, delete-orphan")

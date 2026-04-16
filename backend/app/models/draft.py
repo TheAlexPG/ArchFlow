@@ -1,8 +1,8 @@
 import enum
 import uuid
 
-from sqlalchemy import Enum, ForeignKey, Index, String, Text
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy import Enum, ForeignKey, String, Text
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
@@ -15,11 +15,19 @@ class DraftStatus(str, enum.Enum):
 
 
 class Draft(Base, UUIDMixin, TimestampMixin):
-    """Named proposal of changes (IcePanel-style).
+    """Named branch of a diagram.
 
-    A draft collects planned object edits (DraftItem rows) and can be
-    compared side-by-side against the live state, then applied or
-    discarded. Live model is untouched until Apply.
+    When the user clicks "Draft new feature" on a diagram, we create a
+    Draft row, then fork the whole diagram (clone its Diagram row plus
+    every ModelObject, Connection, and DiagramObject it references) and
+    point ``forked_diagram_id`` at the clone. The user edits the clone on
+    the normal canvas in isolation; draft-scoped rows carry ``draft_id``
+    so default reads of the live model skip them.
+
+    ``apply`` copies the forked state onto the live source objects (via
+    their ``source_object_id`` / ``source_connection_id`` back-pointers)
+    and deletes what's left of the fork. ``discard`` just deletes the
+    fork and keeps the Draft row for the audit trail.
     """
 
     __tablename__ = "drafts"
@@ -35,34 +43,22 @@ class Draft(Base, UUIDMixin, TimestampMixin):
         default=None,
     )
 
-    items = relationship(
-        "DraftItem", back_populates="draft", cascade="all, delete-orphan"
+    # Which live diagram this draft was forked from.
+    source_diagram_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("diagrams.id", ondelete="SET NULL"),
+        default=None,
+    )
+    # The cloned diagram the user edits inside this draft.
+    forked_diagram_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("diagrams.id", ondelete="SET NULL"),
+        default=None,
     )
 
-
-class DraftItem(Base, UUIDMixin, TimestampMixin):
-    """One proposed edit inside a draft.
-
-    For v1 we only track object edits (target_type=object). `proposed_state`
-    holds the full ModelObject field dict as the user wants it. `baseline`
-    captures the live object's state when the draft item was created so
-    the diff is stable even if live changes before Apply.
-    """
-
-    __tablename__ = "draft_items"
-
-    draft_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("drafts.id", ondelete="CASCADE")
+    source_diagram = relationship(
+        "Diagram", foreign_keys=[source_diagram_id], viewonly=True
     )
-    # For v1 we only handle target_type='object'; leaving the column open
-    # for connection/diagram edits in a follow-up.
-    target_type: Mapped[str] = mapped_column(String(32), default="object")
-    target_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), default=None
-    )  # null for creates
-    baseline: Mapped[dict | None] = mapped_column(JSONB, default=None)
-    proposed_state: Mapped[dict] = mapped_column(JSONB)
-
-    draft = relationship("Draft", back_populates="items")
-
-    __table_args__ = (Index("ix_draft_items_draft_id", "draft_id"),)
+    forked_diagram = relationship(
+        "Diagram", foreign_keys=[forked_diagram_id], viewonly=True
+    )

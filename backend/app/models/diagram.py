@@ -27,6 +27,13 @@ class Diagram(Base, UUIDMixin, TimestampMixin):
     )
     settings: Mapped[dict | None] = mapped_column(JSONB, default=None)
     pinned: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Set when this diagram is the forked copy inside a draft. Live queries
+    # hide it; the draft API surfaces it explicitly.
+    draft_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("drafts.id", ondelete="CASCADE"),
+        default=None,
+    )
 
     # Relationships
     scope_object = relationship("ModelObject", foreign_keys=[scope_object_id])

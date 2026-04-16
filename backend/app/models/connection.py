@@ -44,6 +44,18 @@ class Connection(Base, UUIDMixin, TimestampMixin):
     label_size: Mapped[float] = mapped_column(Float, default=11.0)
     via_object_ids: Mapped[list[str] | None] = mapped_column(ARRAY(String), default=None)
 
+    # See ModelObject.draft_id for semantics — same scoping applies here.
+    draft_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("drafts.id", ondelete="CASCADE"),
+        default=None,
+    )
+    source_connection_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("connections.id", ondelete="SET NULL"),
+        default=None,
+    )
+
     # Relationships
     source = relationship(
         "ModelObject", foreign_keys=[source_id], back_populates="source_connections"

@@ -10,8 +10,7 @@ import type {
   ConnectionUpdate,
   Draft,
   DraftCreate,
-  DraftItem,
-  DraftItemCreate,
+  DraftFromDiagram,
   Flow,
   FlowCreate,
   FlowUpdate,
@@ -34,11 +33,13 @@ api.interceptors.request.use((config) => {
 
 // ─── Objects ─────────────────────────────────────────────
 
-export function useObjects() {
+export function useObjects(draftId?: string | null) {
   return useQuery({
-    queryKey: ['objects'],
+    queryKey: ['objects', { draftId: draftId ?? null }],
     queryFn: async () => {
-      const { data } = await api.get<ModelObject[]>('/objects')
+      const { data } = await api.get<ModelObject[]>('/objects', {
+        params: draftId ? { draft_id: draftId } : undefined,
+      })
       return data
     },
   })
@@ -96,11 +97,13 @@ export function useGlobalActivity(params: {
   })
 }
 
-export function useCreateObject() {
+export function useCreateObject(draftId?: string | null) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async (obj: ObjectCreate) => {
-      const { data } = await api.post<ModelObject>('/objects', obj)
+      const { data } = await api.post<ModelObject>('/objects', obj, {
+        params: draftId ? { draft_id: draftId } : undefined,
+      })
       return data
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['objects'] }),
@@ -130,21 +133,25 @@ export function useDeleteObject() {
 
 // ─── Connections ─────────────────────────────────────────
 
-export function useConnections() {
+export function useConnections(draftId?: string | null) {
   return useQuery({
-    queryKey: ['connections'],
+    queryKey: ['connections', { draftId: draftId ?? null }],
     queryFn: async () => {
-      const { data } = await api.get<Connection[]>('/connections')
+      const { data } = await api.get<Connection[]>('/connections', {
+        params: draftId ? { draft_id: draftId } : undefined,
+      })
       return data
     },
   })
 }
 
-export function useCreateConnection() {
+export function useCreateConnection(draftId?: string | null) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async (conn: ConnectionCreate) => {
-      const { data } = await api.post<Connection>('/connections', conn)
+      const { data } = await api.post<Connection>('/connections', conn, {
+        params: draftId ? { draft_id: draftId } : undefined,
+      })
       return data
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['connections'] }),
@@ -384,7 +391,7 @@ export function useDeleteFlow() {
   })
 }
 
-// ─── Drafts ──────────────────────────────────────────────
+// ─── Drafts (diagram forks) ───────────────────────────────
 
 export function useDrafts() {
   return useQuery({
@@ -418,6 +425,30 @@ export function useCreateDraft() {
   })
 }
 
+/**
+ * Fork an existing diagram into a new draft. Returns the draft with
+ * `forked_diagram_id` set — the frontend should navigate the user there.
+ */
+export function useCreateDraftFromDiagram() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({
+      diagramId,
+      ...data
+    }: DraftFromDiagram & { diagramId: string }) => {
+      const { data: result } = await api.post<Draft>(
+        `/drafts/from-diagram/${diagramId}`,
+        data,
+      )
+      return result
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['drafts'] })
+      qc.invalidateQueries({ queryKey: ['diagrams'] })
+    },
+  })
+}
+
 export function useDeleteDraft() {
   const qc = useQueryClient()
   return useMutation({
@@ -425,49 +456,6 @@ export function useDeleteDraft() {
       await api.delete(`/drafts/${id}`)
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['drafts'] }),
-  })
-}
-
-export function useAddDraftItem() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: async ({ draftId, ...data }: DraftItemCreate & { draftId: string }) => {
-      const { data: result } = await api.post<DraftItem>(`/drafts/${draftId}/items`, data)
-      return result
-    },
-    onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ['drafts', vars.draftId] })
-      qc.invalidateQueries({ queryKey: ['drafts'] })
-    },
-  })
-}
-
-export function useUpdateDraftItem() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: async ({
-      draftId, itemId, proposed_state,
-    }: { draftId: string; itemId: string; proposed_state: Record<string, unknown> }) => {
-      const { data } = await api.put<DraftItem>(`/drafts/${draftId}/items/${itemId}`, {
-        proposed_state,
-      })
-      return data
-    },
-    onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ['drafts', vars.draftId] })
-    },
-  })
-}
-
-export function useDeleteDraftItem() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: async ({ draftId, itemId }: { draftId: string; itemId: string }) => {
-      await api.delete(`/drafts/${draftId}/items/${itemId}`)
-    },
-    onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ['drafts', vars.draftId] })
-    },
   })
 }
 
@@ -481,6 +469,8 @@ export function useApplyDraft() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['drafts'] })
       qc.invalidateQueries({ queryKey: ['objects'] })
+      qc.invalidateQueries({ queryKey: ['connections'] })
+      qc.invalidateQueries({ queryKey: ['diagrams'] })
     },
   })
 }
@@ -492,6 +482,9 @@ export function useDiscardDraft() {
       const { data } = await api.post<Draft>(`/drafts/${draftId}/discard`)
       return data
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['drafts'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['drafts'] })
+      qc.invalidateQueries({ queryKey: ['diagrams'] })
+    },
   })
 }

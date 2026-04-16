@@ -16,8 +16,18 @@ async def get_objects(
     type_filter: str | None = None,
     status_filter: str | None = None,
     parent_id: uuid.UUID | None = None,
+    draft_id: uuid.UUID | None = None,
 ) -> list[ModelObject]:
     query = select(ModelObject)
+    # Live queries hide draft-scoped objects. When a draft_id is passed we
+    # include that draft's forked objects AND the live model, because a
+    # forked diagram can reference either.
+    if draft_id is not None:
+        query = query.where(
+            (ModelObject.draft_id.is_(None)) | (ModelObject.draft_id == draft_id)
+        )
+    else:
+        query = query.where(ModelObject.draft_id.is_(None))
     if type_filter:
         query = query.where(ModelObject.type == type_filter)
     if status_filter:
@@ -33,7 +43,9 @@ async def get_object(db: AsyncSession, object_id: uuid.UUID) -> ModelObject | No
     return result.scalar_one_or_none()
 
 
-async def create_object(db: AsyncSession, data: ObjectCreate) -> ModelObject:
+async def create_object(
+    db: AsyncSession, data: ObjectCreate, draft_id: uuid.UUID | None = None
+) -> ModelObject:
     obj = ModelObject(
         name=data.name,
         type=data.type,
@@ -47,11 +59,15 @@ async def create_object(db: AsyncSession, data: ObjectCreate) -> ModelObject:
         owner_team=data.owner_team,
         external_links=data.external_links,
         metadata_=data.metadata_,
+        draft_id=draft_id,
     )
     db.add(obj)
     await db.flush()
     await db.refresh(obj)
-    await activity_service.log_created(db, ActivityTargetType.OBJECT, obj)
+    # Only log activity for live objects; draft-scoped changes live
+    # inside the draft until they're applied.
+    if draft_id is None:
+        await activity_service.log_created(db, ActivityTargetType.OBJECT, obj)
     return obj
 
 

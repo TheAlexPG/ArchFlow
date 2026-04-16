@@ -76,6 +76,7 @@ export interface Diagram {
   scope_object_id: string | null
   settings: Record<string, unknown> | null
   pinned: boolean
+  draft_id: string | null
   created_at: string
   updated_at: string
 }
@@ -195,24 +196,14 @@ export interface FlowUpdate {
 
 export type DraftStatus = 'open' | 'merged' | 'discarded'
 
-export interface DraftItem {
-  id: string
-  draft_id: string
-  target_type: string
-  target_id: string | null
-  baseline: Record<string, unknown> | null
-  proposed_state: Record<string, unknown>
-  created_at: string
-  updated_at: string
-}
-
 export interface Draft {
   id: string
   name: string
   description: string | null
   status: DraftStatus
   author_id: string | null
-  items: DraftItem[]
+  source_diagram_id: string | null
+  forked_diagram_id: string | null
   created_at: string
   updated_at: string
 }
@@ -222,8 +213,7 @@ export interface DraftCreate {
   description?: string | null
 }
 
-export interface DraftItemCreate {
-  target_type?: string
-  target_id?: string | null
-  proposed_state: Record<string, unknown>
+export interface DraftFromDiagram {
+  name: string
+  description?: string | null
 }

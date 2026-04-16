@@ -27,6 +27,7 @@ import {
   useObjects,
   useSaveDiagramPosition,
 } from '../../hooks/use-api'
+import { useDiagram } from '../../hooks/use-diagrams'
 import { useCanvasStore } from '../../stores/canvas-store'
 import type { ModelObject, Connection } from '../../types/model'
 import { C4Edge } from './C4Edge'
@@ -73,10 +74,15 @@ interface ArchFlowCanvasProps {
 }
 
 function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
-  const { data: allObjects = [] } = useObjects()
-  const { data: connections = [] } = useConnections()
+  // If this diagram is a forked draft, we must ask for its draft-scoped
+  // objects/connections — otherwise we'd only get the live model and miss
+  // every forked clone the user has on this canvas.
+  const { data: diagram } = useDiagram(diagramId)
+  const draftId = diagram?.draft_id ?? null
+  const { data: allObjects = [] } = useObjects(draftId)
+  const { data: connections = [] } = useConnections(draftId)
   const { data: diagramObjects = [] } = useDiagramObjects(diagramId)
-  const createConnection = useCreateConnection()
+  const createConnection = useCreateConnection(draftId)
   const deleteConnection = useDeleteConnection()
   const saveDiagramPosition = useSaveDiagramPosition()
   const {

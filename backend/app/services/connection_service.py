@@ -7,8 +7,17 @@ from app.models.connection import Connection
 from app.schemas.connection import ConnectionCreate, ConnectionUpdate
 
 
-async def get_connections(db: AsyncSession) -> list[Connection]:
-    result = await db.execute(select(Connection))
+async def get_connections(
+    db: AsyncSession, draft_id: uuid.UUID | None = None
+) -> list[Connection]:
+    query = select(Connection)
+    if draft_id is not None:
+        query = query.where(
+            (Connection.draft_id.is_(None)) | (Connection.draft_id == draft_id)
+        )
+    else:
+        query = query.where(Connection.draft_id.is_(None))
+    result = await db.execute(query)
     return list(result.scalars().all())
 
 
@@ -28,7 +37,9 @@ async def get_connections_between(
     return list(result.scalars().all())
 
 
-async def create_connection(db: AsyncSession, data: ConnectionCreate) -> Connection:
+async def create_connection(
+    db: AsyncSession, data: ConnectionCreate, draft_id: uuid.UUID | None = None
+) -> Connection:
     conn = Connection(
         source_id=data.source_id,
         target_id=data.target_id,
@@ -41,6 +52,7 @@ async def create_connection(db: AsyncSession, data: ConnectionCreate) -> Connect
         shape=data.shape,
         label_size=data.label_size,
         via_object_ids=data.via_object_ids,
+        draft_id=draft_id,
     )
     db.add(conn)
     await db.flush()

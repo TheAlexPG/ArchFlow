@@ -14,11 +14,17 @@ from app.schemas.diagram import (
 
 
 async def get_diagrams(
-    db: AsyncSession, scope_object_id: uuid.UUID | None = None
+    db: AsyncSession,
+    scope_object_id: uuid.UUID | None = None,
+    include_drafts: bool = False,
 ) -> list[Diagram]:
     query = select(Diagram)
     if scope_object_id is not None:
         query = query.where(Diagram.scope_object_id == scope_object_id)
+    # Forked (draft-owned) diagrams are hidden from the default list so the
+    # user doesn't see "(draft)" entries mixed into the main Diagrams page.
+    if not include_drafts:
+        query = query.where(Diagram.draft_id.is_(None))
     result = await db.execute(query.order_by(Diagram.name))
     return list(result.scalars().all())
 

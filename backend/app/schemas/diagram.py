@@ -31,6 +31,7 @@ class DiagramResponse(BaseModel):
     scope_object_id: uuid.UUID | None = None
     settings: dict | None = None
     pinned: bool = False
+    draft_id: uuid.UUID | None = None
     created_at: datetime
     updated_at: datetime
 

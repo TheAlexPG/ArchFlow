@@ -1,6 +1,5 @@
 import uuid
 from datetime import datetime
-from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -17,27 +16,11 @@ class DraftUpdate(BaseModel):
     description: str | None = None
 
 
-class DraftItemResponse(BaseModel):
-    id: uuid.UUID
-    draft_id: uuid.UUID
-    target_type: str
-    target_id: uuid.UUID | None = None
-    baseline: dict[str, Any] | None = None
-    proposed_state: dict[str, Any]
-    created_at: datetime
-    updated_at: datetime
+class DraftFromDiagram(BaseModel):
+    """Payload for starting a draft from an existing diagram."""
 
-    model_config = {"from_attributes": True}
-
-
-class DraftItemCreate(BaseModel):
-    target_type: str = "object"
-    target_id: uuid.UUID | None = None  # None for brand-new creates
-    proposed_state: dict[str, Any]
-
-
-class DraftItemUpdate(BaseModel):
-    proposed_state: dict[str, Any]
+    name: str = Field(..., min_length=1, max_length=255)
+    description: str | None = None
 
 
 class DraftResponse(BaseModel):
@@ -46,7 +29,8 @@ class DraftResponse(BaseModel):
     description: str | None = None
     status: DraftStatus
     author_id: uuid.UUID | None = None
-    items: list[DraftItemResponse] = Field(default_factory=list)
+    source_diagram_id: uuid.UUID | None = None
+    forked_diagram_id: uuid.UUID | None = None
     created_at: datetime
     updated_at: datetime
 

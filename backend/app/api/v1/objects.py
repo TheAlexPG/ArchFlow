@@ -18,9 +18,16 @@ async def list_objects(
     type: str | None = Query(None),
     status: str | None = Query(None),
     parent_id: uuid.UUID | None = Query(None),
+    draft_id: uuid.UUID | None = Query(
+        None,
+        description="When set, also include ModelObjects scoped to this draft "
+        "(forked clones). Otherwise only live objects are returned.",
+    ),
     db: AsyncSession = Depends(get_db),
 ):
-    objects = await object_service.get_objects(db, type, status, parent_id)
+    objects = await object_service.get_objects(
+        db, type, status, parent_id, draft_id=draft_id
+    )
     return [ObjectResponse.from_model(obj) for obj in objects]
 
 
@@ -33,12 +40,18 @@ async def get_object(object_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("", response_model=ObjectResponse, status_code=201)
-async def create_object(data: ObjectCreate, db: AsyncSession = Depends(get_db)):
+async def create_object(
+    data: ObjectCreate,
+    draft_id: uuid.UUID | None = Query(
+        None, description="If set, the new object is scoped to this draft."
+    ),
+    db: AsyncSession = Depends(get_db),
+):
     if data.parent_id:
         parent = await object_service.get_object(db, data.parent_id)
         if not parent:
             raise HTTPException(status_code=400, detail="Parent object not found")
-    obj = await object_service.create_object(db, data)
+    obj = await object_service.create_object(db, data, draft_id=draft_id)
     return ObjectResponse.from_model(obj)
 
 

@@ -5,6 +5,7 @@ import {
   useDiagramObjects,
   useObjects,
 } from '../../hooks/use-api'
+import { useDiagram } from '../../hooks/use-diagrams'
 import { useCanvasStore } from '../../stores/canvas-store'
 import type { CommentType, ObjectType } from '../../types/model'
 import { TYPE_ICONS, TYPE_LABELS } from '../canvas/node-utils'
@@ -28,9 +29,13 @@ interface AddObjectToolbarProps {
 export function AddObjectToolbar({ diagramId }: AddObjectToolbarProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [search, setSearch] = useState('')
-  const { data: objects = [] } = useObjects()
+  // When we're on a forked draft diagram, creations stay scoped to the
+  // draft so they don't leak into the live model.
+  const { data: diagram } = useDiagram(diagramId)
+  const draftId = diagram?.draft_id ?? null
+  const { data: objects = [] } = useObjects(draftId)
   const { data: diagramObjects = [] } = useDiagramObjects(diagramId)
-  const createObject = useCreateObject()
+  const createObject = useCreateObject(draftId)
   const addToDiagram = useAddObjectToDiagram()
   const { setCommentComposeType } = useCanvasStore()
 

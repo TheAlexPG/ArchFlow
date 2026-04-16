@@ -11,8 +11,11 @@ router = APIRouter(prefix="/connections", tags=["connections"])
 
 
 @router.get("", response_model=list[ConnectionResponse])
-async def list_connections(db: AsyncSession = Depends(get_db)):
-    return await connection_service.get_connections(db)
+async def list_connections(
+    draft_id: uuid.UUID | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    return await connection_service.get_connections(db, draft_id=draft_id)
 
 
 @router.get("/between", response_model=list[ConnectionResponse])
@@ -33,14 +36,18 @@ async def get_connection(connection_id: uuid.UUID, db: AsyncSession = Depends(ge
 
 
 @router.post("", response_model=ConnectionResponse, status_code=201)
-async def create_connection(data: ConnectionCreate, db: AsyncSession = Depends(get_db)):
+async def create_connection(
+    data: ConnectionCreate,
+    draft_id: uuid.UUID | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
     source = await object_service.get_object(db, data.source_id)
     if not source:
         raise HTTPException(status_code=400, detail="Source object not found")
     target = await object_service.get_object(db, data.target_id)
     if not target:
         raise HTTPException(status_code=400, detail="Target object not found")
-    return await connection_service.create_connection(db, data)
+    return await connection_service.create_connection(db, data, draft_id=draft_id)
 
 
 @router.put("/{connection_id}", response_model=ConnectionResponse)
