@@ -20,10 +20,11 @@ export function C4Node({ data, selected }: NodeProps) {
       `}
       style={{ borderColor }}
     >
-      <Handle type="target" position={Position.Top} className="!bg-neutral-500 !w-2 !h-2" />
-      <Handle type="source" position={Position.Bottom} className="!bg-neutral-500 !w-2 !h-2" />
-      <Handle type="target" position={Position.Left} className="!bg-neutral-500 !w-2 !h-2" id="left-target" />
-      <Handle type="source" position={Position.Right} className="!bg-neutral-500 !w-2 !h-2" id="right-source" />
+      {/* With connectionMode="loose" these work as both source and target */}
+      <Handle type="source" position={Position.Top} id="top" className="!bg-neutral-500 !w-2 !h-2" />
+      <Handle type="source" position={Position.Bottom} id="bottom" className="!bg-neutral-500 !w-2 !h-2" />
+      <Handle type="source" position={Position.Left} id="left" className="!bg-neutral-500 !w-2 !h-2" />
+      <Handle type="source" position={Position.Right} id="right" className="!bg-neutral-500 !w-2 !h-2" />
 
       {/* Status indicator */}
       <div

@@ -3,6 +3,7 @@ import {
   Background,
   Controls,
   MiniMap,
+  ConnectionMode,
   useReactFlow,
   type Connection as RFConnection,
   type Node,
@@ -44,6 +45,8 @@ function connectionToEdge(conn: Connection): Edge {
     id: conn.id,
     source: conn.source_id,
     target: conn.target_id,
+    sourceHandle: conn.source_handle,
+    targetHandle: conn.target_handle,
     type: 'c4',
     markerEnd: { type: MarkerType.ArrowClosed, color: '#525252' },
     data: { label: conn.label, protocol: conn.protocol },
@@ -130,6 +133,8 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
         createConnection.mutate({
           source_id: params.source,
           target_id: params.target,
+          source_handle: params.sourceHandle || null,
+          target_handle: params.targetHandle || null,
         })
       }
     },
@@ -158,6 +163,7 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     <ReactFlow
       defaultNodes={[]}
       defaultEdges={[]}
+      connectionMode={ConnectionMode.Loose}
       onNodeDragStop={onNodeDragStop}
       onConnect={onConnect}
       onSelectionChange={onSelectionChange}

@@ -13,6 +13,8 @@ class ConnectionCreate(BaseModel):
     protocol: str | None = None
     direction: ConnectionDirection = ConnectionDirection.UNIDIRECTIONAL
     tags: list[str] | None = None
+    source_handle: str | None = None
+    target_handle: str | None = None
 
 
 class ConnectionUpdate(BaseModel):
@@ -20,6 +22,8 @@ class ConnectionUpdate(BaseModel):
     protocol: str | None = None
     direction: ConnectionDirection | None = None
     tags: list[str] | None = None
+    source_handle: str | None = None
+    target_handle: str | None = None
 
 
 class ConnectionResponse(BaseModel):
@@ -30,6 +34,8 @@ class ConnectionResponse(BaseModel):
     protocol: str | None = None
     direction: ConnectionDirection
     tags: list[str] | None = None
+    source_handle: str | None = None
+    target_handle: str | None = None
     created_at: datetime
     updated_at: datetime
 

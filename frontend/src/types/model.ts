@@ -47,6 +47,8 @@ export interface Connection {
   protocol: string | null
   direction: ConnectionDirection
   tags: string[] | null
+  source_handle: string | null
+  target_handle: string | null
   created_at: string
   updated_at: string
 }
@@ -107,4 +109,6 @@ export interface ConnectionCreate {
   protocol?: string | null
   direction?: ConnectionDirection
   tags?: string[] | null
+  source_handle?: string | null
+  target_handle?: string | null
 }

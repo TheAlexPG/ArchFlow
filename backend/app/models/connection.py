@@ -29,6 +29,8 @@ class Connection(Base, UUIDMixin, TimestampMixin):
         default=ConnectionDirection.UNIDIRECTIONAL,
     )
     tags: Mapped[list[str] | None] = mapped_column(ARRAY(String), default=None)
+    source_handle: Mapped[str | None] = mapped_column(String(50), default=None)
+    target_handle: Mapped[str | None] = mapped_column(String(50), default=None)
 
     # Relationships
     source = relationship(
