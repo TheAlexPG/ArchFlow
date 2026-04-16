@@ -1,7 +1,7 @@
 import enum
 import uuid
 
-from sqlalchemy import Enum, ForeignKey, Index, String, Text
+from sqlalchemy import Enum, Float, ForeignKey, Index, String, Text
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -11,6 +11,13 @@ from app.models.base import Base, TimestampMixin, UUIDMixin
 class ConnectionDirection(str, enum.Enum):
     UNIDIRECTIONAL = "unidirectional"
     BIDIRECTIONAL = "bidirectional"
+
+
+class EdgeShape(str, enum.Enum):
+    CURVED = "curved"
+    STRAIGHT = "straight"
+    STEP = "step"
+    SMOOTHSTEP = "smoothstep"
 
 
 class Connection(Base, UUIDMixin, TimestampMixin):
@@ -31,6 +38,11 @@ class Connection(Base, UUIDMixin, TimestampMixin):
     tags: Mapped[list[str] | None] = mapped_column(ARRAY(String), default=None)
     source_handle: Mapped[str | None] = mapped_column(String(50), default=None)
     target_handle: Mapped[str | None] = mapped_column(String(50), default=None)
+    shape: Mapped[EdgeShape] = mapped_column(
+        Enum(EdgeShape, name="edge_shape"), default=EdgeShape.CURVED
+    )
+    label_size: Mapped[float] = mapped_column(Float, default=11.0)
+    via_object_ids: Mapped[list[str] | None] = mapped_column(ARRAY(String), default=None)
 
     # Relationships
     source = relationship(

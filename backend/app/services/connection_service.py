@@ -38,6 +38,9 @@ async def create_connection(db: AsyncSession, data: ConnectionCreate) -> Connect
         tags=data.tags,
         source_handle=data.source_handle,
         target_handle=data.target_handle,
+        shape=data.shape,
+        label_size=data.label_size,
+        via_object_ids=data.via_object_ids,
     )
     db.add(conn)
     await db.flush()

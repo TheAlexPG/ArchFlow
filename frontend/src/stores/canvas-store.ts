@@ -27,7 +27,7 @@ export const useCanvasStore = create<CanvasState>((set) => ({
   selectNode: (id) =>
     set({ selectedNodeId: id, selectedEdgeId: null, sidebarOpen: id !== null }),
   selectEdge: (id) =>
-    set({ selectedEdgeId: id, selectedNodeId: null }),
+    set({ selectedEdgeId: id, selectedNodeId: null, sidebarOpen: id !== null }),
   toggleSidebar: (open) =>
     set((state) => ({ sidebarOpen: open ?? !state.sidebarOpen })),
   setSidebarTab: (tab) => set({ sidebarTab: tab }),

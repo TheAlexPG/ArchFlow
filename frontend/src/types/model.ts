@@ -13,6 +13,8 @@ export type ObjectStatus = 'live' | 'future' | 'deprecated' | 'removed'
 
 export type ConnectionDirection = 'unidirectional' | 'bidirectional'
 
+export type EdgeShape = 'curved' | 'straight' | 'step' | 'smoothstep'
+
 export type DiagramType =
   | 'system_landscape'
   | 'system_context'
@@ -49,8 +51,21 @@ export interface Connection {
   tags: string[] | null
   source_handle: string | null
   target_handle: string | null
+  shape: EdgeShape
+  label_size: number
+  via_object_ids: string[] | null
   created_at: string
   updated_at: string
+}
+
+export interface ConnectionUpdate {
+  label?: string | null
+  protocol?: string | null
+  direction?: ConnectionDirection
+  tags?: string[] | null
+  shape?: EdgeShape
+  label_size?: number
+  via_object_ids?: string[] | null
 }
 
 export interface Diagram {

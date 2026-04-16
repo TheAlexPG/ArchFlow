@@ -4,17 +4,20 @@ import { ReactFlowProvider } from '@xyflow/react'
 import { ArchFlowCanvas } from '../components/canvas/ArchFlowCanvas'
 import { AddObjectToolbar } from '../components/toolbar/AddObjectToolbar'
 import { FilterToolbar } from '../components/toolbar/FilterToolbar'
+import { EdgeSidebar } from '../components/sidebar/EdgeSidebar'
 import { ObjectSidebar } from '../components/sidebar/ObjectSidebar'
 import { ObjectTree } from '../components/tree/ObjectTree'
 import { SearchModal } from '../components/nav/SearchModal'
 import { useDiagram } from '../hooks/use-diagrams'
 import { useAuthStore } from '../stores/auth-store'
+import { useCanvasStore } from '../stores/canvas-store'
 
 export function DiagramPage() {
   const { diagramId } = useParams<{ diagramId: string }>()
   const { data: diagram } = useDiagram(diagramId)
   const navigate = useNavigate()
   const { logout } = useAuthStore()
+  const { selectedEdgeId } = useCanvasStore()
   const [searchOpen, setSearchOpen] = useState(false)
 
   const toggleSearch = useCallback(() => setSearchOpen((v) => !v), [])
@@ -111,7 +114,7 @@ export function DiagramPage() {
             </div>
             <FilterToolbar />
           </div>
-          <ObjectSidebar />
+          {selectedEdgeId ? <EdgeSidebar /> : <ObjectSidebar />}
         </div>
       </div>
 

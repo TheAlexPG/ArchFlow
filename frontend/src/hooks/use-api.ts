@@ -3,6 +3,7 @@ import axios from 'axios'
 import type {
   Connection,
   ConnectionCreate,
+  ConnectionUpdate,
   ModelObject,
   ObjectCreate,
   ObjectUpdate,
@@ -175,6 +176,28 @@ export function useDeleteConnection() {
   return useMutation({
     mutationFn: async (id: string) => {
       await api.delete(`/connections/${id}`)
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['connections'] }),
+  })
+}
+
+export function useConnection(id: string | null) {
+  return useQuery({
+    queryKey: ['connections', id],
+    queryFn: async () => {
+      const { data } = await api.get<Connection>(`/connections/${id}`)
+      return data
+    },
+    enabled: !!id,
+  })
+}
+
+export function useUpdateConnection() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, ...data }: ConnectionUpdate & { id: string }) => {
+      const { data: result } = await api.put<Connection>(`/connections/${id}`, data)
+      return result
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['connections'] }),
   })

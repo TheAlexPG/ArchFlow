@@ -1,9 +1,14 @@
 meta:
   project: ArchFlow
-  updated: '2026-04-15'
+  updated: '2026-04-16'
 context:
-  active_epic: auth
-  in_progress: []
+  active_epic: edge-details
+  in_progress:
+  - id: edge-details-001
+    title: Build edge details sidebar (Sender/Receiver/Via/Direction/Shape/Label)
+    epic: edge-details
+    branch: ''
+    locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
   blocked: []
   recent_completed:
   - id: import-export-003
@@ -23,20 +28,20 @@ context:
     completed: 2026-04-15T14:42
   next_up: []
   stats:
-    total: 16
+    total: 29
     done: 11
-    in_progress: 0
+    in_progress: 1
     in_review: 0
-    todo: 5
+    todo: 17
     blocked: 0
     archived: 21
   active_phase:
     id: c4-zoom
     name: C4 Zoom + Diagrams
     stats:
-      total: 11
-      todo: 0
-      in-progress: 0
+      total: 22
+      todo: 10
+      in-progress: 1
       in-review: 0
       done: 11
       blocked: 0
@@ -513,6 +518,27 @@ epics:
       canvas opens type selector.'
     estimate: M
     phase: collaboration
+  - id: detail-sidebar-006
+    title: Add "Belongs to" (parent) and "In X diagrams" references in object sidebar
+    status: todo
+    priority: medium
+    created: 2026-04-16T11:08
+    last_referenced: 2026-04-16T11:08
+    notes: 'Extend cross-references: show parent object name (clickable to navigate),
+      list of diagrams this object is used in (with links). Needs backend endpoint
+      to query diagrams containing an object.'
+    estimate: S
+    phase: c4-zoom
+  - id: detail-sidebar-007
+    title: Add "note" comment type alongside question/inaccurate/idea
+    status: todo
+    priority: low
+    created: 2026-04-16T11:08
+    last_referenced: 2026-04-16T11:08
+    notes: 'Extend comment_type enum: question, inaccurate, idea, note. Each with
+      distinct icon and color. IcePanel has 3, user wants 4.'
+    estimate: S
+    phase: collaboration
 - id: groups
   name: Groups & Visual Grouping
   status: planned
@@ -533,6 +559,18 @@ epics:
     phase: c4-zoom
     started: 2026-04-15T14:43
     completed: 2026-04-15T14:44
+  - id: groups-002
+    title: Add groups as layout containers with drag-to-reorganize chips at canvas
+      bottom
+    status: todo
+    priority: low
+    created: 2026-04-16T11:08
+    last_referenced: 2026-04-16T11:08
+    notes: 'IcePanel: bottom canvas area shows group chips (Layer 4, Domain 5) with
+      drag handles. Click to filter canvas by group. "+ New group" creates group overlay.
+      Different from visual Group object type — this is filter/overlay mode.'
+    estimate: L
+    phase: overlays-flows
 - id: global-search
   name: Global Search & Navigation
   status: planned
@@ -609,6 +647,146 @@ epics:
     phase: c4-zoom
     started: 2026-04-15T14:34
     completed: 2026-04-15T14:36
+- id: popup-picker
+  name: Popup Object Picker
+  status: planned
+  description: Replace/augment left sidebar with popup picker via + button for more
+    canvas space (IcePanel reference)
+  created: 2026-04-16T11:07
+  tasks:
+  - id: popup-picker-001
+    title: Build popup object picker replacing left sidebar tree
+    status: todo
+    priority: high
+    created: 2026-04-16T11:08
+    last_referenced: 2026-04-16T11:08
+    notes: 'IcePanel: + button opens floating popup with search, object list (with
+      type icons), tooltip on hover showing type and parent, quick-create buttons
+      (System/Actor/Group) at bottom. Left sidebar becomes optional/collapsible to
+      give canvas more space.'
+    estimate: L
+    phase: c4-zoom
+- id: c4-drill-down
+  name: C4 Zoom Drill-Down Navigation
+  status: planned
+  description: Navigate between C4 levels by clicking zoom icon on nodes (parent-child
+    diagram relationships)
+  created: 2026-04-16T11:07
+  tasks:
+  - id: c4-drill-down-001
+    title: 'Add C4 drill-down: click zoom icon on node to enter child diagram'
+    status: todo
+    priority: high
+    created: 2026-04-16T11:08
+    last_referenced: 2026-04-16T11:08
+    notes: 'IcePanel: objects that have sub-diagrams show magnifying glass icon. Click
+      opens popup "Level N - App diagram" with list of child diagrams + "+ New diagram"
+      button. Parent-child relationship between diagrams via scope_object_id. Backend:
+      filter diagrams by scope_object_id. Frontend: zoom icon, drill-down popup, breadcrumb
+      update.'
+    estimate: L
+    phase: c4-zoom
+  - id: c4-drill-down-002
+    title: Show zoom indicator badge on nodes that have child diagrams
+    status: todo
+    priority: medium
+    created: 2026-04-16T11:08
+    last_referenced: 2026-04-16T11:08
+    notes: Query diagrams by scope_object_id to know which objects have sub-diagrams.
+      Show small 🔍 icon + count badge on those nodes. IcePanel reference — helps users
+      know where they can zoom in.
+    estimate: S
+    phase: c4-zoom
+- id: edge-details
+  name: Edge Details & Customization
+  status: planned
+  description: Full edge editing sidebar with shape, direction, label size, via objects,
+    rich description
+  created: 2026-04-16T11:07
+  tasks:
+  - id: edge-details-001
+    title: Build edge details sidebar (Sender/Receiver/Via/Direction/Shape/Label)
+    status: in-progress
+    priority: high
+    created: 2026-04-16T11:08
+    last_referenced: 2026-04-16T11:11
+    notes: 'IcePanel: click edge → sidebar with Sender (source), Receiver (target),
+      Via (pass-through objects), Status, Direction with Flip button, Shape dropdown
+      (Curved/Straight/Step), Label size slider, Tags, Technology, rich description.
+      Reuse existing tabbed sidebar pattern.'
+    estimate: L
+    phase: c4-zoom
+    started: 2026-04-16T11:11
+    locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
+  - id: edge-details-002
+    title: Add edge shape customization (curved/straight/step/smoothstep)
+    status: todo
+    priority: medium
+    created: 2026-04-16T11:08
+    last_referenced: 2026-04-16T11:08
+    notes: Store edge shape in metadata or new column. React Flow supports bezier
+      (curved), straight, step, smoothstep path types. Per-edge selection in sidebar.
+    estimate: M
+    phase: c4-zoom
+  - id: edge-details-003
+    title: Add edge label size slider and multi-line label rendering
+    status: todo
+    priority: medium
+    created: 2026-04-16T11:08
+    last_referenced: 2026-04-16T11:08
+    notes: 'IcePanel: edge labels support multi-line text with good positioning. Slider
+      to control label font size. Store as JSON in metadata: {label_size, label_position}.'
+    estimate: M
+    phase: c4-zoom
+  - id: edge-details-004
+    title: Add "Via" support — connections passing through intermediate objects
+    status: todo
+    priority: medium
+    created: 2026-04-16T11:08
+    last_referenced: 2026-04-16T11:08
+    notes: 'IcePanel: connection can route through "Via" objects. Stored as ordered
+      array of object IDs. Visual edge routes via those waypoints.'
+    estimate: M
+    phase: c4-zoom
+  - id: edge-details-005
+    title: Add Direction Flip button and bidirectional edge rendering
+    status: todo
+    priority: low
+    created: 2026-04-16T11:08
+    last_referenced: 2026-04-16T11:08
+    notes: One-click flip source↔target. Bidirectional edges render with arrows on
+      both ends.
+    estimate: S
+    phase: c4-zoom
+- id: node-customization
+  name: Node Customization & Styling
+  status: planned
+  description: Node resize, custom visual styling per type (actor/system/external),
+    zoom indicators
+  created: 2026-04-16T11:07
+  tasks:
+  - id: node-customization-001
+    title: Add node resize handles (drag corners to resize)
+    status: todo
+    priority: medium
+    created: 2026-04-16T11:08
+    last_referenced: 2026-04-16T11:08
+    notes: React Flow NodeResizer component. Store width/height in diagram_objects.width/height.
+      Useful for groups and large labels.
+    estimate: M
+    phase: c4-zoom
+  - id: node-customization-002
+    title: Improve visual styling per object type (actor/system/external distinct
+      looks)
+    status: todo
+    priority: medium
+    created: 2026-04-16T11:08
+    last_referenced: 2026-04-16T11:08
+    notes: 'IcePanel: Actor shown as person icon with label below, External System
+      with cloud icon, System as rounded rect, App as square. Match IcePanel aesthetic
+      for each type.'
+    estimate: M
+    phase: c4-zoom
 phases:
 - id: core-model
   name: Core Model + Canvas
