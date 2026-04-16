@@ -28,8 +28,9 @@ export function C4Node({ data, selected }: NodeProps) {
 
   return (
     <div
-      className="relative rounded-lg border-2 bg-neutral-900 px-4 py-3 shadow-lg"
+      className="relative rounded-lg border-2 px-4 py-3 shadow-lg"
       style={{
+        background: '#171717',
         borderColor: selected ? '#3b82f6' : borderColor,
         width: '100%',
         height: '100%',
