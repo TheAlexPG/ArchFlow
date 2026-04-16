@@ -1,5 +1,10 @@
 import { useMemo, useState } from 'react'
-import { useAddObjectToDiagram, useCreateObject, useObjects } from '../../hooks/use-api'
+import {
+  useAddObjectToDiagram,
+  useCreateObject,
+  useDiagramObjects,
+  useObjects,
+} from '../../hooks/use-api'
 import { useCanvasStore } from '../../stores/canvas-store'
 import type { ModelObject, ObjectType } from '../../types/model'
 import { TYPE_ICONS, TYPE_LABELS } from '../canvas/node-utils'
@@ -44,11 +49,17 @@ interface ObjectTreeProps {
 
 export function ObjectTree({ diagramId }: ObjectTreeProps) {
   const { data: objects = [] } = useObjects()
+  const { data: diagramObjects = [] } = useDiagramObjects(diagramId)
   const [search, setSearch] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const { selectNode } = useCanvasStore()
   const createObject = useCreateObject()
   const addToDiagram = useAddObjectToDiagram()
+
+  const inDiagramIds = useMemo(
+    () => new Set(diagramObjects.map((d) => d.object_id)),
+    [diagramObjects],
+  )
 
   const tree = useMemo(() => buildTree(objects), [objects])
 
@@ -62,6 +73,16 @@ export function ObjectTree({ diagramId }: ObjectTreeProps) {
       if (next.has(id)) next.delete(id)
       else next.add(id)
       return next
+    })
+  }
+
+  const handleAddToDiagram = (objectId: string) => {
+    if (!diagramId) return
+    addToDiagram.mutate({
+      diagramId,
+      objectId,
+      x: 100 + Math.random() * 400,
+      y: 100 + Math.random() * 300,
     })
   }
 
@@ -100,7 +121,15 @@ export function ObjectTree({ diagramId }: ObjectTreeProps) {
       <div className="flex-1 overflow-y-auto py-1">
         {filteredObjects
           ? filteredObjects.map((obj) => (
-              <TreeItem key={obj.id} obj={obj} depth={0} onSelect={selectNode} />
+              <TreeItem
+                key={obj.id}
+                obj={obj}
+                depth={0}
+                onSelect={selectNode}
+                inDiagram={inDiagramIds.has(obj.id)}
+                diagramId={diagramId}
+                onAdd={handleAddToDiagram}
+              />
             ))
           : tree.map((node) => (
               <TreeNodeItem
@@ -110,6 +139,9 @@ export function ObjectTree({ diagramId }: ObjectTreeProps) {
                 expanded={expanded}
                 toggleExpand={toggleExpand}
                 onSelect={selectNode}
+                inDiagramIds={inDiagramIds}
+                diagramId={diagramId}
+                onAdd={handleAddToDiagram}
               />
             ))}
         {objects.length === 0 && (
@@ -145,15 +177,22 @@ function TreeNodeItem({
   expanded,
   toggleExpand,
   onSelect,
+  inDiagramIds,
+  diagramId,
+  onAdd,
 }: {
   node: TreeNode
   depth: number
   expanded: Set<string>
   toggleExpand: (id: string) => void
   onSelect: (id: string) => void
+  inDiagramIds: Set<string>
+  diagramId?: string
+  onAdd: (id: string) => void
 }) {
   const hasChildren = node.children.length > 0
   const isExpanded = expanded.has(node.object.id)
+  const inDiagram = inDiagramIds.has(node.object.id)
 
   return (
     <>
@@ -162,7 +201,7 @@ function TreeNodeItem({
         style={{ paddingLeft: `${depth * 16 + 8}px` }}
         onClick={() => onSelect(node.object.id)}
       >
-        {hasChildren && (
+        {hasChildren ? (
           <button
             onClick={(e) => {
               e.stopPropagation()
@@ -172,10 +211,31 @@ function TreeNodeItem({
           >
             {isExpanded ? '▾' : '▸'}
           </button>
+        ) : (
+          <span className="w-4 shrink-0" />
         )}
-        {!hasChildren && <span className="w-4 shrink-0" />}
         <span className="text-xs opacity-50">{TYPE_ICONS[node.object.type]}</span>
-        <span className="text-xs text-neutral-300 truncate">{node.object.name}</span>
+        <span
+          className="text-xs truncate flex-1"
+          style={{ color: inDiagram ? '#d4d4d4' : '#737373' }}
+        >
+          {node.object.name}
+        </span>
+        {diagramId && !inDiagram && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              onAdd(node.object.id)
+            }}
+            className="opacity-0 group-hover:opacity-100 text-[10px] text-blue-400 hover:text-blue-300 px-1 transition-opacity"
+            title="Add to diagram"
+          >
+            +
+          </button>
+        )}
+        {diagramId && inDiagram && (
+          <span className="text-[9px] text-neutral-600" title="In this diagram">●</span>
+        )}
       </div>
       {isExpanded &&
         node.children.map((child) => (
@@ -186,6 +246,9 @@ function TreeNodeItem({
             expanded={expanded}
             toggleExpand={toggleExpand}
             onSelect={onSelect}
+            inDiagramIds={inDiagramIds}
+            diagramId={diagramId}
+            onAdd={onAdd}
           />
         ))}
     </>
@@ -196,19 +259,45 @@ function TreeItem({
   obj,
   depth,
   onSelect,
+  inDiagram,
+  diagramId,
+  onAdd,
 }: {
   obj: ModelObject
   depth: number
   onSelect: (id: string) => void
+  inDiagram: boolean
+  diagramId?: string
+  onAdd: (id: string) => void
 }) {
   return (
     <div
-      className="flex items-center gap-1 px-2 py-1 hover:bg-neutral-800 cursor-pointer"
+      className="flex items-center gap-1 px-2 py-1 hover:bg-neutral-800 cursor-pointer group"
       style={{ paddingLeft: `${depth * 16 + 8}px` }}
       onClick={() => onSelect(obj.id)}
     >
       <span className="text-xs opacity-50">{TYPE_ICONS[obj.type]}</span>
-      <span className="text-xs text-neutral-300 truncate">{obj.name}</span>
+      <span
+        className="text-xs truncate flex-1"
+        style={{ color: inDiagram ? '#d4d4d4' : '#737373' }}
+      >
+        {obj.name}
+      </span>
+      {diagramId && !inDiagram && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            onAdd(obj.id)
+          }}
+          className="opacity-0 group-hover:opacity-100 text-[10px] text-blue-400 hover:text-blue-300 px-1 transition-opacity"
+          title="Add to diagram"
+        >
+          +
+        </button>
+      )}
+      {diagramId && inDiagram && (
+        <span className="text-[9px] text-neutral-600">●</span>
+      )}
     </div>
   )
 }

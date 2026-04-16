@@ -5,10 +5,10 @@ import { SearchModal } from '../components/nav/SearchModal'
 import { useAuthStore } from '../stores/auth-store'
 
 const DIAGRAM_TYPE_LABELS: Record<string, string> = {
-  system_landscape: 'System Landscape',
-  system_context: 'System Context',
-  container: 'Container',
-  component: 'Component',
+  system_landscape: 'L1 — System Landscape',
+  system_context: 'L1 — System Context',
+  container: 'L2 — Container',
+  component: 'L3 — Component',
   custom: 'Custom',
 }
 

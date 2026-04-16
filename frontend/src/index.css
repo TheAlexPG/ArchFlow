@@ -13,3 +13,48 @@ html, body, #root {
   display: flex;
   flex-direction: column;
 }
+
+/* React Flow dark theme overrides */
+.react-flow__controls {
+  background: #171717 !important;
+  border: 1px solid #333 !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
+  border-radius: 6px !important;
+  overflow: hidden;
+}
+
+.react-flow__controls-button {
+  background: #171717 !important;
+  border-bottom: 1px solid #262626 !important;
+  color: #a3a3a3 !important;
+  width: 28px !important;
+  height: 28px !important;
+}
+
+.react-flow__controls-button:hover {
+  background: #262626 !important;
+  color: #f5f5f5 !important;
+}
+
+.react-flow__controls-button svg {
+  fill: currentColor !important;
+}
+
+.react-flow__controls-button:last-child {
+  border-bottom: none !important;
+}
+
+.react-flow__minimap {
+  background: #171717 !important;
+  border: 1px solid #333 !important;
+  border-radius: 6px !important;
+}
+
+.react-flow__attribution {
+  background: transparent !important;
+}
+
+.react-flow__attribution a {
+  color: #404040 !important;
+  font-size: 10px !important;
+}
