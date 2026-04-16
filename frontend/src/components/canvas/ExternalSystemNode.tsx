@@ -1,6 +1,6 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import type { C4NodeData } from './C4Node'
-import { STATUS_COLORS } from './node-utils'
+import { STATUS_COLORS, stripHtml } from './node-utils'
 
 export function ExternalSystemNode({ data, selected }: NodeProps) {
   const obj = (data as C4NodeData).object
@@ -43,10 +43,12 @@ export function ExternalSystemNode({ data, selected }: NodeProps) {
         </div>
       </div>
 
-      {obj.description && (
-        <div style={{ fontSize: 11, color: '#737373', marginTop: 6 }}>
-          {obj.description}
-        </div>
+      {obj.description && stripHtml(obj.description) && (
+        <div
+          className="node-desc-html"
+          style={{ fontSize: 11, color: '#737373', marginTop: 6 }}
+          dangerouslySetInnerHTML={{ __html: obj.description }}
+        />
       )}
 
       {obj.technology && obj.technology.length > 0 && (

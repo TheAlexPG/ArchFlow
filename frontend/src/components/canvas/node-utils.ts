@@ -43,3 +43,15 @@ export const TYPE_BORDER_COLORS: Record<ObjectType, string> = {
   store: '#f59e0b',
   component: '#10b981',
 }
+
+/**
+ * Strip HTML tags and decode basic entities for preview display on nodes.
+ * Descriptions are stored as TipTap HTML; on the canvas we only want plain text.
+ */
+export function stripHtml(html: string | null | undefined): string {
+  if (!html) return ''
+  const text = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+  const el = document.createElement('textarea')
+  el.innerHTML = text
+  return el.value
+}

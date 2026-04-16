@@ -58,3 +58,78 @@ html, body, #root {
   color: #404040 !important;
   font-size: 10px !important;
 }
+
+/* Reset TipTap block margins when description is shown as preview inside a node */
+.node-desc-html p {
+  margin: 0;
+}
+.node-desc-html p + p {
+  margin-top: 2px;
+}
+.node-desc-html strong {
+  font-weight: 600;
+  color: #e5e5e5;
+}
+.node-desc-html em {
+  font-style: italic;
+}
+.node-desc-html code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+  background: #262626;
+  padding: 0 3px;
+  border-radius: 3px;
+}
+.node-desc-html h1,
+.node-desc-html h2,
+.node-desc-html h3 {
+  font-size: inherit;
+  font-weight: 600;
+  margin: 0;
+  color: #e5e5e5;
+}
+.node-desc-html ul,
+.node-desc-html ol {
+  margin: 2px 0;
+  padding-left: 16px;
+}
+
+/*
+ * Kill default React Flow selection styles — we handle selection with
+ * border-color inside each node. Removing this default box-shadow avoids a
+ * layer-promotion trigger on select.
+ */
+.react-flow__node.selected,
+.react-flow__node:focus,
+.react-flow__node:focus-visible {
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+/*
+ * Keep NodeResizer DOM stable on select/deselect — controls are rendered
+ * permanently via isVisible={true} in custom nodes and hidden visually
+ * when the node isn't selected. Avoids DOM mount/unmount churn.
+ */
+.react-flow__node:not(.selected) .react-flow__resize-control {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/*
+ * Safari-specific fix for subpixel blur when clicking a node:
+ *
+ * Safari/WebKit promotes the selected node to a fresh GPU composition
+ * layer the moment the `.selected` className toggles. Under the
+ * viewport's fractional-pixel transform, the cached raster rasterises
+ * blurry and stays blurry until the next transform change. Chrome does
+ * not exhibit this.
+ *
+ * Forcing a single persistent GPU layer at the .react-flow root (which
+ * itself has no inline transform from React Flow) establishes a stable
+ * composition context for all descendants, so Safari reuses the same
+ * layer on select instead of minting a new one.
+ */
+.react-flow {
+  transform: translate3d(0, 0, 0);
+}

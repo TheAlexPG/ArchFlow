@@ -1,5 +1,6 @@
 import { Handle, NodeResizer, Position, type NodeProps } from '@xyflow/react'
 import type { C4NodeData } from './C4Node'
+import { stripHtml } from './node-utils'
 
 export function GroupNode({ data, selected }: NodeProps) {
   const obj = (data as C4NodeData).object
@@ -20,7 +21,7 @@ export function GroupNode({ data, selected }: NodeProps) {
     >
       <NodeResizer
         color="#3b82f6"
-        isVisible={selected}
+        isVisible
         minWidth={200}
         minHeight={120}
       />
@@ -38,10 +39,12 @@ export function GroupNode({ data, selected }: NodeProps) {
       <div style={{ fontSize: 14, fontWeight: 600, color: '#e5e5e5' }}>
         {obj.name}
       </div>
-      {obj.description && (
-        <div style={{ fontSize: 11, color: '#737373', marginTop: 4 }}>
-          {obj.description}
-        </div>
+      {obj.description && stripHtml(obj.description) && (
+        <div
+          className="node-desc-html"
+          style={{ fontSize: 11, color: '#737373', marginTop: 4 }}
+          dangerouslySetInnerHTML={{ __html: obj.description }}
+        />
       )}
     </div>
   )

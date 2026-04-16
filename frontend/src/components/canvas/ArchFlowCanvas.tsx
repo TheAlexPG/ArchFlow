@@ -115,12 +115,19 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     if (key === prevKeyRef.current) return
     prevKeyRef.current = key
 
-    // Preserve dragged positions and selection state
+    // Preserve dragged positions, selection state, and size from NodeResizer
     const currentNodes = getNodes()
     const merged = nodes.map((n) => {
       const existing = currentNodes.find((cn) => cn.id === n.id)
       if (existing) {
-        return { ...n, position: existing.position, selected: existing.selected }
+        return {
+          ...n,
+          position: existing.position,
+          selected: existing.selected,
+          width: existing.width,
+          height: existing.height,
+          style: existing.style,
+        }
       }
       return n
     })
@@ -211,6 +218,14 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
       deleteKeyCode={['Backspace', 'Delete']}
       nodeTypes={nodeTypes}
       edgeTypes={edgeTypes}
+      /*
+       * Do not bump z-index of selected nodes. React Flow's default is to
+       * elevate the selected node via inline `zIndex`, which re-evaluates
+       * the stacking context and promotes the node to a fresh GPU
+       * composition layer. Under the viewport's fractional-pixel transform,
+       * this leaves the entire canvas rasterized blurry until the next pan.
+       */
+      elevateNodesOnSelect={false}
       fitView
       snapToGrid
       snapGrid={[20, 20]}

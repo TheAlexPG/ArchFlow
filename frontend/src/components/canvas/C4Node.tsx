@@ -2,7 +2,7 @@ import { Handle, NodeResizer, Position, type NodeProps } from '@xyflow/react'
 import { useNavigate } from 'react-router-dom'
 import type { ModelObject } from '../../types/model'
 import { useDiagrams } from '../../hooks/use-diagrams'
-import { STATUS_COLORS, TYPE_BORDER_COLORS, TYPE_ICONS } from './node-utils'
+import { STATUS_COLORS, TYPE_BORDER_COLORS, TYPE_ICONS, stripHtml } from './node-utils'
 
 export type C4NodeData = {
   object: ModelObject
@@ -28,17 +28,22 @@ export function C4Node({ data, selected }: NodeProps) {
 
   return (
     <div
-      className={`
-        relative rounded-lg border-2 bg-neutral-900 px-4 py-3 min-w-[160px] max-w-[240px]
-        shadow-lg transition-shadow
-        ${selected ? 'shadow-blue-500/30 ring-1 ring-blue-500' : 'shadow-black/30'}
-      `}
-      style={{ borderColor }}
+      className="relative rounded-lg border-2 bg-neutral-900 px-4 py-3 shadow-lg"
+      style={{
+        borderColor: selected ? '#3b82f6' : borderColor,
+        width: '100%',
+        height: '100%',
+        minWidth: 160,
+        minHeight: 60,
+        boxSizing: 'border-box',
+      }}
     >
+      {/* Always rendered so DOM is stable on select/deselect — controls are
+          hidden via CSS when the node isn't selected (see index.css). */}
       <NodeResizer
         color="#3b82f6"
-        isVisible={selected}
-        minWidth={120}
+        isVisible
+        minWidth={160}
         minHeight={60}
       />
       {/* With connectionMode="loose" these work as both source and target */}
@@ -71,8 +76,11 @@ export function C4Node({ data, selected }: NodeProps) {
         <span className="text-lg shrink-0 mt-0.5 opacity-60">{TYPE_ICONS[obj.type]}</span>
         <div className="min-w-0">
           <div className="font-semibold text-sm text-neutral-100 truncate">{obj.name}</div>
-          {obj.description && (
-            <div className="text-xs text-neutral-400 mt-0.5 line-clamp-2">{obj.description}</div>
+          {obj.description && stripHtml(obj.description) && (
+            <div
+              className="node-desc-html text-xs text-neutral-400 mt-0.5"
+              dangerouslySetInnerHTML={{ __html: obj.description }}
+            />
           )}
         </div>
       </div>
