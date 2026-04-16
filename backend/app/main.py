@@ -8,6 +8,8 @@ from app.api.v1.comments import router as comments_router
 from app.api.v1.connections import router as connections_router
 from app.api.v1.diagrams import router as diagrams_router
 from app.api.v1.export import router as export_router
+from app.api.v1.flows import diagrams_router as flow_diagrams_router
+from app.api.v1.flows import router as flows_router
 from app.api.v1.objects import router as objects_router
 from app.core.config import settings
 from app.core.database import engine
@@ -38,6 +40,8 @@ def create_app() -> FastAPI:
     app.include_router(objects_router, prefix="/api/v1")
     app.include_router(connections_router, prefix="/api/v1")
     app.include_router(diagrams_router, prefix="/api/v1")
+    app.include_router(flow_diagrams_router, prefix="/api/v1")
+    app.include_router(flows_router, prefix="/api/v1")
     app.include_router(comments_router, prefix="/api/v1")
     app.include_router(export_router, prefix="/api/v1")
 

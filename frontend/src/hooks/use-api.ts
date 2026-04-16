@@ -8,6 +8,9 @@ import type {
   Connection,
   ConnectionCreate,
   ConnectionUpdate,
+  Flow,
+  FlowCreate,
+  FlowUpdate,
   ModelObject,
   ObjectCreate,
   ObjectUpdate,
@@ -307,5 +310,52 @@ export function useGetInsights() {
       const { data } = await api.post<ObjectInsights>(`/objects/${objectId}/insights`)
       return data
     },
+  })
+}
+
+// ─── Flows ───────────────────────────────────────────────
+
+export function useFlows(diagramId: string | undefined) {
+  return useQuery({
+    queryKey: ['flows', diagramId],
+    queryFn: async () => {
+      const { data } = await api.get<Flow[]>(`/diagrams/${diagramId}/flows`)
+      return data
+    },
+    enabled: !!diagramId,
+  })
+}
+
+export function useCreateFlow() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ diagramId, ...data }: FlowCreate & { diagramId: string }) => {
+      const { data: result } = await api.post<Flow>(`/diagrams/${diagramId}/flows`, data)
+      return result
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['flows', vars.diagramId] })
+    },
+  })
+}
+
+export function useUpdateFlow() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, ...data }: FlowUpdate & { id: string }) => {
+      const { data: result } = await api.put<Flow>(`/flows/${id}`, data)
+      return result
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['flows'] }),
+  })
+}
+
+export function useDeleteFlow() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await api.delete(`/flows/${id}`)
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['flows'] }),
   })
 }

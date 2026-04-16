@@ -12,6 +12,13 @@ interface CanvasState {
   // to this object (upstream or downstream) so the user can trace its
   // dependencies visually. Triggered from the object context menu.
   dependenciesFocusId: string | null
+  // Flow playback state: when a flow is playing the canvas dims non-flow
+  // edges, highlights each step with a number badge, and surfaces
+  // Previous/Next controls. `activeBranch` filters the step list when the
+  // selected flow has branching alternative paths.
+  playingFlowId: string | null
+  playingStepIdx: number
+  activeBranch: string | null
 
   selectNode: (id: string | null) => void
   selectEdge: (id: string | null) => void
@@ -21,6 +28,10 @@ interface CanvasState {
   setAddingObjectType: (type: string | null) => void
   toggleTree: () => void
   setDependenciesFocus: (id: string | null) => void
+  startFlow: (flowId: string, branch?: string | null) => void
+  stopFlow: () => void
+  setFlowStep: (idx: number) => void
+  setFlowBranch: (branch: string | null) => void
 }
 
 export const useCanvasStore = create<CanvasState>((set) => ({
@@ -32,6 +43,9 @@ export const useCanvasStore = create<CanvasState>((set) => ({
   addingObjectType: null,
   treeOpen: false,
   dependenciesFocusId: null,
+  playingFlowId: null,
+  playingStepIdx: 0,
+  activeBranch: null,
 
   selectNode: (id) =>
     set({ selectedNodeId: id, selectedEdgeId: null, sidebarOpen: id !== null }),
@@ -44,4 +58,11 @@ export const useCanvasStore = create<CanvasState>((set) => ({
   setAddingObjectType: (type) => set({ addingObjectType: type }),
   toggleTree: () => set((state) => ({ treeOpen: !state.treeOpen })),
   setDependenciesFocus: (id) => set({ dependenciesFocusId: id }),
+  startFlow: (flowId, branch = null) =>
+    set({ playingFlowId: flowId, playingStepIdx: 0, activeBranch: branch }),
+  stopFlow: () =>
+    set({ playingFlowId: null, playingStepIdx: 0, activeBranch: null }),
+  setFlowStep: (idx) => set({ playingStepIdx: idx }),
+  setFlowBranch: (branch) =>
+    set({ activeBranch: branch, playingStepIdx: 0 }),
 }))

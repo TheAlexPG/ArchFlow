@@ -22,6 +22,7 @@ import {
   useCreateConnection,
   useDeleteConnection,
   useDiagramObjects,
+  useFlows,
   useObjects,
   useSaveDiagramPosition,
 } from '../../hooks/use-api'
@@ -82,8 +83,28 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     dependenciesFocusId,
     setDependenciesFocus,
     activeFilter,
+    playingFlowId,
+    playingStepIdx,
+    activeBranch,
   } = useCanvasStore()
   const filterDim = activeFilter as FilterDim
+  const { data: flows = [] } = useFlows(diagramId)
+
+  // Map edgeId → step number (1-based) for the currently active flow branch,
+  // plus the id of the "current" step being played. Drives edge highlighting
+  // during flow playback.
+  const flowPlayback = useMemo(() => {
+    if (!playingFlowId) return null
+    const flow = flows.find((f) => f.id === playingFlowId)
+    if (!flow) return null
+    const branchSteps = flow.steps.filter((s) =>
+      !activeBranch || activeBranch === 'main' ? !s.branch : s.branch === activeBranch,
+    )
+    const stepNumbers = new Map<string, number>()
+    branchSteps.forEach((s, i) => stepNumbers.set(s.connection_id, i + 1))
+    const currentConnId = branchSteps[playingStepIdx]?.connection_id ?? null
+    return { stepNumbers, currentConnId }
+  }, [playingFlowId, playingStepIdx, activeBranch, flows])
   const { setNodes, setEdges, getNodes, getEdges } = useReactFlow()
   const prevKeyRef = useRef<string>('')
   const prevConnsRef = useRef<string>('')
@@ -202,17 +223,34 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
       .join(',')
     if (key === prevConnsRef.current) return
     prevConnsRef.current = key
-    // Preserve selection state across re-renders + apply overlay opacity.
+    // Preserve selection state across re-renders + apply overlay opacity +
+    // flow playback step number/highlight.
     const currentEdges = getEdges()
     setEdges(
       filtered.map(connectionToEdge).map((e) => {
         const existing = currentEdges.find((ce) => ce.id === e.id)
-        const opacity = dependencyChain && !dependencyChain.edges.has(e.id) ? 0.15 : 1
-        const withStyle = { ...e, style: { ...e.style, opacity } }
+        const flowStep = flowPlayback?.stepNumbers.get(e.id)
+        const isCurrent = flowPlayback?.currentConnId === e.id
+        const flowOpacity = flowPlayback
+          ? flowStep
+            ? 1
+            : 0.1
+          : dependencyChain && !dependencyChain.edges.has(e.id)
+            ? 0.15
+            : 1
+        const withStyle = {
+          ...e,
+          style: { ...e.style, opacity: flowOpacity },
+          data: {
+            ...(e.data || {}),
+            flowStep: flowStep ?? null,
+            flowCurrent: isCurrent,
+          },
+        }
         return existing?.selected ? { ...withStyle, selected: true } : withStyle
       }),
     )
-  }, [connections, diagramObjects, setEdges, getEdges, dependencyChain])
+  }, [connections, diagramObjects, setEdges, getEdges, dependencyChain, flowPlayback])
 
   // Apply dimming + color overlay to existing nodes/edges whenever the
   // dependency focus or active filter changes. For freshly-created nodes,
@@ -240,16 +278,29 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     const currentEdges = getEdges()
     if (currentEdges.length > 0) {
       setEdges(
-        currentEdges.map((e) => ({
-          ...e,
-          style: {
-            ...e.style,
-            opacity: dependencyChain && !dependencyChain.edges.has(e.id) ? 0.15 : 1,
-          },
-        })),
+        currentEdges.map((e) => {
+          const flowStep = flowPlayback?.stepNumbers.get(e.id)
+          const isCurrent = flowPlayback?.currentConnId === e.id
+          const opacity = flowPlayback
+            ? flowStep
+              ? 1
+              : 0.1
+            : dependencyChain && !dependencyChain.edges.has(e.id)
+              ? 0.15
+              : 1
+          return {
+            ...e,
+            style: { ...e.style, opacity },
+            data: {
+              ...(e.data || {}),
+              flowStep: flowStep ?? null,
+              flowCurrent: isCurrent,
+            },
+          }
+        }),
       )
     }
-  }, [dependencyChain, filterDim, getNodes, setNodes, getEdges, setEdges])
+  }, [dependencyChain, filterDim, flowPlayback, getNodes, setNodes, getEdges, setEdges])
 
   // ESC clears the dependencies focus overlay.
   useEffect(() => {

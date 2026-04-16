@@ -24,13 +24,18 @@
 **Active Phase:** Overlays + Flows (1/5 done)
 **Phases:** done Core Model + Canvas | done C4 Zoom + Diagrams | done Drafts + Versioning | done Collaboration | done API + MCP | done AI Features | >> Overlays + Flows | ... Polish + Enterprise
 
-**In Progress:** frontend-canvas-008 Implement color-coding overlays based on active filter (tag/tech/status/team), frontend-canvas-012 Implement "Get insights" AI feature for object analysis, detail-sidebar-004 Implement per-object history tab (change log scoped to selected object), detail-sidebar-005 Implement typed comments (question, inaccuracy, idea) with icons, detail-sidebar-007 Add "note" comment type alongside question/inaccurate/idea
+**In Progress:** frontend-canvas-008 Implement color-coding overlays based on active filter (tag/tech/status/team), frontend-canvas-009 Add flow alternative paths (branching) support, frontend-canvas-012 Implement "Get insights" AI feature for object analysis, detail-sidebar-004 Implement per-object history tab (change log scoped to selected object), detail-sidebar-005 Implement typed comments (question, inaccuracy, idea) with icons, detail-sidebar-007 Add "note" comment type alongside question/inaccurate/idea
 **Blocked:** —
-**Next Up:** frontend-canvas-009 Add flow alternative paths (branching) support (medium), frontend-canvas-010 Show numbered step labels on canvas connections during flow playback (medium)
+**Next Up:** frontend-canvas-010 Show numbered step labels on canvas connections during flow playback (medium)
 
 ---
 
 ## Changelog
+
+### 2026-04-16 — auto
+5 files / +248 / -154 — overlay-utils helpers, node outline styling via canvas-store.activeFilter, FilterToolbar wired to store with legend strip
+Tasks touched: 
+
 
 ### 2026-04-16 — auto
 10 files / +538 / -23 — anthropic SDK, ai_service, POST /objects/{id}/insights, useGetInsights hook, InsightsModal. Feature gated on ANTHROPIC_API_KEY env.

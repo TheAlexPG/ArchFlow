@@ -49,6 +49,20 @@ export function C4Edge({
 
   const label = (data as Record<string, unknown>)?.label as string | undefined
   const protocol = (data as Record<string, unknown>)?.protocol as string | undefined
+  const flowStep = (data as Record<string, unknown>)?.flowStep as number | null | undefined
+  const flowCurrent = (data as Record<string, unknown>)?.flowCurrent as boolean | undefined
+
+  // When a flow is playing, steps in the active branch get a thicker blue
+  // stroke; the step being played gets a bright green stroke so the eye
+  // lands on "what's happening right now".
+  const stroke = flowCurrent
+    ? '#22c55e'
+    : flowStep
+      ? '#3b82f6'
+      : selected
+        ? '#3b82f6'
+        : '#525252'
+  const strokeWidth = flowCurrent ? 3 : flowStep ? 2.2 : selected ? 2 : 1.5
 
   return (
     <>
@@ -57,10 +71,7 @@ export function C4Edge({
         path={edgePath}
         markerEnd={markerEnd}
         markerStart={markerStart}
-        style={{
-          stroke: selected ? '#3b82f6' : '#525252',
-          strokeWidth: selected ? 2 : 1.5,
-        }}
+        style={{ stroke, strokeWidth }}
       />
       {(label || protocol) && (
         <EdgeLabelRenderer>
@@ -78,6 +89,30 @@ export function C4Edge({
             {label}
             {label && protocol && <br />}
             {protocol && <span className="text-neutral-500">[{protocol}]</span>}
+          </div>
+        </EdgeLabelRenderer>
+      )}
+      {flowStep && (
+        <EdgeLabelRenderer>
+          <div
+            className="absolute pointer-events-none nodrag nopan"
+            style={{
+              transform: `translate(-50%, -50%) translate(${labelX}px,${labelY - 22}px)`,
+              width: 22,
+              height: 22,
+              borderRadius: '50%',
+              background: flowCurrent ? '#22c55e' : '#3b82f6',
+              color: 'white',
+              fontSize: 11,
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 2px 6px rgba(0,0,0,0.4)',
+              border: '2px solid #0a0a0a',
+            }}
+          >
+            {flowStep}
           </div>
         </EdgeLabelRenderer>
       )}

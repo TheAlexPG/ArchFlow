@@ -4,6 +4,8 @@ import { ReactFlowProvider } from '@xyflow/react'
 import { ArchFlowCanvas } from '../components/canvas/ArchFlowCanvas'
 import { AddObjectToolbar } from '../components/toolbar/AddObjectToolbar'
 import { FilterToolbar } from '../components/toolbar/FilterToolbar'
+import { FlowPlaybackBar } from '../components/toolbar/FlowPlaybackBar'
+import { FlowsPanel } from '../components/toolbar/FlowsPanel'
 import { EdgeSidebar } from '../components/sidebar/EdgeSidebar'
 import { ObjectSidebar } from '../components/sidebar/ObjectSidebar'
 import { ObjectTree } from '../components/tree/ObjectTree'
@@ -124,6 +126,8 @@ export function DiagramPage() {
             <div style={{ position: 'absolute', inset: 0 }}>
               <ArchFlowCanvas diagramId={diagramId} />
             </div>
+            {diagramId && <FlowsPanel diagramId={diagramId} />}
+            {diagramId && <FlowPlaybackBar diagramId={diagramId} />}
             <FilterToolbar />
           </div>
           {selectedEdgeId ? <EdgeSidebar /> : <ObjectSidebar />}

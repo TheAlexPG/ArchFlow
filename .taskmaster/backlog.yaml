@@ -8,6 +8,10 @@ context:
     title: Implement color-coding overlays based on active filter (tag/tech/status/team)
     epic: frontend-canvas
     branch: ''
+  - id: frontend-canvas-009
+    title: Add flow alternative paths (branching) support
+    epic: frontend-canvas
+    branch: ''
     locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
   - id: frontend-canvas-012
     title: Implement "Get insights" AI feature for object analysis
@@ -31,10 +35,6 @@ context:
     title: Implement "View dependencies" visual overlay (highlight upstream/downstream)
     completed: 2026-04-16T12:59
   next_up:
-  - id: frontend-canvas-009
-    title: Add flow alternative paths (branching) support
-    priority: medium
-    epic: frontend-canvas
   - id: frontend-canvas-010
     title: Show numbered step labels on canvas connections during flow playback
     priority: medium
@@ -43,8 +43,8 @@ context:
     total: 9
     done: 1
     in_progress: 1
-    in_review: 4
-    todo: 3
+    in_review: 5
+    todo: 2
     blocked: 0
     archived: 43
   active_phase:
@@ -52,9 +52,9 @@ context:
     name: Overlays + Flows
     stats:
       total: 5
-      todo: 3
+      todo: 2
       in-progress: 1
-      in-review: 0
+      in-review: 1
       done: 1
       blocked: 0
       archived: 0
@@ -321,28 +321,29 @@ epics:
     archived: 2026-04-16T12:59
   - id: frontend-canvas-008
     title: Implement color-coding overlays based on active filter (tag/tech/status/team)
-    status: in-progress
+    status: in-review
     priority: medium
     created: 2026-04-15T11:43
-    last_referenced: 2026-04-16T13:14
+    last_referenced: 2026-04-16T13:16
     notes: When a filter tab is active, color-code nodes by the selected dimension.
       Non-matching nodes dim to ~30% opacity. Saved as named perspectives per spec
       section 3.2.
     estimate: L
     phase: overlays-flows
     started: 2026-04-16T13:14
-    locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
   - id: frontend-canvas-009
     title: Add flow alternative paths (branching) support
-    status: todo
+    status: in-progress
     priority: medium
     created: 2026-04-15T11:50
-    last_referenced: 2026-04-15T11:50
+    last_referenced: 2026-04-16T13:16
     notes: 'IcePanel: flows can have alternative paths (e.g. "Google OAuth alternative").
       A branch point in the flow with a different sequence. Needs flow_branches table
       or parent_step_id for branching.'
     estimate: L
     phase: overlays-flows
+    started: 2026-04-16T13:16
+    locked_by: Alexandrs-MacBook-Pro.local-55404-fda9e0f7
   - id: frontend-canvas-010
     title: Show numbered step labels on canvas connections during flow playback
     status: todo

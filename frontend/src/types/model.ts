@@ -156,3 +156,32 @@ export interface CommentUpdate {
   body?: string
   resolved?: boolean
 }
+
+export interface FlowStep {
+  id: string
+  connection_id: string
+  branch: string | null
+  note: string | null
+}
+
+export interface Flow {
+  id: string
+  diagram_id: string
+  name: string
+  description: string | null
+  steps: FlowStep[]
+  created_at: string
+  updated_at: string
+}
+
+export interface FlowCreate {
+  name: string
+  description?: string | null
+  steps?: FlowStep[]
+}
+
+export interface FlowUpdate {
+  name?: string
+  description?: string | null
+  steps?: FlowStep[]
+}

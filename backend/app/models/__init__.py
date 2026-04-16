@@ -3,6 +3,7 @@ from app.models.base import Base
 from app.models.comment import Comment, CommentTargetType, CommentType
 from app.models.connection import Connection, ConnectionDirection
 from app.models.diagram import Diagram, DiagramObject, DiagramType
+from app.models.flow import Flow
 from app.models.object import ModelObject, ObjectScope, ObjectStatus, ObjectType
 from app.models.user import User
 
@@ -19,6 +20,7 @@ __all__ = [
     "Diagram",
     "DiagramObject",
     "DiagramType",
+    "Flow",
     "ModelObject",
     "ObjectScope",
     "ObjectStatus",
