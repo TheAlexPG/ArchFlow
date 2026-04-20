@@ -12,7 +12,8 @@ from app.schemas.diagram import (
     DiagramResponse,
     DiagramUpdate,
 )
-from app.services import diagram_service, draft_service
+from app.api.deps import get_optional_user
+from app.services import access_service, diagram_service, draft_service, workspace_service
 from app.services.webhook_service import fire_and_forget_emit
 
 router = APIRouter(prefix="/diagrams", tags=["diagrams"])
@@ -22,17 +23,54 @@ router = APIRouter(prefix="/diagrams", tags=["diagrams"])
 async def list_diagrams(
     scope_object_id: uuid.UUID | None = Query(None),
     db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_optional_user),
 ):
-    return await diagram_service.get_diagrams(db, scope_object_id)
+    """
+    When the caller is authenticated and has a workspace, restrict the list
+    to diagrams they have team-granted access to. Workspace admins+ see
+    everything. Unauthenticated callers still see everything for now — full
+    auth rollout is a follow-up.
+    """
+    diagrams = await diagram_service.get_diagrams(db, scope_object_id)
+    if current_user is None:
+        return diagrams
+    workspace = await workspace_service.get_default_workspace_for_user(
+        db, current_user.id
+    )
+    if workspace is None:
+        return diagrams
+    membership = await workspace_service.get_user_membership(
+        db, current_user.id, workspace.id
+    )
+    if membership is None:
+        return diagrams
+    allowed = await access_service.filter_visible_diagram_ids(
+        db, current_user.id, workspace.id, membership.role
+    )
+    if allowed is None:
+        return diagrams
+    return [d for d in diagrams if d.id in allowed or d.workspace_id != workspace.id]
 
 
 @router.get("/{diagram_id}", response_model=DiagramResponse)
 async def get_diagram(
-    diagram_id: uuid.UUID, db: AsyncSession = Depends(get_db)
+    diagram_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_optional_user),
 ):
     diagram = await diagram_service.get_diagram(db, diagram_id)
     if not diagram:
         raise HTTPException(status_code=404, detail="Diagram not found")
+    # If the diagram is scoped to a workspace AND the caller is an
+    # authenticated member of that workspace, enforce team ACL.
+    if current_user is not None and diagram.workspace_id is not None:
+        membership = await workspace_service.get_user_membership(
+            db, current_user.id, diagram.workspace_id
+        )
+        if membership is not None and not await access_service.can_read_diagram(
+            db, current_user.id, diagram, membership.role
+        ):
+            raise HTTPException(status_code=403, detail="No access to this diagram")
     return diagram
 
 

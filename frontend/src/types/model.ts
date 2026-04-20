@@ -314,3 +314,38 @@ export interface Workspace {
   role: WorkspaceRole
   created_at: string
 }
+
+export interface WorkspaceMember {
+  user_id: string
+  email: string
+  name: string
+  role: WorkspaceRole
+}
+
+export interface WorkspaceInvite {
+  id: string
+  email: string
+  role: WorkspaceRole
+  token: string
+}
+
+export interface Team {
+  id: string
+  workspace_id: string
+  name: string
+  slug: string
+  description: string | null
+}
+
+export interface TeamMember {
+  user_id: string
+  email: string
+  name: string
+}
+
+export type DiagramAccessLevel = 'read' | 'write' | 'admin'
+
+export interface DiagramGrant {
+  team_id: string
+  access_level: DiagramAccessLevel
+}

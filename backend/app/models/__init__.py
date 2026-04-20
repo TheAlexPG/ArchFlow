@@ -7,6 +7,8 @@ from app.models.diagram import Diagram, DiagramObject, DiagramType
 from app.models.draft import Draft, DraftDiagram, DraftStatus
 from app.models.flow import Flow
 from app.models.object import ModelObject, ObjectScope, ObjectStatus, ObjectType
+from app.models.invite import WorkspaceInvite
+from app.models.team import AccessLevel, DiagramAccess, Team, TeamMember
 from app.models.user import User
 from app.models.webhook import Webhook
 from app.models.workspace import Organization, Role, Workspace, WorkspaceMember
@@ -32,11 +34,16 @@ __all__ = [
     "ModelObject",
     "ObjectScope",
     "ObjectStatus",
+    "AccessLevel",
+    "DiagramAccess",
     "ObjectType",
     "Organization",
     "Role",
+    "Team",
+    "TeamMember",
     "User",
     "Webhook",
     "Workspace",
+    "WorkspaceInvite",
     "WorkspaceMember",
 ]

@@ -5,10 +5,17 @@ import type {
   ApiKeyCreate,
   ApiKeyWithSecret,
   Comment,
+  DiagramAccessLevel,
+  DiagramGrant,
+  Team,
+  TeamMember,
   Webhook,
   WebhookCreate,
   WebhookWithSecret,
   Workspace,
+  WorkspaceInvite,
+  WorkspaceMember,
+  WorkspaceRole,
   CommentCreate,
   CommentTargetType,
   CommentUpdate,
@@ -675,5 +682,184 @@ export function useWorkspaces() {
       const { data } = await api.get<Workspace[]>('/workspaces')
       return data
     },
+  })
+}
+
+// ─── Members + invites ────────────────────────────────────
+
+export function useWorkspaceMembers(workspaceId: string | null) {
+  return useQuery({
+    queryKey: ['workspaces', workspaceId, 'members'],
+    queryFn: async () => {
+      const { data } = await api.get<WorkspaceMember[]>(
+        `/workspaces/${workspaceId}/members`,
+      )
+      return data
+    },
+    enabled: !!workspaceId,
+  })
+}
+
+export function useInviteMember(workspaceId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (payload: { email: string; role: WorkspaceRole }) => {
+      const { data } = await api.post(`/workspaces/${workspaceId}/invites`, payload)
+      return data as
+        | { type: 'member_added'; user_id: string }
+        | { type: 'invite_created'; invite: WorkspaceInvite }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['workspaces', workspaceId, 'members'] })
+      qc.invalidateQueries({ queryKey: ['workspaces', workspaceId, 'invites'] })
+    },
+  })
+}
+
+export function useUpdateMemberRole(workspaceId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ userId, role }: { userId: string; role: WorkspaceRole }) => {
+      const { data } = await api.patch<WorkspaceMember>(
+        `/workspaces/${workspaceId}/members/${userId}`,
+        { role },
+      )
+      return data
+    },
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ['workspaces', workspaceId, 'members'] }),
+  })
+}
+
+export function useRemoveMember(workspaceId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (userId: string) => {
+      await api.delete(`/workspaces/${workspaceId}/members/${userId}`)
+    },
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ['workspaces', workspaceId, 'members'] }),
+  })
+}
+
+// ─── Teams ────────────────────────────────────────────────
+
+export function useTeams(workspaceId: string | null) {
+  return useQuery({
+    queryKey: ['workspaces', workspaceId, 'teams'],
+    queryFn: async () => {
+      const { data } = await api.get<Team[]>(`/workspaces/${workspaceId}/teams`)
+      return data
+    },
+    enabled: !!workspaceId,
+  })
+}
+
+export function useCreateTeam(workspaceId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (payload: { name: string; description?: string }) => {
+      const { data } = await api.post<Team>(
+        `/workspaces/${workspaceId}/teams`,
+        payload,
+      )
+      return data
+    },
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ['workspaces', workspaceId, 'teams'] }),
+  })
+}
+
+export function useDeleteTeam(workspaceId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (teamId: string) => {
+      await api.delete(`/workspaces/${workspaceId}/teams/${teamId}`)
+    },
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ['workspaces', workspaceId, 'teams'] }),
+  })
+}
+
+export function useTeamMembers(workspaceId: string | null, teamId: string | null) {
+  return useQuery({
+    queryKey: ['teams', teamId, 'members'],
+    queryFn: async () => {
+      const { data } = await api.get<TeamMember[]>(
+        `/workspaces/${workspaceId}/teams/${teamId}/members`,
+      )
+      return data
+    },
+    enabled: !!workspaceId && !!teamId,
+  })
+}
+
+export function useAddTeamMember(workspaceId: string | null, teamId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (userId: string) => {
+      await api.post(`/workspaces/${workspaceId}/teams/${teamId}/members`, {
+        user_id: userId,
+      })
+    },
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ['teams', teamId, 'members'] }),
+  })
+}
+
+export function useRemoveTeamMember(
+  workspaceId: string | null,
+  teamId: string | null,
+) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (userId: string) => {
+      await api.delete(
+        `/workspaces/${workspaceId}/teams/${teamId}/members/${userId}`,
+      )
+    },
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ['teams', teamId, 'members'] }),
+  })
+}
+
+// ─── Diagram team access ─────────────────────────────────
+
+export function useDiagramGrants(diagramId: string | null) {
+  return useQuery({
+    queryKey: ['diagrams', diagramId, 'access'],
+    queryFn: async () => {
+      const { data } = await api.get<DiagramGrant[]>(
+        `/diagrams/${diagramId}/access`,
+      )
+      return data
+    },
+    enabled: !!diagramId,
+  })
+}
+
+export function useGrantTeamAccess(diagramId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (payload: { team_id: string; level: DiagramAccessLevel }) => {
+      const { data } = await api.post<DiagramGrant>(
+        `/diagrams/${diagramId}/access`,
+        payload,
+      )
+      return data
+    },
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ['diagrams', diagramId, 'access'] }),
+  })
+}
+
+export function useRevokeTeamAccess(diagramId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (teamId: string) => {
+      await api.delete(`/diagrams/${diagramId}/access/${teamId}`)
+    },
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ['diagrams', diagramId, 'access'] }),
   })
 }
