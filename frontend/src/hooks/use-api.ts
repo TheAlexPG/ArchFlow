@@ -10,6 +10,7 @@ import type {
   ConnectionUpdate,
   Draft,
   DraftCreate,
+  DraftDiagram,
   DraftDiff,
   DraftFromDiagram,
   Flow,
@@ -447,6 +448,46 @@ export function useCreateDraftFromDiagram() {
       qc.invalidateQueries({ queryKey: ['drafts'] })
       qc.invalidateQueries({ queryKey: ['diagrams'] })
     },
+  })
+}
+
+export function useAddDiagramToDraft() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ draftId, diagramId }: { draftId: string; diagramId: string }) => {
+      const { data } = await api.post<DraftDiagram>(`/drafts/${draftId}/diagrams/${diagramId}`)
+      return data
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['drafts'] })
+      qc.invalidateQueries({ queryKey: ['drafts', vars.draftId] })
+      qc.invalidateQueries({ queryKey: ['diagrams', vars.diagramId, 'drafts'] })
+    },
+  })
+}
+
+export function useRemoveDiagramFromDraft() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ draftId, diagramId }: { draftId: string; diagramId: string }) => {
+      await api.delete(`/drafts/${draftId}/diagrams/${diagramId}`)
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['drafts'] })
+      qc.invalidateQueries({ queryKey: ['drafts', vars.draftId] })
+      qc.invalidateQueries({ queryKey: ['diagrams', vars.diagramId, 'drafts'] })
+    },
+  })
+}
+
+export function useDraftsForDiagram(diagramId: string | undefined) {
+  return useQuery({
+    queryKey: ['diagrams', diagramId, 'drafts'],
+    queryFn: async () => {
+      const { data } = await api.get<Draft[]>(`/diagrams/${diagramId}/drafts`)
+      return data
+    },
+    enabled: !!diagramId,
   })
 }
 
