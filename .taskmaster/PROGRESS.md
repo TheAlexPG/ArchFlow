@@ -28,11 +28,11 @@
 | Model Versions & Conflict Resolution | Planned | 0/4 | — |
 | Teams, Roles & Workspaces | Planned | 0/4 | — |
 | Real-time Collaboration | Planned | 0/4 | — |
-| API Keys, Webhooks, Rate Limiting | Planned | 1/3 | — |
+| API Keys, Webhooks, Rate Limiting | Planned | 2/3 | — |
 | AI Features (beyond insights) | Planned | 0/4 | — |
 | Enterprise SSO & Compliance | Planned | 0/3 | — |
 
-**Active Phase:** API Keys & Webhooks (1/3 done)
+**Active Phase:** API Keys & Webhooks (2/3 done)
 **Phases:** ... Versions + Conflicts | ... Teams, Roles, Workspaces | ... Real-time Collaboration | >> API Keys & Webhooks | ... AI Features (extended) | ... Enterprise SSO
 
 **In Progress:** —
@@ -42,6 +42,21 @@
 ---
 
 ## Changelog
+
+### 2026-04-20 — Webhooks: signed outbound events
+**Done:**
+- Webhook model + migration\nService with HMAC-SHA256 signing, retry with backoff, auto-disable\nEvent emit wired into object/connection/diagram CRUD + draft.applied\nCRUD endpoints + test ping + event catalogue\nSettings page section with create dialog + secret-once reveal + Test button\nSession-scoped event loop in conftest fixes cross-test asyncpg teardown\n9 tests green (3 new + 6 existing)
+
+**Decisions:**
+- Emit at API layer (not service) so the API-level Pydantic response model is reused as the payload schema — ensures webhook consumers see the same JSON shape that REST clients see.\nBackground delivery uses a dedicated async_sessionmaker, not the request session, since that session closes before retry sleeps elapse.
+
+**Issues:**
+- None blocking; delivery races commit by a few ms (fire_and_forget scheduled at endpoint level, commit happens in get_db teardown). If a request rolls back after the emit schedule, a false event fires. Acceptable for MVP; can move to after-commit hooks if this ever bites.
+
+**Tasks touched:** N/A
+
+---
+
 
 ### 2026-04-20 — API Keys: Bearer auth + Settings UI
 **Done:**

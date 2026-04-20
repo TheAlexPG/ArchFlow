@@ -6,16 +6,19 @@ context:
   in_progress: []
   blocked: []
   recent_completed:
+  - id: api-keys-002
+    title: Webhooks — subscribe to model-change events
+    completed: 2026-04-20T19:58
   - id: api-keys-001
     title: API keys table + Bearer key auth scheme
     completed: 2026-04-20T19:51
   next_up: []
   stats:
     total: 22
-    done: 1
+    done: 2
     in_progress: 0
     in_review: 0
-    todo: 21
+    todo: 20
     blocked: 0
     archived: 70
   active_phase:
@@ -23,10 +26,10 @@ context:
     name: API Keys & Webhooks
     stats:
       total: 3
-      todo: 2
+      todo: 1
       in-progress: 0
       in-review: 0
-      done: 1
+      done: 2
       blocked: 0
       archived: 0
     target_date: null
@@ -1400,13 +1403,18 @@ epics:
     completed: 2026-04-20T19:51
   - id: api-keys-002
     title: Webhooks — subscribe to model-change events
-    status: todo
+    status: done
     priority: medium
     created: 2026-04-20T11:00
     notes: Spec §7.3. webhooks table (url, events[], secret). Outbound delivery with
       signing + retry. Event list per spec.
     estimate: L
     phase: api-surface
+    last_referenced: 2026-04-20T19:58
+    started: 2026-04-20T19:51
+    branch: feature/api-keys-002
+    worktree: .worktrees/api-keys-002
+    completed: 2026-04-20T19:58
   - id: api-keys-003
     title: Rate limiting via Redis
     status: todo
