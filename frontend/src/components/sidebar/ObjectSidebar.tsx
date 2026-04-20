@@ -9,11 +9,15 @@ import {
   useUpdateObject,
   type ActivityLogEntry,
 } from '../../hooks/use-api'
-import { useObjectDiagrams } from '../../hooks/use-diagrams'
+import { useDiagrams, useObjectDiagrams } from '../../hooks/use-diagrams'
 import { useCanvasStore } from '../../stores/canvas-store'
-import type { ObjectScope, ObjectStatus } from '../../types/model'
+import type { ModelObject, ObjectScope, ObjectStatus } from '../../types/model'
 import { STATUS_COLORS, TYPE_LABELS } from '../canvas/node-utils'
 import { RichTextEditor } from '../common/RichTextEditor'
+import {
+  CreateChildDiagramModal,
+  DRILLABLE_TYPES,
+} from '../drafts/CreateChildDiagramModal'
 
 export function ObjectSidebar() {
   const { selectedNodeId, sidebarOpen, sidebarTab, setSidebarTab, toggleSidebar } = useCanvasStore()
@@ -192,6 +196,11 @@ export function ObjectSidebar() {
               />
             </Field>
 
+            {/* Drill into — only for drillable types */}
+            {DRILLABLE_TYPES.has(obj.type) && (
+              <DrillIntoSection obj={obj} />
+            )}
+
             {/* Delete */}
             <button
               onClick={handleDelete}
@@ -208,6 +217,104 @@ export function ObjectSidebar() {
 
         {sidebarTab === 'history' && <HistoryTab objectId={obj.id} />}
       </div>
+    </div>
+  )
+}
+
+function DrillIntoSection({ obj }: { obj: ModelObject }) {
+  const navigate = useNavigate()
+  const { data: childDiagrams = [] } = useDiagrams(obj.id)
+  const [createModalOpen, setCreateModalOpen] = useState(false)
+
+  const levelText = obj.type === 'system' ? 'Container diagram (L2)' : 'Component diagram (L3)'
+
+  return (
+    <div>
+      <div className="text-xs text-neutral-500 mb-1">Drill into</div>
+      <div
+        style={{
+          background: '#0f0f0f',
+          border: '1px solid #262626',
+          borderRadius: 6,
+          padding: '8px 10px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 6,
+        }}
+      >
+        <div
+          style={{
+            fontSize: 10,
+            color: '#525252',
+            textTransform: 'uppercase',
+            letterSpacing: '0.05em',
+          }}
+        >
+          {levelText}
+        </div>
+        {childDiagrams.length === 0 ? (
+          <button
+            onClick={() => setCreateModalOpen(true)}
+            style={{
+              background: '#1e3a5f',
+              border: '1px solid #3b82f655',
+              borderRadius: 5,
+              color: '#93c5fd',
+              cursor: 'pointer',
+              fontSize: 12,
+              padding: '6px 10px',
+              textAlign: 'left',
+            }}
+          >
+            + Create {obj.type === 'system' ? 'container' : 'component'} diagram
+          </button>
+        ) : (
+          <>
+            {childDiagrams.map((d) => (
+              <button
+                key={d.id}
+                onClick={() => navigate(`/diagram/${d.id}`)}
+                style={{
+                  background: 'transparent',
+                  border: '1px solid #262626',
+                  borderRadius: 5,
+                  color: '#60a5fa',
+                  cursor: 'pointer',
+                  fontSize: 12,
+                  padding: '5px 8px',
+                  textAlign: 'left',
+                  textDecoration: 'none',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = '#1e3a5f')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+              >
+                {d.name}
+              </button>
+            ))}
+            <button
+              onClick={() => setCreateModalOpen(true)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#525252',
+                cursor: 'pointer',
+                fontSize: 11,
+                padding: '2px 0',
+                textAlign: 'left',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = '#a3a3a3')}
+              onMouseLeave={(e) => (e.currentTarget.style.color = '#525252')}
+            >
+              + New child diagram
+            </button>
+          </>
+        )}
+      </div>
+      <CreateChildDiagramModal
+        object={obj}
+        open={createModalOpen}
+        onClose={() => setCreateModalOpen(false)}
+      />
     </div>
   )
 }
