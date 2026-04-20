@@ -948,6 +948,23 @@ export function useCreateManualSnapshot() {
   })
 }
 
+export function useRevertVersion() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (versionId: string) => {
+      const { data } = await api.post<Version>(`/versions/${versionId}/revert`)
+      return data
+    },
+    onSuccess: () => {
+      // Revert rewrites live tables — everything observable changed.
+      qc.invalidateQueries({ queryKey: ['versions'] })
+      qc.invalidateQueries({ queryKey: ['objects'] })
+      qc.invalidateQueries({ queryKey: ['connections'] })
+      qc.invalidateQueries({ queryKey: ['diagrams'] })
+    },
+  })
+}
+
 export function useCompareVersions() {
   return useMutation({
     mutationFn: async ({ a, b }: { a: string; b: string }) => {
