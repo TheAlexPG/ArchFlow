@@ -195,15 +195,14 @@ select {
  * "ugly grey square" artifact visible inside group nodes.
  */
 .react-flow__node-group {
-  /* Reset ReactFlow's built-in 150px width + 10px padding + border + bg
-   * so only our custom GroupNode rendering is visible. Without this, the
-   * RF container shows a narrower rectangle that visually overlaps with
-   * our own dashed frame (the "ugly grey square" the user reported). */
+  /* Reset ReactFlow's built-in padding + border + bg so only our custom
+   * GroupNode rendering is visible. Do NOT override `width` with
+   * !important — NodeResizer writes inline width to this element when
+   * the user drags an edge handle; !important would block the resize. */
   background: transparent !important;
   background-color: transparent !important;
   border: none !important;
   padding: 0 !important;
-  width: auto !important;
   border-radius: 0 !important;
   font-size: inherit !important;
   color: inherit !important;

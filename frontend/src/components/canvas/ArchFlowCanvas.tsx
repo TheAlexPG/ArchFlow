@@ -187,10 +187,16 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
           zIndex: obj.type === 'group' ? 0 : 1,
         }
         // Restore persisted node size from the diagram_objects row so the
-        // resized dimensions survive page reloads.
+        // resized dimensions survive page reloads. For groups that never
+        // got resized, seed a sensible default so NodeResizer has something
+        // to grow from — otherwise ReactFlow uses its 150px type default
+        // which fights with our min-size constraints.
         if (dObj.width != null && dObj.height != null) {
           node.width = dObj.width
           node.height = dObj.height
+        } else if (obj.type === 'group') {
+          node.width = 320
+          node.height = 220
         }
         return node
       })
