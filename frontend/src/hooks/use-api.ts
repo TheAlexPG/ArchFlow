@@ -1,6 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
 import type {
+  ApiKey,
+  ApiKeyCreate,
+  ApiKeyWithSecret,
   Comment,
   CommentCreate,
   CommentTargetType,
@@ -564,5 +567,38 @@ export function useDiscardDraft() {
       qc.invalidateQueries({ queryKey: ['drafts'] })
       qc.invalidateQueries({ queryKey: ['diagrams'] })
     },
+  })
+}
+
+// ─── API keys ─────────────────────────────────────────────
+
+export function useApiKeys() {
+  return useQuery({
+    queryKey: ['api-keys'],
+    queryFn: async () => {
+      const { data } = await api.get<ApiKey[]>('/api-keys')
+      return data
+    },
+  })
+}
+
+export function useCreateApiKey() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (payload: ApiKeyCreate) => {
+      const { data } = await api.post<ApiKeyWithSecret>('/api-keys', payload)
+      return data
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['api-keys'] }),
+  })
+}
+
+export function useRevokeApiKey() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await api.delete(`/api-keys/${id}`)
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['api-keys'] }),
   })
 }

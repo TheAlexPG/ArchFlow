@@ -260,3 +260,26 @@ export interface DraftDiff {
   total_summary: DraftDiffSummary
   per_diagram: PerDiagramDiffEntry[]
 }
+
+export type ApiKeyPermission = 'read' | 'write' | 'admin'
+
+export interface ApiKey {
+  id: string
+  name: string
+  key_prefix: string
+  permissions: ApiKeyPermission[]
+  expires_at: string | null
+  last_used_at: string | null
+  revoked_at: string | null
+  created_at: string
+}
+
+export interface ApiKeyWithSecret extends ApiKey {
+  secret: string
+}
+
+export interface ApiKeyCreate {
+  name: string
+  permissions: ApiKeyPermission[]
+  expires_in_days?: number | null
+}
