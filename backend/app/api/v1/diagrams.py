@@ -12,7 +12,7 @@ from app.schemas.diagram import (
     DiagramResponse,
     DiagramUpdate,
 )
-from app.services import diagram_service
+from app.services import diagram_service, draft_service
 
 router = APIRouter(prefix="/diagrams", tags=["diagrams"])
 
@@ -124,3 +124,17 @@ async def remove_object_from_diagram(
         raise HTTPException(
             status_code=404, detail="Object not found in diagram"
         )
+
+
+# ─── Draft membership ─────────────────────────────────────────
+
+@router.get("/{diagram_id}/drafts")
+async def get_diagram_drafts(
+    diagram_id: uuid.UUID, db: AsyncSession = Depends(get_db)
+):
+    """Return all OPEN drafts that include this diagram as a source.
+
+    Each entry has draft_id, draft_name, source_diagram_id, and
+    forked_diagram_id so the frontend can navigate directly to the fork.
+    """
+    return await draft_service.get_drafts_for_diagram(db, diagram_id)

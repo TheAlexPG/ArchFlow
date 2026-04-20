@@ -57,7 +57,10 @@ _CONNECTION_EDITABLE_FIELDS = (
 async def list_drafts(db: AsyncSession) -> list[Draft]:
     result = await db.execute(
         select(Draft)
-        .options(selectinload(Draft.diagrams))
+        .options(
+            selectinload(Draft.diagrams).selectinload(DraftDiagram.source_diagram),
+            selectinload(Draft.diagrams).selectinload(DraftDiagram.forked_diagram),
+        )
         .order_by(Draft.created_at.desc())
     )
     return list(result.scalars().all())
@@ -67,7 +70,10 @@ async def get_draft(db: AsyncSession, draft_id: uuid.UUID) -> Draft | None:
     result = await db.execute(
         select(Draft)
         .where(Draft.id == draft_id)
-        .options(selectinload(Draft.diagrams))
+        .options(
+            selectinload(Draft.diagrams).selectinload(DraftDiagram.source_diagram),
+            selectinload(Draft.diagrams).selectinload(DraftDiagram.forked_diagram),
+        )
     )
     return result.scalar_one_or_none()
 
@@ -82,16 +88,19 @@ async def create_draft(
     )
     db.add(draft)
     await db.flush()
-    await db.refresh(draft)
-    return draft
+    # Re-query with eager-loaded relationships (new draft has no DraftDiagrams yet).
+    loaded = await get_draft(db, draft.id)
+    return loaded  # type: ignore[return-value]
 
 
 async def update_draft(db: AsyncSession, draft: Draft, data: DraftUpdate) -> Draft:
     for field, value in data.model_dump(exclude_unset=True).items():
         setattr(draft, field, value)
     await db.flush()
-    await db.refresh(draft)
-    return draft
+    # Expire so get_draft re-fetches all relationships cleanly.
+    db.expire(draft)
+    loaded = await get_draft(db, draft.id)
+    return loaded  # type: ignore[return-value]
 
 
 async def delete_draft(db: AsyncSession, draft: Draft) -> None:
@@ -829,8 +838,16 @@ async def fork_existing_diagram(
     db.add(dd)
     await db.flush()
 
-    await db.refresh(draft, ["diagrams"])
-    return draft, dd
+    # Expire the in-memory Draft so selectinload in get_draft re-fetches the
+    # now-populated diagrams collection (the identity map would otherwise
+    # return the stale empty list).
+    await db.refresh(draft)
+    db.expire(draft, ["diagrams"])
+
+    # Re-query so that DraftDiagram sub-relationships (source_diagram,
+    # forked_diagram) are eagerly loaded before returning.
+    loaded_draft = await get_draft(db, draft.id)
+    return loaded_draft, dd
 
 
 async def get_drafts_for_diagram(

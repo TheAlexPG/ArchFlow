@@ -23,14 +23,25 @@ class DraftFromDiagram(BaseModel):
     description: str | None = None
 
 
+class DraftDiagramResponse(BaseModel):
+    id: uuid.UUID
+    draft_id: uuid.UUID
+    source_diagram_id: uuid.UUID
+    forked_diagram_id: uuid.UUID
+    source_diagram_name: str | None = None
+    forked_diagram_name: str | None = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class DraftResponse(BaseModel):
     id: uuid.UUID
     name: str
     description: str | None = None
     status: DraftStatus
     author_id: uuid.UUID | None = None
-    source_diagram_id: uuid.UUID | None = None
-    forked_diagram_id: uuid.UUID | None = None
+    diagrams: list[DraftDiagramResponse] = []
     created_at: datetime
     updated_at: datetime
 
@@ -52,17 +63,22 @@ class DraftDiffSummary(BaseModel):
     resized_objects: int
 
 
-class DraftDiffResponse(BaseModel):
-    summary: DraftDiffSummary
-    # Per-side status maps — the key is the id of the row as it lives on
-    # that side (live id on source, forked id on fork).
-    source_objects: dict[str, str]  # id -> "unchanged" | "modified" | "deleted"
-    fork_objects: dict[str, str]    # id -> "unchanged" | "modified" | "new"
+class PerDiagramDiff(BaseModel):
+    source_diagram_id: str
+    forked_diagram_id: str
+    source_diagram_name: str | None = None
+    forked_diagram_name: str | None = None
+    # Per-side status maps — key is the id of the row as it lives on that side.
+    source_objects: dict[str, str]
+    fork_objects: dict[str, str]
     source_connections: dict[str, str]
     fork_connections: dict[str, str]
-    # Which objects on the fork have been moved/resized vs. source. Keyed
-    # by forked ModelObject id.
     moved_on_fork: list[str]
     resized_on_fork: list[str]
-    # Names keyed by id — handy for the summary strip.
     object_names: dict[str, str]
+    summary: DraftDiffSummary
+
+
+class DraftDiffResponse(BaseModel):
+    total_summary: DraftDiffSummary
+    per_diagram: list[PerDiagramDiff]
