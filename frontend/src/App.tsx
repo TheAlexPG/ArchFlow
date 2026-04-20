@@ -9,6 +9,7 @@ import { DraftDetailPage } from './pages/DraftDetailPage'
 import { DraftsPage } from './pages/DraftsPage'
 import { ObjectsPage } from './pages/ObjectsPage'
 import { OverviewPage } from './pages/OverviewPage'
+import { SettingsPage } from './pages/SettingsPage'
 import { useAuthStore } from './stores/auth-store'
 import './index.css'
 
@@ -99,6 +100,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <ActivityPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/settings"
+            element={
+              <ProtectedRoute>
+                <SettingsPage />
               </ProtectedRoute>
             }
           />

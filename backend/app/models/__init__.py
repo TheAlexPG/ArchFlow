@@ -1,4 +1,5 @@
 from app.models.activity_log import ActivityAction, ActivityLog, ActivityTargetType
+from app.models.api_key import ApiKey
 from app.models.base import Base
 from app.models.comment import Comment, CommentTargetType, CommentType
 from app.models.connection import Connection, ConnectionDirection
@@ -12,6 +13,7 @@ __all__ = [
     "ActivityAction",
     "ActivityLog",
     "ActivityTargetType",
+    "ApiKey",
     "Base",
     "Comment",
     "CommentTargetType",
