@@ -115,6 +115,47 @@ async def diagram_socket(
             pass
 
 
+@router.websocket("/me")
+async def me_socket(
+    websocket: WebSocket,
+    token: str = Query(..., description="Access JWT"),
+):
+    """Per-user event stream — notifications land here.
+
+    Kept separate from the workspace socket so the client can stay
+    subscribed when they switch workspaces without dropping incoming
+    notifications.
+    """
+    user = await _authenticate(token)
+    if user is None:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    await websocket.accept()
+    room_id = f"user:{user.id}"
+    member = await manager.join(
+        room_id=room_id,
+        websocket=websocket,
+        user_id=user.id,
+        user_name=user.name,
+    )
+    try:
+        while True:
+            raw = await websocket.receive_text()
+            try:
+                msg = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            if msg.get("type") == "ping":
+                await websocket.send_text(json.dumps({"type": "pong"}))
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        logger.exception("user ws crashed")
+    finally:
+        manager.leave(room_id, member)
+
+
 @router.websocket("/workspace/{workspace_id}")
 async def workspace_socket(
     websocket: WebSocket,

@@ -17,8 +17,16 @@ export interface CursorState {
   updatedAt: number
 }
 
+export interface SelectionState {
+  ids: string[]
+  user_name: string
+}
+
 export interface DiagramSocketResult {
   cursors: Record<string, CursorState>
+  /** user_id → node ids that user has selected. Cleared on presence.leave
+   *  or when the user broadcasts an empty selection. */
+  selections: Record<string, SelectionState>
   presence: PresenceUser[]
   sendCursor: (x: number, y: number) => void
   sendSelection: (ids: string[]) => void
@@ -31,12 +39,28 @@ function wsUrl(path: string, token: string): string {
   return `${proto}//${location.host}${path}?token=${encodeURIComponent(token)}`
 }
 
+/** Merge or insert an entity into a (possibly undefined) id-keyed list.
+ *  Used by useWorkspaceSocket to patch TanStack cache on object/connection/
+ *  diagram events without hitting the network. */
+function mergeEntity<T extends { id: string }>(
+  prev: T[] | undefined,
+  next: T,
+): T[] {
+  if (!prev) return [next]
+  const idx = prev.findIndex((row) => row.id === next.id)
+  if (idx === -1) return [...prev, next]
+  const merged = [...prev]
+  merged[idx] = { ...prev[idx], ...next }
+  return merged
+}
+
 // ── useDiagramSocket ──────────────────────────────────────────────────────────
 
 export function useDiagramSocket(diagramId: string | null): DiagramSocketResult {
   const token = useAuthStore((s) => s.accessToken)
 
   const [cursors, setCursors] = useState<Record<string, CursorState>>({})
+  const [selections, setSelections] = useState<Record<string, SelectionState>>({})
   const [presence, setPresence] = useState<PresenceUser[]>([])
 
   const wsRef = useRef<WebSocket | null>(null)
@@ -106,7 +130,27 @@ export function useDiagramSocket(diagramId: string | null): DiagramSocketResult 
             delete next[user.user_id]
             return next
           })
+          setSelections((prev) => {
+            const next = { ...prev }
+            delete next[user.user_id]
+            return next
+          })
           clearEvictTimer(user.user_id)
+        } else if (type === 'selection') {
+          const userId = msg.user_id as string
+          const ids = (msg.ids as string[]) ?? []
+          setSelections((prev) => {
+            if (ids.length === 0) {
+              if (!(userId in prev)) return prev
+              const next = { ...prev }
+              delete next[userId]
+              return next
+            }
+            return {
+              ...prev,
+              [userId]: { ids, user_name: msg.user_name as string },
+            }
+          })
         } else if (type === 'cursor') {
           const userId = msg.user_id as string
           setCursors((prev) => ({
@@ -158,6 +202,7 @@ export function useDiagramSocket(diagramId: string | null): DiagramSocketResult 
       wsRef.current?.close()
       wsRef.current = null
       setCursors({})
+      setSelections({})
       setPresence([])
     }
     // reconnect on diagramId or token change
@@ -180,7 +225,73 @@ export function useDiagramSocket(diagramId: string | null): DiagramSocketResult 
     ws.send(JSON.stringify({ type: 'selection', ids }))
   }, [])
 
-  return { cursors, presence, sendCursor, sendSelection }
+  return { cursors, selections, presence, sendCursor, sendSelection }
+}
+
+// ── useUserSocket ─────────────────────────────────────────────────────────────
+
+/** Opens the per-user notification stream — notifications.new events
+ *  invalidate the notifications query so the bell badge updates live. */
+export function useUserSocket(): void {
+  const token = useAuthStore((s) => s.accessToken)
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
+  const queryClient = useQueryClient()
+
+  const wsRef = useRef<WebSocket | null>(null)
+  const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    if (!isAuthenticated || !token) return
+
+    let backoff = 500
+    let destroyed = false
+
+    function connect() {
+      if (destroyed) return
+      const ws = new WebSocket(wsUrl('/api/v1/ws/me', token!))
+      wsRef.current = ws
+
+      ws.onmessage = (ev) => {
+        let msg: Record<string, unknown>
+        try {
+          msg = JSON.parse(ev.data as string) as Record<string, unknown>
+        } catch {
+          return
+        }
+        if (msg.type === 'notification.new') {
+          void queryClient.invalidateQueries({ queryKey: ['notifications'] })
+        }
+      }
+
+      ws.onopen = () => {
+        backoff = 500
+      }
+
+      ws.onclose = () => {
+        if (destroyed) return
+        reconnectTimer.current = setTimeout(() => {
+          backoff = Math.min(backoff * 2, 10000)
+          connect()
+        }, backoff)
+      }
+
+      ws.onerror = () => {
+        ws.close()
+      }
+    }
+
+    connect()
+
+    return () => {
+      destroyed = true
+      if (reconnectTimer.current) {
+        clearTimeout(reconnectTimer.current)
+        reconnectTimer.current = null
+      }
+      wsRef.current?.close()
+      wsRef.current = null
+    }
+  }, [isAuthenticated, token, queryClient])
 }
 
 // ── useWorkspaceSocket ────────────────────────────────────────────────────────
@@ -217,12 +328,82 @@ export function useWorkspaceSocket(): void {
         const type = msg.type as string | undefined
         if (!type) return
 
-        if (type.startsWith('object.')) {
-          void queryClient.invalidateQueries({ queryKey: ['objects'] })
-        } else if (type.startsWith('connection.')) {
-          void queryClient.invalidateQueries({ queryKey: ['connections'] })
-        } else if (type.startsWith('diagram.')) {
-          void queryClient.invalidateQueries({ queryKey: ['diagrams'] })
+        // Fast path: the backend ships the full entity payload inside the
+        // event so we can merge it straight into TanStack cache — no
+        // refetch round-trip, other clients see changes in ~one tick.
+        // Fallback to invalidate when the payload isn't available
+        // (deletes, or events that pre-date this optimization).
+        if (type === 'object.created' || type === 'object.updated') {
+          const obj = msg.object as { id: string } | undefined
+          if (obj) {
+            queryClient.setQueriesData<Array<{ id: string }> | undefined>(
+              { queryKey: ['objects'] },
+              (prev) => mergeEntity(prev, obj),
+            )
+            queryClient.setQueryData<{ id: string } | undefined>(
+              ['objects', obj.id],
+              obj as never,
+            )
+          } else {
+            void queryClient.invalidateQueries({ queryKey: ['objects'] })
+          }
+        } else if (type === 'object.deleted') {
+          const id = msg.id as string | undefined
+          if (id) {
+            queryClient.setQueriesData<Array<{ id: string }> | undefined>(
+              { queryKey: ['objects'] },
+              (prev) => prev?.filter((o) => o.id !== id),
+            )
+            queryClient.removeQueries({ queryKey: ['objects', id] })
+          } else {
+            void queryClient.invalidateQueries({ queryKey: ['objects'] })
+          }
+        } else if (type === 'connection.created' || type === 'connection.updated') {
+          const conn = msg.connection as { id: string } | undefined
+          if (conn) {
+            queryClient.setQueriesData<Array<{ id: string }> | undefined>(
+              { queryKey: ['connections'] },
+              (prev) => mergeEntity(prev, conn),
+            )
+          } else {
+            void queryClient.invalidateQueries({ queryKey: ['connections'] })
+          }
+        } else if (type === 'connection.deleted') {
+          const id = msg.id as string | undefined
+          if (id) {
+            queryClient.setQueriesData<Array<{ id: string }> | undefined>(
+              { queryKey: ['connections'] },
+              (prev) => prev?.filter((c) => c.id !== id),
+            )
+          } else {
+            void queryClient.invalidateQueries({ queryKey: ['connections'] })
+          }
+        } else if (type === 'diagram.created' || type === 'diagram.updated') {
+          const diagram = msg.diagram as { id: string } | undefined
+          if (diagram) {
+            queryClient.setQueriesData<Array<{ id: string }> | undefined>(
+              { queryKey: ['diagrams'] },
+              (prev) => mergeEntity(prev, diagram),
+            )
+            queryClient.setQueryData(['diagrams', diagram.id], diagram)
+          } else {
+            void queryClient.invalidateQueries({ queryKey: ['diagrams'] })
+          }
+        } else if (type === 'diagram.deleted') {
+          const id = msg.id as string | undefined
+          if (id) {
+            queryClient.setQueriesData<Array<{ id: string }> | undefined>(
+              { queryKey: ['diagrams'] },
+              (prev) => prev?.filter((d) => d.id !== id),
+            )
+            queryClient.removeQueries({ queryKey: ['diagrams', id] })
+          } else {
+            void queryClient.invalidateQueries({ queryKey: ['diagrams'] })
+          }
+        } else if (type === 'notification.new') {
+          // Let the bell's own query refetch — payload has only the
+          // unread_count delta, not the full row shape.
+          void queryClient.invalidateQueries({ queryKey: ['notifications'] })
         }
       }
 

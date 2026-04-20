@@ -8,6 +8,7 @@ import type {
   Conflict,
   DiagramAccessLevel,
   DiagramGrant,
+  Notification,
   Team,
   TeamMember,
   Version,
@@ -1002,5 +1003,54 @@ export function useDraftConflicts(draftId: string | null) {
       return data
     },
     enabled: !!draftId,
+  })
+}
+
+// ─── Notifications ──────────────────────────────────────
+
+export function useNotifications() {
+  return useQuery({
+    queryKey: ['notifications'],
+    queryFn: async () => {
+      const { data } = await api.get<Notification[]>('/notifications')
+      return data
+    },
+    staleTime: 10_000,
+  })
+}
+
+export function useUnreadNotificationCount() {
+  return useQuery({
+    queryKey: ['notifications', 'unread-count'],
+    queryFn: async () => {
+      const { data } = await api.get<{ count: number }>('/notifications/unread-count')
+      return data.count
+    },
+    refetchInterval: 60_000,
+  })
+}
+
+export function useMarkNotificationRead() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await api.post(`/notifications/${id}/read`)
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['notifications'] })
+    },
+  })
+}
+
+export function useMarkAllNotificationsRead() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async () => {
+      const { data } = await api.post<{ updated: number }>('/notifications/read-all')
+      return data
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['notifications'] })
+    },
   })
 }

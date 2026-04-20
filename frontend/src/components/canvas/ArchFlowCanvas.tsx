@@ -40,7 +40,8 @@ import { GroupNode } from './GroupNode'
 import { collectLegend, extractFilterValue, overlayStyleFor, type FilterDim } from './overlay-utils'
 import { detectParentGroup, findSpatialGroupMembers, nodeToRect } from './group-utils'
 import { useDiagramSocket } from '../../hooks/use-realtime'
-import { CursorsOverlay } from './CursorsOverlay'
+import { CursorsOverlay, RemoteSelectionsOverlay } from './CursorsOverlay'
+import { PresenceRoster } from './PresenceRoster'
 
 const nodeTypes: NodeTypes = {
   c4: C4Node as unknown as NodeTypes['c4'],
@@ -139,7 +140,9 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
   const { setNodes, setEdges, getNodes, getEdges, screenToFlowPosition } = useReactFlow()
 
   // Realtime collaboration: cursor sharing with other users in the same diagram.
-  const { cursors, sendCursor } = useDiagramSocket(diagramId ?? null)
+  const { cursors, selections, presence, sendCursor, sendSelection } = useDiagramSocket(
+    diagramId ?? null,
+  )
 
   const onMouseMove = useCallback(
     (event: React.MouseEvent) => {
@@ -533,8 +536,10 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
       if (sel.length > 0) selectNode(sel[0].id)
       else if (selEdges.length > 0) selectEdge(selEdges[0].id)
       else selectNode(null)
+      // Broadcast to other users so they see who's looking at what.
+      sendSelection(sel.map((n) => n.id))
     },
-    [selectNode, selectEdge],
+    [selectNode, selectEdge, sendSelection],
   )
 
   // Drop a canvas comment pin where the user just clicked, when a compose
@@ -707,6 +712,8 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
       />
       {diagramId && <CanvasComments diagramId={diagramId} />}
       <CursorsOverlay cursors={cursors} />
+      <RemoteSelectionsOverlay selections={selections} />
+      <PresenceRoster users={presence} />
     </ReactFlow>
     </>
   )
