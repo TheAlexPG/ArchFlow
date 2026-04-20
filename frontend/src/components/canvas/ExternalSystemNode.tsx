@@ -18,10 +18,10 @@ export function ExternalSystemNode({ data, selected }: NodeProps) {
         border: `2px dashed ${selected ? '#3b82f6' : '#6b7280'}`,
       }}
     >
-      <Handle type="source" position={Position.Top} id="top" className="!bg-neutral-500 !w-2 !h-2" />
-      <Handle type="source" position={Position.Bottom} id="bottom" className="!bg-neutral-500 !w-2 !h-2" />
-      <Handle type="source" position={Position.Left} id="left" className="!bg-neutral-500 !w-2 !h-2" />
-      <Handle type="source" position={Position.Right} id="right" className="!bg-neutral-500 !w-2 !h-2" />
+      <Handle type="source" position={Position.Top} id="top" className="archflow-handle !bg-neutral-500 !w-2 !h-2" />
+      <Handle type="source" position={Position.Bottom} id="bottom" className="archflow-handle !bg-neutral-500 !w-2 !h-2" />
+      <Handle type="source" position={Position.Left} id="left" className="archflow-handle !bg-neutral-500 !w-2 !h-2" />
+      <Handle type="source" position={Position.Right} id="right" className="archflow-handle !bg-neutral-500 !w-2 !h-2" />
 
       {/* Status */}
       <div

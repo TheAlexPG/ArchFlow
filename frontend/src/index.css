@@ -165,3 +165,25 @@ select {
 .react-flow {
   transform: translate3d(0, 0, 0);
 }
+
+/*
+ * Connection handles — hidden by default, fade in on node hover or selection.
+ * pointer-events: none when hidden so the invisible dots don't block clicks
+ * on the canvas. Restored to auto when visible so drag-to-connect still works.
+ *
+ * The `.react-flow__node:hover` selector is safe to use here: React Flow does
+ * NOT trigger re-renders on CSS :hover, so there is no risk of a glitch while
+ * dragging a new edge mid-gesture (the connecting overlay steals pointer events
+ * from the source node anyway).
+ */
+.archflow-handle {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+.react-flow__node:hover .archflow-handle,
+.react-flow__node.selected .archflow-handle {
+  opacity: 1;
+  pointer-events: auto;
+}
