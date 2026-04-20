@@ -11,7 +11,7 @@ import { EdgeSidebar } from '../components/sidebar/EdgeSidebar'
 import { ObjectSidebar } from '../components/sidebar/ObjectSidebar'
 import { ObjectTree } from '../components/tree/ObjectTree'
 import { SearchModal } from '../components/nav/SearchModal'
-import { useDiagram } from '../hooks/use-diagrams'
+import { useDiagram, useDiagramBreadcrumbs } from '../hooks/use-diagrams'
 import {
   useApplyDraft,
   useCreateDraftFromDiagram,
@@ -25,6 +25,7 @@ import { useCanvasStore } from '../stores/canvas-store'
 export function DiagramPage() {
   const { diagramId } = useParams<{ diagramId: string }>()
   const { data: diagram } = useDiagram(diagramId)
+  const breadcrumbs = useDiagramBreadcrumbs(diagramId)
   const navigate = useNavigate()
   const { logout } = useAuthStore()
   const { selectedEdgeId, treeOpen, toggleTree } = useCanvasStore()
@@ -119,7 +120,7 @@ export function DiagramPage() {
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           padding: '8px 16px', borderBottom: '1px solid #262626', background: '#111',
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <button
               onClick={() => navigate('/')}
               style={{
@@ -128,22 +129,42 @@ export function DiagramPage() {
               }}
               title="Home"
             >
-              ⌂
+              &#8962;
             </button>
-            <span style={{ color: '#333' }}>›</span>
-            <button
-              onClick={() => navigate('/')}
-              style={{
-                background: 'none', border: 'none', color: '#a3a3a3', cursor: 'pointer',
-                fontSize: 13, padding: '2px 6px',
-              }}
-            >
-              Diagrams
-            </button>
-            <span style={{ color: '#333' }}>›</span>
-            <span style={{ fontSize: 13, fontWeight: 500 }}>
-              {diagram?.name || 'Loading...'}
-            </span>
+            {breadcrumbs.length <= 1 ? (
+              // No parent chain — simple "Home › <name>"
+              <>
+                <span style={{ color: '#333' }}>›</span>
+                <span style={{ fontSize: 13, fontWeight: 500 }}>
+                  {diagram?.name || 'Loading...'}
+                </span>
+              </>
+            ) : (
+              // Full C4 parent chain — all ancestors are clickable, current is plain text
+              breadcrumbs.map((crumb, idx) => {
+                const isLast = idx === breadcrumbs.length - 1
+                return (
+                  <span key={crumb.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ color: '#333' }}>›</span>
+                    {isLast ? (
+                      <span style={{ fontSize: 13, fontWeight: 500 }}>
+                        {crumb.name}
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => navigate(`/diagram/${crumb.id}`)}
+                        style={{
+                          background: 'none', border: 'none', color: '#a3a3a3', cursor: 'pointer',
+                          fontSize: 13, padding: '2px 6px',
+                        }}
+                      >
+                        {crumb.name}
+                      </button>
+                    )}
+                  </span>
+                )
+              })
+            )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <button
