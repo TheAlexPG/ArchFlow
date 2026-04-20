@@ -91,6 +91,11 @@ export function C4Node({ data, selected }: NodeProps) {
         boxSizing: 'border-box',
       }}
       onDoubleClick={handleDoubleClick}
+      title={
+        canHaveChildren && childDiagrams.length >= 1
+          ? `Double-click to open ${childDiagrams[0].name}`
+          : undefined
+      }
     >
       {/* Always rendered so DOM is stable on select/deselect — controls are
           hidden via CSS when the node isn't selected (see index.css). */}
