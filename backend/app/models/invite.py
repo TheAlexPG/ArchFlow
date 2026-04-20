@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String
+from sqlalchemy import ARRAY, DateTime, Enum, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -37,6 +37,10 @@ class WorkspaceInvite(Base, UUIDMixin, TimestampMixin):
     )
     revoked_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
+    )
+    # Teams the user will be added to automatically on acceptance. Empty = none.
+    team_ids: Mapped[list[uuid.UUID]] = mapped_column(
+        ARRAY(UUID(as_uuid=True)), default=list
     )
 
     invited_by = relationship("User", foreign_keys=[invited_by_user_id])

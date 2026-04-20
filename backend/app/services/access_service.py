@@ -1,24 +1,22 @@
-"""Per-diagram access control via teams.
+"""Per-diagram access control via teams or direct user grants.
 
-Visibility rule (one of these must be true):
-- Caller is workspace admin or owner → can see everything.
-- The diagram has NO grants attached at all → fall back to workspace-wide
-  visibility (every workspace member sees it).
-- The diagram has at least one grant, and the caller is a member of one of
-  those teams.
+Visibility rule (one must be true):
+- Caller is workspace admin or owner → sees everything.
+- Diagram has NO grants → workspace-wide visibility.
+- Diagram has at least one grant, AND the caller is granted directly OR
+  is a member of a granted team.
 
-Mutation (create/update/delete) requires `write` or `admin` grant, OR the
-caller being a workspace admin/owner. Workspace editors without explicit team
-access to a restricted diagram can't mutate it.
+Mutation (create/update/delete) requires `write` or `admin` grant (direct or
+via team), OR the caller being a workspace admin/owner.
 """
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import has_role
 from app.models.diagram import Diagram
-from app.models.team import AccessLevel, DiagramAccess, TeamMember, Team
+from app.models.team import AccessLevel, DiagramAccess, TeamMember
 from app.models.workspace import Role
 
 
@@ -73,6 +71,48 @@ async def revoke_team_access(
     return True
 
 
+async def grant_user_access(
+    db: AsyncSession,
+    diagram_id: uuid.UUID,
+    user_id: uuid.UUID,
+    level: AccessLevel,
+) -> DiagramAccess:
+    existing = await db.execute(
+        select(DiagramAccess).where(
+            DiagramAccess.diagram_id == diagram_id,
+            DiagramAccess.user_id == user_id,
+        )
+    )
+    row = existing.scalar_one_or_none()
+    if row is not None:
+        row.access_level = level
+    else:
+        row = DiagramAccess(
+            diagram_id=diagram_id, user_id=user_id, access_level=level
+        )
+        db.add(row)
+    await db.commit()
+    await db.refresh(row)
+    return row
+
+
+async def revoke_user_access(
+    db: AsyncSession, diagram_id: uuid.UUID, user_id: uuid.UUID
+) -> bool:
+    result = await db.execute(
+        select(DiagramAccess).where(
+            DiagramAccess.diagram_id == diagram_id,
+            DiagramAccess.user_id == user_id,
+        )
+    )
+    row = result.scalar_one_or_none()
+    if row is None:
+        return False
+    await db.delete(row)
+    await db.commit()
+    return True
+
+
 async def can_read_diagram(
     db: AsyncSession, user_id: uuid.UUID, diagram: Diagram, role: Role
 ) -> bool:
@@ -80,10 +120,16 @@ async def can_read_diagram(
         return True
     grants = await list_diagram_grants(db, diagram.id)
     if not grants:
-        return True  # no restriction yet — workspace-wide visibility
+        return True  # no restriction → workspace-wide visibility
 
-    # Caller must be in at least one granted team.
-    team_ids = {g.team_id for g in grants}
+    # Direct user grant?
+    if any(g.user_id == user_id for g in grants):
+        return True
+
+    # Via a team?
+    team_ids = {g.team_id for g in grants if g.team_id is not None}
+    if not team_ids:
+        return False
     result = await db.execute(
         select(TeamMember).where(
             TeamMember.user_id == user_id, TeamMember.team_id.in_(team_ids)
@@ -102,16 +148,23 @@ async def can_write_diagram(
     grants = await list_diagram_grants(db, diagram.id)
     if not grants:
         return True
-    # Need write or admin on a team we belong to.
+
+    write_levels = [AccessLevel.WRITE.value, AccessLevel.ADMIN.value]
+
+    # Direct write grant?
+    if any(
+        g.user_id == user_id and g.access_level.value in write_levels for g in grants
+    ):
+        return True
+
+    # Write via a team we're in?
     result = await db.execute(
-        select(DiagramAccess, TeamMember)
+        select(DiagramAccess)
         .join(TeamMember, TeamMember.team_id == DiagramAccess.team_id)
         .where(
             DiagramAccess.diagram_id == diagram.id,
             TeamMember.user_id == user_id,
-            DiagramAccess.access_level.in_(
-                [AccessLevel.WRITE.value, AccessLevel.ADMIN.value]
-            ),
+            DiagramAccess.access_level.in_(write_levels),
         )
     )
     return result.first() is not None
@@ -123,16 +176,14 @@ async def filter_visible_diagram_ids(
     workspace_id: uuid.UUID,
     role: Role,
 ) -> set[uuid.UUID] | None:
-    """Return the set of diagram ids in `workspace_id` that `user_id` can read.
+    """Diagram ids in `workspace_id` that `user_id` can read.
 
-    Returns `None` to signal "no restriction at all" (admin+ in the whole
-    workspace); the caller should treat `None` as "all diagrams visible".
+    Returns `None` to signal "no restriction at all" (admin+); the caller
+    should treat that as "all diagrams visible".
     """
     if has_role(role, Role.ADMIN):
         return None
 
-    # Find every diagram that either (a) has no grants or (b) has a grant
-    # shared with one of the user's teams.
     all_diagrams = await db.execute(
         select(Diagram.id).where(Diagram.workspace_id == workspace_id)
     )
@@ -149,13 +200,17 @@ async def filter_visible_diagram_ids(
     if not restricted_ids:
         return open_ids
 
-    accessible_restricted = await db.execute(
+    # Diagrams where the caller has direct or team grant.
+    accessible = await db.execute(
         select(DiagramAccess.diagram_id).distinct()
-        .join(TeamMember, TeamMember.team_id == DiagramAccess.team_id)
+        .outerjoin(TeamMember, TeamMember.team_id == DiagramAccess.team_id)
         .where(
             DiagramAccess.diagram_id.in_(restricted_ids),
-            TeamMember.user_id == user_id,
+            or_(
+                DiagramAccess.user_id == user_id,
+                TeamMember.user_id == user_id,
+            ),
         )
     )
-    accessible_ids = {d for (d,) in accessible_restricted.all()}
+    accessible_ids = {d for (d,) in accessible.all()}
     return open_ids | accessible_ids

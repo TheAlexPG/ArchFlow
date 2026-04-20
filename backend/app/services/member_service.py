@@ -78,19 +78,58 @@ async def remove_member(
     await db.commit()
 
 
+async def _add_user_to_teams(
+    db: AsyncSession,
+    workspace_id: uuid.UUID,
+    user_id: uuid.UUID,
+    team_ids: list[uuid.UUID],
+) -> None:
+    """Add a user to each of `team_ids`, skipping teams that don't belong
+    to `workspace_id` or where the user is already a member.
+
+    Silently skipping rather than raising keeps the invite flow forgiving:
+    if a team was deleted between invite creation and acceptance, we don't
+    want the whole accept step to fail.
+    """
+    if not team_ids:
+        return
+    from app.models.team import Team, TeamMember
+
+    valid = await db.execute(
+        select(Team.id).where(
+            Team.id.in_(team_ids), Team.workspace_id == workspace_id
+        )
+    )
+    valid_ids = {tid for (tid,) in valid.all()}
+
+    already = await db.execute(
+        select(TeamMember.team_id).where(
+            TeamMember.user_id == user_id, TeamMember.team_id.in_(valid_ids)
+        )
+    )
+    already_ids = {tid for (tid,) in already.all()}
+
+    for tid in valid_ids - already_ids:
+        db.add(TeamMember(team_id=tid, user_id=user_id))
+    await db.commit()
+
+
 async def invite_user(
     db: AsyncSession,
     workspace_id: uuid.UUID,
     email: str,
     role: Role,
     invited_by_user_id: uuid.UUID | None,
+    team_ids: list[uuid.UUID] | None = None,
 ) -> tuple[WorkspaceInvite | None, WorkspaceMember | None]:
-    """If the email is already a registered user, add them as a member
-    immediately. Otherwise persist a pending invite with a unique token —
-    the user picks up the invite after they register.
+    """If the email is already a registered user, add them as a member + to
+    `team_ids` immediately. Otherwise persist a pending invite carrying the
+    team_ids, and apply them on acceptance.
 
     Returns either (invite, None) or (None, member).
     """
+    team_ids = team_ids or []
+
     user_q = await db.execute(select(User).where(User.email == email))
     existing_user = user_q.scalar_one_or_none()
     if existing_user is not None:
@@ -108,6 +147,7 @@ async def invite_user(
         db.add(member)
         await db.commit()
         await db.refresh(member)
+        await _add_user_to_teams(db, workspace_id, existing_user.id, team_ids)
         return None, member
 
     invite = WorkspaceInvite(
@@ -116,6 +156,7 @@ async def invite_user(
         role=role,
         token=secrets.token_urlsafe(32),
         invited_by_user_id=invited_by_user_id,
+        team_ids=team_ids,
     )
     db.add(invite)
     await db.commit()
@@ -143,6 +184,7 @@ async def accept_invite(
     db.add(member)
     await db.commit()
     await db.refresh(member)
+    await _add_user_to_teams(db, invite.workspace_id, user.id, list(invite.team_ids))
     return member
 
 

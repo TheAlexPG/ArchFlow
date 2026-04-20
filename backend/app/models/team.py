@@ -56,13 +56,18 @@ class TeamMember(Base, UUIDMixin, TimestampMixin):
 
 
 class DiagramAccess(Base, UUIDMixin, TimestampMixin):
-    """Grants a team access to a specific diagram.
+    """Grants access to a specific diagram — either to a team or to a
+    single user.
+
+    Each row has exactly one grantee: team_id set and user_id null, OR
+    user_id set and team_id null. The DB enforces this with a CHECK
+    constraint and two partial unique indexes (see migration 648de0788239).
 
     When no DiagramAccess rows exist for a diagram, it falls back to
     workspace-wide visibility (every workspace member can see it, subject to
     their workspace role). As soon as ANY grant exists, the diagram becomes
-    restricted and is only visible to members of the granted teams (plus
-    workspace admins/owners).
+    restricted and is only visible to the granted teams + granted users
+    (plus workspace admins/owners).
     """
 
     __tablename__ = "diagram_access"
@@ -72,8 +77,17 @@ class DiagramAccess(Base, UUIDMixin, TimestampMixin):
         ForeignKey("diagrams.id", ondelete="CASCADE"),
         index=True,
     )
-    team_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("teams.id", ondelete="CASCADE"), index=True
+    team_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("teams.id", ondelete="CASCADE"),
+        index=True,
+        default=None,
+    )
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
+        default=None,
     )
     access_level: Mapped[AccessLevel] = mapped_column(
         Enum(
@@ -82,8 +96,4 @@ class DiagramAccess(Base, UUIDMixin, TimestampMixin):
             values_callable=lambda e: [v.value for v in e],
         ),
         default=AccessLevel.READ,
-    )
-
-    __table_args__ = (
-        UniqueConstraint("diagram_id", "team_id", name="uq_team_per_diagram_access"),
     )

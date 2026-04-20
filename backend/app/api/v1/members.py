@@ -24,12 +24,20 @@ class MemberResponse(BaseModel):
 class InviteCreateRequest(BaseModel):
     email: EmailStr
     role: Role
+    # Teams to auto-add the user to on acceptance. Ignored entries (wrong
+    # workspace, deleted team) are silently skipped.
+    team_ids: list[UUID] = []
 
 
 class InviteResponse(BaseModel):
     id: UUID
     email: str
     role: str
+    token: str
+    team_ids: list[UUID]
+
+
+class AcceptInviteRequest(BaseModel):
     token: str
 
 
@@ -62,7 +70,12 @@ async def invite_member(
 ):
     try:
         invite, member = await member_service.invite_user(
-            db, workspace_id, payload.email, payload.role, current_user.id
+            db,
+            workspace_id,
+            payload.email,
+            payload.role,
+            current_user.id,
+            team_ids=payload.team_ids,
         )
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
@@ -76,7 +89,8 @@ async def invite_member(
             email=invite.email,
             role=invite.role.value,
             token=invite.token,
-        ).model_dump(),
+            team_ids=list(invite.team_ids),
+        ).model_dump(mode="json"),
     }
 
 
@@ -88,7 +102,13 @@ async def list_invites(
 ):
     rows = await member_service.list_invites(db, workspace_id)
     return [
-        InviteResponse(id=r.id, email=r.email, role=r.role.value, token=r.token)
+        InviteResponse(
+            id=r.id,
+            email=r.email,
+            role=r.role.value,
+            token=r.token,
+            team_ids=list(r.team_ids),
+        )
         for r in rows
     ]
 

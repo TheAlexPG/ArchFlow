@@ -703,7 +703,11 @@ export function useWorkspaceMembers(workspaceId: string | null) {
 export function useInviteMember(workspaceId: string | null) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (payload: { email: string; role: WorkspaceRole }) => {
+    mutationFn: async (payload: {
+      email: string
+      role: WorkspaceRole
+      team_ids?: string[]
+    }) => {
       const { data } = await api.post(`/workspaces/${workspaceId}/invites`, payload)
       return data as
         | { type: 'member_added'; user_id: string }
@@ -712,6 +716,7 @@ export function useInviteMember(workspaceId: string | null) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['workspaces', workspaceId, 'members'] })
       qc.invalidateQueries({ queryKey: ['workspaces', workspaceId, 'invites'] })
+      qc.invalidateQueries({ queryKey: ['teams'] })
     },
   })
 }
@@ -843,7 +848,7 @@ export function useGrantTeamAccess(diagramId: string | null) {
   return useMutation({
     mutationFn: async (payload: { team_id: string; level: DiagramAccessLevel }) => {
       const { data } = await api.post<DiagramGrant>(
-        `/diagrams/${diagramId}/access`,
+        `/diagrams/${diagramId}/access/teams`,
         payload,
       )
       return data
@@ -857,9 +862,49 @@ export function useRevokeTeamAccess(diagramId: string | null) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async (teamId: string) => {
-      await api.delete(`/diagrams/${diagramId}/access/${teamId}`)
+      await api.delete(`/diagrams/${diagramId}/access/teams/${teamId}`)
     },
     onSuccess: () =>
       qc.invalidateQueries({ queryKey: ['diagrams', diagramId, 'access'] }),
+  })
+}
+
+export function useGrantUserAccess(diagramId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (payload: { user_id: string; level: DiagramAccessLevel }) => {
+      const { data } = await api.post<DiagramGrant>(
+        `/diagrams/${diagramId}/access/users`,
+        payload,
+      )
+      return data
+    },
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ['diagrams', diagramId, 'access'] }),
+  })
+}
+
+export function useRevokeUserAccess(diagramId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (userId: string) => {
+      await api.delete(`/diagrams/${diagramId}/access/users/${userId}`)
+    },
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ['diagrams', diagramId, 'access'] }),
+  })
+}
+
+export function useAcceptInvite() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (token: string) => {
+      const { data } = await api.post<{ workspace_id: string; role: string }>(
+        '/invites/accept',
+        { token },
+      )
+      return data
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['workspaces'] }),
   })
 }

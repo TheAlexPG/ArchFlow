@@ -15,13 +15,21 @@ from app.services import access_service
 router = APIRouter(prefix="/diagrams/{diagram_id}/access", tags=["diagram-access"])
 
 
-class GrantRequest(BaseModel):
+class TeamGrantRequest(BaseModel):
     team_id: UUID
     level: AccessLevel = AccessLevel.READ
 
 
+class UserGrantRequest(BaseModel):
+    user_id: UUID
+    level: AccessLevel = AccessLevel.READ
+
+
 class GrantResponse(BaseModel):
-    team_id: UUID
+    """One grant row. Exactly one of team_id / user_id is non-null."""
+
+    team_id: UUID | None
+    user_id: UUID | None
     access_level: str
 
 
@@ -43,27 +51,33 @@ async def list_grants(
     await _diagram_or_404(db, diagram_id)
     grants = await access_service.list_diagram_grants(db, diagram_id)
     return [
-        GrantResponse(team_id=g.team_id, access_level=g.access_level.value)
+        GrantResponse(
+            team_id=g.team_id,
+            user_id=g.user_id,
+            access_level=g.access_level.value,
+        )
         for g in grants
     ]
 
 
-@router.post("", response_model=GrantResponse, status_code=201)
-async def grant(
+@router.post("/teams", response_model=GrantResponse, status_code=201)
+async def grant_team(
     diagram_id: UUID,
-    payload: GrantRequest,
+    payload: TeamGrantRequest,
     _: Role = Depends(require_role(Role.ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
     await _diagram_or_404(db, diagram_id)
-    grant = await access_service.grant_team_access(
+    g = await access_service.grant_team_access(
         db, diagram_id, payload.team_id, payload.level
     )
-    return GrantResponse(team_id=grant.team_id, access_level=grant.access_level.value)
+    return GrantResponse(
+        team_id=g.team_id, user_id=g.user_id, access_level=g.access_level.value
+    )
 
 
-@router.delete("/{team_id}", status_code=204)
-async def revoke(
+@router.delete("/teams/{team_id}", status_code=204)
+async def revoke_team(
     diagram_id: UUID,
     team_id: UUID,
     _: Role = Depends(require_role(Role.ADMIN)),
@@ -73,3 +87,34 @@ async def revoke(
     ok = await access_service.revoke_team_access(db, diagram_id, team_id)
     if not ok:
         raise HTTPException(404, "Grant not found")
+
+
+@router.post("/users", response_model=GrantResponse, status_code=201)
+async def grant_user(
+    diagram_id: UUID,
+    payload: UserGrantRequest,
+    _: Role = Depends(require_role(Role.ADMIN)),
+    db: AsyncSession = Depends(get_db),
+):
+    await _diagram_or_404(db, diagram_id)
+    g = await access_service.grant_user_access(
+        db, diagram_id, payload.user_id, payload.level
+    )
+    return GrantResponse(
+        team_id=g.team_id, user_id=g.user_id, access_level=g.access_level.value
+    )
+
+
+@router.delete("/users/{user_id}", status_code=204)
+async def revoke_user(
+    diagram_id: UUID,
+    user_id: UUID,
+    _: Role = Depends(require_role(Role.ADMIN)),
+    db: AsyncSession = Depends(get_db),
+):
+    await _diagram_or_404(db, diagram_id)
+    ok = await access_service.revoke_user_access(db, diagram_id, user_id)
+    if not ok:
+        raise HTTPException(404, "Grant not found")
+
+
