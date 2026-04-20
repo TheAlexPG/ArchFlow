@@ -21,14 +21,21 @@ from app.api.v1.members import router as members_router
 from app.api.v1.oauth_stub import router as oauth_router
 from app.api.v1.teams import router as teams_router
 from app.api.v1.versions import router as versions_router
+from app.api.v1.websocket import router as websocket_router
 from app.api.v1.workspaces import router as workspaces_router
 from app.core.config import settings
 from app.core.database import engine
+from app.realtime.manager import manager as ws_manager
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Redis subscriber starts lazily on first WS join too, but kicking it
+    # off at app boot means REST endpoints that publish events don't
+    # race the subscriber's first iteration.
+    await ws_manager.start()
     yield
+    await ws_manager.stop()
     await engine.dispose()
 
 
@@ -66,6 +73,7 @@ def create_app() -> FastAPI:
     app.include_router(oauth_router, prefix="/api/v1")
     app.include_router(invites_router, prefix="/api/v1")
     app.include_router(versions_router, prefix="/api/v1")
+    app.include_router(websocket_router, prefix="/api/v1")
 
     @app.get("/health")
     async def health():

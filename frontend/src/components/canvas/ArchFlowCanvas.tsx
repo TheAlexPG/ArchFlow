@@ -39,6 +39,8 @@ import { ExternalSystemNode } from './ExternalSystemNode'
 import { GroupNode } from './GroupNode'
 import { collectLegend, extractFilterValue, overlayStyleFor, type FilterDim } from './overlay-utils'
 import { detectParentGroup, findSpatialGroupMembers, nodeToRect } from './group-utils'
+import { useDiagramSocket } from '../../hooks/use-realtime'
+import { CursorsOverlay } from './CursorsOverlay'
 
 const nodeTypes: NodeTypes = {
   c4: C4Node as unknown as NodeTypes['c4'],
@@ -135,6 +137,19 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     return { stepNumbers, currentConnId }
   }, [playingFlowId, playingStepIdx, activeBranch, flows])
   const { setNodes, setEdges, getNodes, getEdges, screenToFlowPosition } = useReactFlow()
+
+  // Realtime collaboration: cursor sharing with other users in the same diagram.
+  const { cursors, sendCursor } = useDiagramSocket(diagramId ?? null)
+
+  const onMouseMove = useCallback(
+    (event: React.MouseEvent) => {
+      if (document.hidden) return
+      const pos = screenToFlowPosition({ x: event.clientX, y: event.clientY })
+      sendCursor(pos.x, pos.y)
+    },
+    [screenToFlowPosition, sendCursor],
+  )
+
   const prevKeyRef = useRef<string>('')
   const prevConnsRef = useRef<string>('')
   // Stores {groupId -> {nodeId -> startPosition}} while a group drag is in progress.
@@ -653,6 +668,7 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
       onSelectionChange={onSelectionChange}
       onEdgesDelete={onEdgesDelete}
       onPaneClick={onPaneClick}
+      onMouseMove={onMouseMove}
       deleteKeyCode={['Backspace', 'Delete']}
       nodeTypes={nodeTypes}
       edgeTypes={edgeTypes}
@@ -690,6 +706,7 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
         style={{ background: '#171717', border: '1px solid #333' }}
       />
       {diagramId && <CanvasComments diagramId={diagramId} />}
+      <CursorsOverlay cursors={cursors} />
     </ReactFlow>
     </>
   )
