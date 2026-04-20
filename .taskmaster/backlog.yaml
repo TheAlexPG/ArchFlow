@@ -2,20 +2,18 @@ meta:
   project: ArchFlow
   updated: '2026-04-20'
 context:
-  active_epic: api-keys-webhooks
-  in_progress:
+  active_epic: canvas-polish
+  in_progress: []
+  blocked: []
+  recent_completed:
   - id: api-keys-001
     title: API keys table + Bearer key auth scheme
-    epic: api-keys-webhooks
-    branch: ''
-    locked_by: Alexandrs-MacBook-Pro.local-60393-d0858f10
-  blocked: []
-  recent_completed: []
+    completed: 2026-04-20T19:51
   next_up: []
   stats:
     total: 22
-    done: 0
-    in_progress: 1
+    done: 1
+    in_progress: 0
     in_review: 0
     todo: 21
     blocked: 0
@@ -26,9 +24,9 @@ context:
     stats:
       total: 3
       todo: 2
-      in-progress: 1
+      in-progress: 0
       in-review: 0
-      done: 0
+      done: 1
       blocked: 0
       archived: 0
     target_date: null
@@ -1388,16 +1386,18 @@ epics:
   tasks:
   - id: api-keys-001
     title: API keys table + Bearer key auth scheme
-    status: in-progress
+    status: done
     priority: high
     created: 2026-04-20T11:00
     notes: Spec §7.1. api_keys (org_id, workspace_id, key_hash, permissions[], expires_at).
       Auth middleware accepts API key in addition to JWT.
     estimate: M
     phase: api-surface
-    last_referenced: 2026-04-20T19:43
+    last_referenced: 2026-04-20T19:51
     started: 2026-04-20T19:43
-    locked_by: Alexandrs-MacBook-Pro.local-60393-d0858f10
+    branch: feature/api-keys-001
+    worktree: .worktrees/api-keys-001
+    completed: 2026-04-20T19:51
   - id: api-keys-002
     title: Webhooks — subscribe to model-change events
     status: todo

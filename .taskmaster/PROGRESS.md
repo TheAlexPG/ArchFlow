@@ -28,20 +28,35 @@
 | Model Versions & Conflict Resolution | Planned | 0/4 | — |
 | Teams, Roles & Workspaces | Planned | 0/4 | — |
 | Real-time Collaboration | Planned | 0/4 | — |
-| API Keys, Webhooks, Rate Limiting | Planned | 0/3 | API keys table + Bearer key auth scheme |
+| API Keys, Webhooks, Rate Limiting | Planned | 1/3 | — |
 | AI Features (beyond insights) | Planned | 0/4 | — |
 | Enterprise SSO & Compliance | Planned | 0/3 | — |
 
-**Active Phase:** API Keys & Webhooks (0/3 done)
+**Active Phase:** API Keys & Webhooks (1/3 done)
 **Phases:** ... Versions + Conflicts | ... Teams, Roles, Workspaces | ... Real-time Collaboration | >> API Keys & Webhooks | ... AI Features (extended) | ... Enterprise SSO
 
-**In Progress:** api-keys-001 API keys table + Bearer key auth scheme
+**In Progress:** —
 **Blocked:** —
 **Next Up:** —
 
 ---
 
 ## Changelog
+
+### 2026-04-20 — API Keys: Bearer auth + Settings UI
+**Done:**
+- ApiKey model + migration\nService (create/list/revoke/verify) with ak_-prefixed bcrypt-hashed secrets\nAuth dep recognises API-key Bearers alongside JWT\nCRUD endpoints POST/GET/DELETE /api-keys\nSettings page with create dialog + one-time secret reveal\nUnit + E2E tests all green
+
+**Decisions:**
+- Scope API keys to user_id for now; org_id/workspace_id columns will be added when teams-roles epic lands rather than pre-baking empty columns.\nStore 12-char prefix separately for DB lookup + UI display; bcrypt the full secret so we never persist plaintext.
+
+**Issues:**
+- pytest-asyncio auto mode creates per-test event loops; shared asyncpg engine can't survive switch, so the HTTP-level test was consolidated into one function.\nNote: permissions field is stored but not yet enforced at endpoint level — follow-up task will add per-scope checks on protected routes when writes are implemented.
+
+**Tasks touched:** N/A
+
+---
+
 
 ### 2026-04-16 — auto
 charts/archflow: Chart.yaml, values.yaml, templates for backend+frontend Deployments+Services, Postgres StatefulSet+headless Service, Redis, config Secret, optional Ingress
