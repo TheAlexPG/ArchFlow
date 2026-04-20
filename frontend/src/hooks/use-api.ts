@@ -8,6 +8,7 @@ import type {
   Conflict,
   DiagramAccessLevel,
   DiagramGrant,
+  DiagramPack,
   Team,
   TeamMember,
   Version,
@@ -1002,5 +1003,92 @@ export function useDraftConflicts(draftId: string | null) {
       return data
     },
     enabled: !!draftId,
+  })
+}
+
+// ─── Diagram Packs ────────────────────────────────────────────
+
+export function usePacks(workspaceId: string | null) {
+  return useQuery({
+    queryKey: ['packs', workspaceId],
+    queryFn: async () => {
+      const { data } = await api.get<DiagramPack[]>(
+        `/workspaces/${workspaceId}/packs`,
+      )
+      return data
+    },
+    enabled: !!workspaceId,
+  })
+}
+
+export function useCreatePack(wsId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (name: string) => {
+      const { data } = await api.post<DiagramPack>(
+        `/workspaces/${wsId}/packs`,
+        { name },
+      )
+      return data
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['packs', wsId] }),
+  })
+}
+
+export function useRenamePack(wsId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ packId, name }: { packId: string; name: string }) => {
+      const { data } = await api.patch<DiagramPack>(
+        `/workspaces/${wsId}/packs/${packId}`,
+        { name },
+      )
+      return data
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['packs', wsId] }),
+  })
+}
+
+export function useDeletePack(wsId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (packId: string) => {
+      await api.delete(`/workspaces/${wsId}/packs/${packId}`)
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['packs', wsId] })
+      qc.invalidateQueries({ queryKey: ['diagrams'] })
+    },
+  })
+}
+
+export function useReorderPacks(wsId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (orderedIds: string[]) => {
+      await api.put(`/workspaces/${wsId}/packs/reorder`, {
+        ordered_ids: orderedIds,
+      })
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['packs', wsId] }),
+  })
+}
+
+export function useSetDiagramPack() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({
+      diagramId,
+      packId,
+    }: {
+      diagramId: string
+      packId: string | null
+    }) => {
+      const { data } = await api.put(`/diagrams/${diagramId}/pack`, {
+        pack_id: packId,
+      })
+      return data
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['diagrams'] }),
   })
 }

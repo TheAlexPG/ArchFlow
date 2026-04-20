@@ -68,6 +68,13 @@ export interface ConnectionUpdate {
   via_object_ids?: string[] | null
 }
 
+export interface DiagramPack {
+  id: string
+  workspace_id: string
+  name: string
+  sort_order: number
+}
+
 export interface Diagram {
   id: string
   name: string
@@ -77,6 +84,7 @@ export interface Diagram {
   settings: Record<string, unknown> | null
   pinned: boolean
   draft_id: string | null
+  pack_id: string | null
   created_at: string
   updated_at: string
 }

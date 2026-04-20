@@ -39,6 +39,12 @@ class Diagram(Base, UUIDMixin, TimestampMixin):
         ForeignKey("workspaces.id", ondelete="SET NULL"),
         default=None,
     )
+    pack_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("diagram_packs.id", ondelete="SET NULL"),
+        default=None,
+        index=True,
+    )
 
     # Relationships
     scope_object = relationship("ModelObject", foreign_keys=[scope_object_id])

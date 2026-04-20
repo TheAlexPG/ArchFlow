@@ -1,6 +1,7 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -15,6 +16,7 @@ from app.schemas.diagram import (
 from app.api.deps import get_optional_user
 from app.realtime.manager import fire_and_forget_publish
 from app.services import access_service, diagram_service, draft_service, workspace_service
+from app.services import pack_service
 from app.services.webhook_service import fire_and_forget_emit
 
 router = APIRouter(prefix="/diagrams", tags=["diagrams"])
@@ -180,6 +182,33 @@ async def remove_object_from_diagram(
         raise HTTPException(
             status_code=404, detail="Object not found in diagram"
         )
+
+
+# ─── Pack assignment ──────────────────────────────────────────
+
+class SetDiagramPackBody(BaseModel):
+    pack_id: uuid.UUID | None
+
+
+@router.put("/{diagram_id}/pack", response_model=DiagramResponse)
+async def set_diagram_pack(
+    diagram_id: uuid.UUID,
+    body: SetDiagramPackBody,
+    db: AsyncSession = Depends(get_db),
+):
+    diagram = await diagram_service.get_diagram(db, diagram_id)
+    if not diagram:
+        raise HTTPException(status_code=404, detail="Diagram not found")
+    if body.pack_id is not None:
+        # Verify the pack belongs to the same workspace as the diagram.
+        pack = await pack_service.get_pack(db, diagram.workspace_id, body.pack_id)
+        if pack is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Pack not found in this diagram's workspace",
+            )
+    diagram = await pack_service.set_diagram_pack(db, diagram, body.pack_id)
+    return diagram
 
 
 # ─── Draft membership ─────────────────────────────────────────
