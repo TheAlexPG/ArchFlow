@@ -179,6 +179,7 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
                   : 'c4',
           position: { x: dObj.position_x, y: dObj.position_y },
           data: { object: obj } satisfies C4NodeData,
+          zIndex: obj.type === 'group' ? 0 : 1,
         }
         // Restore persisted node size from the diagram_objects row so the
         // resized dimensions survive page reloads.
