@@ -15,6 +15,7 @@ from app.api.v1.flows import diagrams_router as flow_diagrams_router
 from app.api.v1.flows import router as flows_router
 from app.api.v1.objects import router as objects_router
 from app.api.v1.webhooks import router as webhooks_router
+from app.api.v1.workspaces import router as workspaces_router
 from app.core.config import settings
 from app.core.database import engine
 
@@ -52,6 +53,7 @@ def create_app() -> FastAPI:
     app.include_router(export_router, prefix="/api/v1")
     app.include_router(api_keys_router, prefix="/api/v1")
     app.include_router(webhooks_router, prefix="/api/v1")
+    app.include_router(workspaces_router, prefix="/api/v1")
 
     @app.get("/health")
     async def health():

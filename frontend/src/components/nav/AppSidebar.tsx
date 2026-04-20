@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { useAuthStore } from '../../stores/auth-store'
+import { WorkspaceSwitcher } from './WorkspaceSwitcher'
 
 const NAV_ITEMS = [
   { label: 'Overview', icon: '◉', path: '/' },
@@ -30,11 +31,13 @@ export function AppSidebar() {
         background: '#111',
       }}
     >
-      <div style={{ padding: '0 16px', marginBottom: 24 }}>
+      <div style={{ padding: '0 16px', marginBottom: 16 }}>
         <div style={{ fontWeight: 700, fontSize: 16 }}>ArchFlow</div>
       </div>
 
-      <nav style={{ flex: 1 }}>
+      <WorkspaceSwitcher />
+
+      <nav style={{ flex: 1, marginTop: 12 }}>
         {NAV_ITEMS.map((item) => (
           <NavLink
             key={item.path}

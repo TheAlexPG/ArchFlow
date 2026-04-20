@@ -9,6 +9,7 @@ from app.models.flow import Flow
 from app.models.object import ModelObject, ObjectScope, ObjectStatus, ObjectType
 from app.models.user import User
 from app.models.webhook import Webhook
+from app.models.workspace import Organization, Role, Workspace, WorkspaceMember
 
 __all__ = [
     "ActivityAction",
@@ -32,6 +33,10 @@ __all__ = [
     "ObjectScope",
     "ObjectStatus",
     "ObjectType",
+    "Organization",
+    "Role",
     "User",
     "Webhook",
+    "Workspace",
+    "WorkspaceMember",
 ]

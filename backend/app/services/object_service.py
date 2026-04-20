@@ -44,7 +44,10 @@ async def get_object(db: AsyncSession, object_id: uuid.UUID) -> ModelObject | No
 
 
 async def create_object(
-    db: AsyncSession, data: ObjectCreate, draft_id: uuid.UUID | None = None
+    db: AsyncSession,
+    data: ObjectCreate,
+    draft_id: uuid.UUID | None = None,
+    workspace_id: uuid.UUID | None = None,
 ) -> ModelObject:
     obj = ModelObject(
         name=data.name,
@@ -60,6 +63,7 @@ async def create_object(
         external_links=data.external_links,
         metadata_=data.metadata_,
         draft_id=draft_id,
+        workspace_id=workspace_id,
     )
     db.add(obj)
     await db.flush()

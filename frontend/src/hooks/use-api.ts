@@ -8,6 +8,7 @@ import type {
   Webhook,
   WebhookCreate,
   WebhookWithSecret,
+  Workspace,
   CommentCreate,
   CommentTargetType,
   CommentUpdate,
@@ -27,14 +28,21 @@ import type {
   ObjectUpdate,
 } from '../types/model'
 import { useAuthStore } from '../stores/auth-store'
+import { useWorkspaceStore } from '../stores/workspace-store'
 
 const api = axios.create({ baseURL: '/api/v1' })
 
-// Auth interceptor
+// Auth + workspace interceptor: attach the JWT and the caller's currently
+// selected workspace so the backend can scope writes to it without callers
+// having to thread it through every request.
 api.interceptors.request.use((config) => {
   const token = useAuthStore.getState().accessToken
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
+  }
+  const wsId = useWorkspaceStore.getState().currentWorkspaceId
+  if (wsId) {
+    config.headers['X-Workspace-ID'] = wsId
   }
   return config
 })
@@ -654,6 +662,18 @@ export function useTestWebhook() {
   return useMutation({
     mutationFn: async (id: string) => {
       await api.post(`/webhooks/${id}/test`)
+    },
+  })
+}
+
+// ─── Workspaces ──────────────────────────────────────────
+
+export function useWorkspaces() {
+  return useQuery({
+    queryKey: ['workspaces'],
+    queryFn: async () => {
+      const { data } = await api.get<Workspace[]>('/workspaces')
+      return data
     },
   })
 }
