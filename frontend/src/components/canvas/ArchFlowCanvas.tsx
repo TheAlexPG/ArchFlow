@@ -38,7 +38,7 @@ import { CanvasComments } from './CanvasComments'
 import { ExternalSystemNode } from './ExternalSystemNode'
 import { GroupNode } from './GroupNode'
 import { collectLegend, extractFilterValue, overlayStyleFor, type FilterDim } from './overlay-utils'
-import { detectParentGroup, nodeToRect } from './group-utils'
+import { detectParentGroup, findSpatialGroupMembers, nodeToRect } from './group-utils'
 
 const nodeTypes: NodeTypes = {
   c4: C4Node as unknown as NodeTypes['c4'],
@@ -362,25 +362,33 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     : null
 
   /**
-   * Collect all node IDs that are members of the given group (direct or nested).
-   * Walks the parent_id chain upward for each object on the canvas.
+   * Collect all node IDs that should travel with the given group on drag.
+   * Union of:
+   *   - nodes whose parent_id chain reaches this group (persisted membership)
+   *   - nodes whose rect is currently inside the group's rect (spatial)
+   * The spatial side is what lets a group "pick up" nodes that were never
+   * formally dropped into it (e.g. the user resized a group over existing
+   * nodes, or added a group on top of a cluster).
    */
   const getGroupMemberIds = useCallback(
     (groupId: string): string[] => {
       const objectMap = new Map(allObjects.map((o) => [o.id, o]))
-      const members: string[] = []
+      const members = new Set<string>()
       for (const dObj of diagramObjects) {
         if (dObj.object_id === groupId) continue
         let current = objectMap.get(dObj.object_id)
         while (current) {
           if (current.parent_id === groupId) {
-            members.push(dObj.object_id)
+            members.add(dObj.object_id)
             break
           }
           current = current.parent_id ? objectMap.get(current.parent_id) : undefined
         }
       }
-      return members
+      for (const id of findSpatialGroupMembers(groupId, diagramObjects, allObjects)) {
+        members.add(id)
+      }
+      return [...members]
     },
     [allObjects, diagramObjects],
   )

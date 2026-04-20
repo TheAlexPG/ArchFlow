@@ -78,6 +78,36 @@ export function detectParentGroup(
 }
 
 /**
+ * Find every diagram object whose rectangle is fully contained within the
+ * given group's rectangle on the same diagram. Purely spatial — ignores
+ * parent_id. Used while dragging a group so nodes that happen to sit
+ * inside follow along, even if parent_id was never persisted.
+ */
+export function findSpatialGroupMembers(
+  groupId: string,
+  allPlacements: DiagramObjectData[],
+  allObjects: ModelObject[],
+): string[] {
+  const objectMap = new Map(allObjects.map((o) => [o.id, o]))
+  const groupPlacement = allPlacements.find((p) => p.object_id === groupId)
+  const groupObj = objectMap.get(groupId)
+  if (!groupPlacement || !groupObj || groupObj.type !== 'group') return []
+
+  const groupRect = placementRect(groupPlacement, groupObj)
+  const members: string[] = []
+  for (const dObj of allPlacements) {
+    if (dObj.object_id === groupId) continue
+    const obj = objectMap.get(dObj.object_id)
+    if (!obj) continue
+    const childRect = placementRect(dObj, obj)
+    if (isFullyContained(childRect, groupRect)) {
+      members.push(dObj.object_id)
+    }
+  }
+  return members
+}
+
+/**
  * Build a rect from a ReactFlow node's current position and rendered size,
  * falling back to defaults if the node hasn't been measured yet.
  */

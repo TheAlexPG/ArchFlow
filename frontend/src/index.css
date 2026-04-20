@@ -142,10 +142,16 @@ select {
  * Keep NodeResizer DOM stable on select/deselect — controls are rendered
  * permanently via isVisible={true} in custom nodes and hidden visually
  * when the node isn't selected. Avoids DOM mount/unmount churn.
+ *
+ * pointer-events stay enabled even when the node isn't selected, so the
+ * user can grab an edge/corner and resize on the first gesture. Without
+ * this, the first click on a 1px edge line falls through to the node
+ * body, starting a drag instead of a resize — visible as "left edge
+ * drags the group, right edge does nothing" (the right edge missed the
+ * gesture entirely because the line is outside the body on one side).
  */
 .react-flow__node:not(.selected) .react-flow__resize-control {
   opacity: 0;
-  pointer-events: none;
 }
 
 /*
