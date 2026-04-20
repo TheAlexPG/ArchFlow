@@ -20,6 +20,7 @@ export interface Diagram {
   settings: Record<string, unknown> | null
   pinned: boolean
   draft_id: string | null
+  pack_id: string | null
   created_at: string
   updated_at: string
 }

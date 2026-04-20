@@ -20,6 +20,7 @@ from app.api.v1.invites import router as invites_router
 from app.api.v1.members import router as members_router
 from app.api.v1.oauth_stub import router as oauth_router
 from app.api.v1.teams import router as teams_router
+from app.api.v1.packs import router as packs_router
 from app.api.v1.versions import router as versions_router
 from app.api.v1.websocket import router as websocket_router
 from app.api.v1.workspaces import router as workspaces_router
@@ -69,6 +70,7 @@ def create_app() -> FastAPI:
     app.include_router(workspaces_router, prefix="/api/v1")
     app.include_router(members_router, prefix="/api/v1")
     app.include_router(teams_router, prefix="/api/v1")
+    app.include_router(packs_router, prefix="/api/v1")
     app.include_router(diagram_access_router, prefix="/api/v1")
     app.include_router(oauth_router, prefix="/api/v1")
     app.include_router(invites_router, prefix="/api/v1")
