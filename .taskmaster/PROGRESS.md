@@ -28,11 +28,11 @@
 | Model Versions & Conflict Resolution | Planned | 0/4 | — |
 | Teams, Roles & Workspaces | Planned | 0/4 | — |
 | Real-time Collaboration | Planned | 0/4 | — |
-| API Keys, Webhooks, Rate Limiting | Planned | 2/3 | — |
+| API Keys, Webhooks, Rate Limiting | Planned | 3/3 | — |
 | AI Features (beyond insights) | Planned | 0/4 | — |
 | Enterprise SSO & Compliance | Planned | 0/3 | — |
 
-**Active Phase:** API Keys & Webhooks (2/3 done)
+**Active Phase:** API Keys & Webhooks (3/3 done)
 **Phases:** ... Versions + Conflicts | ... Teams, Roles, Workspaces | ... Real-time Collaboration | >> API Keys & Webhooks | ... AI Features (extended) | ... Enterprise SSO
 
 **In Progress:** —
@@ -42,6 +42,21 @@
 ---
 
 ## Changelog
+
+### 2026-04-20 — Rate limiting via Redis
+**Done:**
+- Redis async client wired\nSliding-window limiter with sorted-set ZADD/ZREM/ZCARD + pipelined ops\nDefault 60/min + 1000/hr buckets; tightest bucket surfaces on denial\nenforce_rate_limit dependency replaces get_current_user on /api-keys and /webhooks, sets X-RateLimit-* headers + 429+Retry-After\nCaller keyed on api_key.id when ak_ auth, else user.id — separate budgets per key\n2 new tests (sliding behaviour + bucket priority); all 10 tests green
+
+**Decisions:**
+- Applied only to endpoints that already enforce auth. Retrofitting auth onto the rest of the app belongs in the teams-roles epic, not here.\nZADD/ZCARD with pipeline() — could be moved to a Lua script for true atomicity, but the current race window is microseconds and any overflow gets trimmed by the next request's ZREMRANGEBYSCORE.
+
+**Issues:**
+- None.
+
+**Tasks touched:** N/A
+
+---
+
 
 ### 2026-04-20 — Webhooks: signed outbound events
 **Done:**

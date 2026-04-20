@@ -6,6 +6,9 @@ context:
   in_progress: []
   blocked: []
   recent_completed:
+  - id: api-keys-003
+    title: Rate limiting via Redis
+    completed: 2026-04-20T20:01
   - id: api-keys-002
     title: Webhooks — subscribe to model-change events
     completed: 2026-04-20T19:58
@@ -15,10 +18,10 @@ context:
   next_up: []
   stats:
     total: 22
-    done: 2
+    done: 3
     in_progress: 0
     in_review: 0
-    todo: 20
+    todo: 19
     blocked: 0
     archived: 70
   active_phase:
@@ -26,10 +29,10 @@ context:
     name: API Keys & Webhooks
     stats:
       total: 3
-      todo: 1
+      todo: 0
       in-progress: 0
       in-review: 0
-      done: 2
+      done: 3
       blocked: 0
       archived: 0
     target_date: null
@@ -1417,12 +1420,17 @@ epics:
     completed: 2026-04-20T19:58
   - id: api-keys-003
     title: Rate limiting via Redis
-    status: todo
+    status: done
     priority: medium
     created: 2026-04-20T11:00
     notes: Sliding-window rate limiter keyed on user/api_key id. Configurable limits.
     estimate: S
     phase: api-surface
+    last_referenced: 2026-04-20T20:01
+    started: 2026-04-20T19:59
+    branch: feature/api-keys-003
+    worktree: .worktrees/api-keys-003
+    completed: 2026-04-20T20:01
 - id: ai-more
   name: AI Features (beyond insights)
   status: planned
