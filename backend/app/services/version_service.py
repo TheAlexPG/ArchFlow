@@ -257,3 +257,166 @@ def summarize_diff(diff: dict[str, Any]) -> dict[str, int]:
         flat[f"{kind}_removed"] = len(part.get("removed", []))
         flat[f"{kind}_modified"] = len(part.get("modified", []))
     return flat
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Revert — apply a snapshot back onto live tables.
+
+
+async def _revert_entity(
+    db: AsyncSession,
+    model_cls: type,
+    snapshot_rows: list[dict[str, Any]],
+    workspace_id: uuid.UUID,
+    fields: tuple[str, ...],
+    live_query_override: Any = None,
+) -> None:
+    """Upsert every row from the snapshot, delete live rows that aren't in
+    it. Scoped to workspace + draft_id IS NULL so we never touch rows from
+    other workspaces or still-open drafts.
+
+    `live_query_override` lets callers supply a pre-built query for models
+    that don't have workspace_id directly (connections live under their
+    endpoint objects).
+    """
+    snapshot_by_id = {
+        uuid.UUID(r["id"]): r for r in snapshot_rows
+    }
+
+    from sqlalchemy import delete
+
+    if live_query_override is not None:
+        live_query = live_query_override
+    else:
+        live_query = select(model_cls).where(model_cls.workspace_id == workspace_id)
+    if hasattr(model_cls, "draft_id"):
+        live_query = live_query.where(model_cls.draft_id.is_(None))
+    live_rows = list((await db.execute(live_query)).scalars().all())
+
+    live_ids = {r.id for r in live_rows}
+    snapshot_ids = set(snapshot_by_id.keys())
+
+    # Delete rows no longer in the snapshot.
+    to_delete = live_ids - snapshot_ids
+    if to_delete:
+        del_q = delete(model_cls).where(model_cls.id.in_(to_delete))
+        await db.execute(del_q)
+
+    live_by_id = {r.id: r for r in live_rows if r.id in snapshot_ids}
+
+    for sid, sdata in snapshot_by_id.items():
+        if sid in live_by_id:
+            row = live_by_id[sid]
+            for f in fields:
+                if f == "id":
+                    continue
+                if f not in sdata:
+                    continue
+                value = sdata[f]
+                # Convert string UUID references back to UUID objects.
+                if f.endswith("_id") and isinstance(value, str):
+                    try:
+                        value = uuid.UUID(value)
+                    except ValueError:
+                        pass
+                setattr(row, f, value)
+        else:
+            # Row was deleted after the snapshot — re-insert it.
+            kwargs: dict[str, Any] = {}
+            for f in fields:
+                if f not in sdata:
+                    continue
+                value = sdata[f]
+                if f.endswith("_id") and isinstance(value, str):
+                    try:
+                        value = uuid.UUID(value)
+                    except ValueError:
+                        pass
+                # ModelObject maps metadata_ column to "metadata"; snapshot
+                # already uses the Python attribute name, so this passes
+                # through untouched.
+                kwargs[f] = value
+            db.add(model_cls(**kwargs))
+
+
+async def revert_to_snapshot(
+    db: AsyncSession,
+    version: Version,
+    created_by_user_id: uuid.UUID | None = None,
+) -> Version:
+    """Restore the workspace to the state captured in `version`, then
+    persist a new snapshot (source=revert) so the rollback itself is
+    auditable.
+
+    Non-destructive: all pre-existing Version rows remain. If the caller
+    changes their mind they can revert forward to the post-collision
+    version just as easily.
+    """
+    snapshot = version.snapshot_data
+    ws_id = version.workspace_id
+
+    # Objects first, then connections + diagrams (connections FK objects).
+    await _revert_entity(
+        db, ModelObject, snapshot.get("objects", []), ws_id, OBJECT_FIELDS
+    )
+    await db.flush()
+
+    # Connections don't have workspace_id — scope via their source object.
+    ws_object_ids_q = select(ModelObject.id).where(
+        ModelObject.workspace_id == ws_id, ModelObject.draft_id.is_(None)
+    )
+    conn_live_query = select(Connection).where(
+        Connection.source_id.in_(ws_object_ids_q)
+    )
+    await _revert_entity(
+        db,
+        Connection,
+        snapshot.get("connections", []),
+        ws_id,
+        CONNECTION_FIELDS,
+        live_query_override=conn_live_query,
+    )
+    await db.flush()
+
+    # Diagrams need special handling — we must also reconcile placements.
+    diagram_snapshots = snapshot.get("diagrams", [])
+    diagram_rows = [
+        {k: v for k, v in d.items() if k != "placements"} for d in diagram_snapshots
+    ]
+    await _revert_entity(
+        db, Diagram, diagram_rows, ws_id, DIAGRAM_FIELDS
+    )
+    await db.flush()
+
+    # Replay placements: wipe everything for diagrams we just restored,
+    # then re-insert from the snapshot.
+    from sqlalchemy import delete
+
+    snap_diagram_ids = [uuid.UUID(d["id"]) for d in diagram_snapshots]
+    if snap_diagram_ids:
+        await db.execute(
+            delete(DiagramObject).where(
+                DiagramObject.diagram_id.in_(snap_diagram_ids)
+            )
+        )
+        for d in diagram_snapshots:
+            diagram_uuid = uuid.UUID(d["id"])
+            for p in d.get("placements", []):
+                db.add(
+                    DiagramObject(
+                        diagram_id=diagram_uuid,
+                        object_id=uuid.UUID(p["object_id"]),
+                        position_x=p.get("position_x") or 0.0,
+                        position_y=p.get("position_y") or 0.0,
+                        width=p.get("width"),
+                        height=p.get("height"),
+                    )
+                )
+    await db.flush()
+
+    return await create_snapshot(
+        db,
+        workspace_id=ws_id,
+        source=VersionSource.REVERT,
+        created_by_user_id=created_by_user_id,
+    )

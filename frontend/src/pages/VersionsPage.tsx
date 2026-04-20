@@ -4,6 +4,7 @@ import { AppSidebar } from '../components/nav/AppSidebar'
 import {
   useCompareVersions,
   useCreateManualSnapshot,
+  useRevertVersion,
   useVersions,
 } from '../hooks/use-api'
 import type { Version, VersionSource } from '../types/model'
@@ -123,6 +124,7 @@ export function VersionsPage() {
   const { data: versions = [], isLoading } = useVersions()
   const createSnapshot = useCreateManualSnapshot()
   const compare = useCompareVersions()
+  const revert = useRevertVersion()
 
   const [compareA, setCompareA] = useState('')
   const [compareB, setCompareB] = useState('')
@@ -165,30 +167,58 @@ export function VersionsPage() {
                   <th className="text-left px-4 py-2 text-xs text-neutral-500 font-normal">Source</th>
                   <th className="text-left px-4 py-2 text-xs text-neutral-500 font-normal">Created</th>
                   <th className="text-left px-4 py-2 text-xs text-neutral-500 font-normal">Draft</th>
+                  <th className="text-right px-4 py-2 text-xs text-neutral-500 font-normal" />
                 </tr>
               </thead>
               <tbody>
-                {versions.map((v) => (
-                  <tr key={v.id} className="border-b border-neutral-800 last:border-0 hover:bg-neutral-800/40">
-                    <td className="px-4 py-2.5 text-neutral-200 font-medium">{v.label}</td>
-                    <td className="px-4 py-2.5">
-                      <SourcePill source={v.source} />
-                    </td>
-                    <td className="px-4 py-2.5 text-neutral-400 text-xs">{formatDate(v.created_at)}</td>
-                    <td className="px-4 py-2.5 text-xs">
-                      {v.draft_id ? (
-                        <Link
-                          to={`/drafts/${v.draft_id}`}
-                          className="text-blue-400 hover:text-blue-300 underline underline-offset-2"
-                        >
-                          {v.draft_id.slice(0, 8)}…
-                        </Link>
-                      ) : (
-                        <span className="text-neutral-600">—</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {versions.map((v, i) => {
+                  const isHead = i === 0
+                  return (
+                    <tr key={v.id} className="border-b border-neutral-800 last:border-0 hover:bg-neutral-800/40">
+                      <td className="px-4 py-2.5 text-neutral-200 font-medium">{v.label}</td>
+                      <td className="px-4 py-2.5">
+                        <SourcePill source={v.source} />
+                      </td>
+                      <td className="px-4 py-2.5 text-neutral-400 text-xs">{formatDate(v.created_at)}</td>
+                      <td className="px-4 py-2.5 text-xs">
+                        {v.draft_id ? (
+                          <Link
+                            to={`/drafts/${v.draft_id}`}
+                            className="text-blue-400 hover:text-blue-300 underline underline-offset-2"
+                          >
+                            {v.draft_id.slice(0, 8)}…
+                          </Link>
+                        ) : (
+                          <span className="text-neutral-600">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                        {isHead ? (
+                          <span className="text-[10px] text-neutral-600 uppercase tracking-wider">
+                            current
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              if (
+                                confirm(
+                                  `Revert workspace to ${v.label}?\n\nThis replaces the live state with this snapshot. All prior versions stay in history, so you can revert forward again if needed.`,
+                                )
+                              ) {
+                                revert.mutate(v.id)
+                              }
+                            }}
+                            disabled={revert.isPending}
+                            className="text-xs text-amber-400 hover:text-amber-300 disabled:opacity-40"
+                            title="Restore this snapshot onto main"
+                          >
+                            Revert
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           )}

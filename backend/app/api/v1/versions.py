@@ -122,3 +122,43 @@ async def compare_versions(
         "diff": diff,
         "summary": version_service.summarize_diff(diff),
     }
+
+
+@router.post("/{version_id}/revert", response_model=VersionResponse, status_code=201)
+async def revert_version(
+    version_id: UUID,
+    current_user: User = Depends(get_current_user),
+    workspace: Workspace = Depends(get_current_workspace),
+    _: Role = Depends(require_role(Role.ADMIN)),
+    db: AsyncSession = Depends(get_db),
+):
+    """Restore the workspace to the state captured in this snapshot.
+
+    Non-destructive: the existing history stays. A new revert-tagged
+    version is persisted so the rollback itself can be undone.
+    """
+    from app.services.webhook_service import fire_and_forget_emit
+
+    target = await version_service.get_version(db, workspace.id, version_id)
+    if target is None:
+        raise HTTPException(404, "Version not found")
+    new_version = await version_service.revert_to_snapshot(
+        db, target, created_by_user_id=current_user.id
+    )
+    fire_and_forget_emit(
+        "version.reverted",
+        {
+            "workspace_id": str(workspace.id),
+            "from_version_id": str(target.id),
+            "new_version_id": str(new_version.id),
+        },
+    )
+    return VersionResponse(
+        id=new_version.id,
+        workspace_id=new_version.workspace_id,
+        label=new_version.label,
+        source=new_version.source.value,
+        draft_id=new_version.draft_id,
+        created_by_user_id=new_version.created_by_user_id,
+        created_at=new_version.created_at,
+    )
