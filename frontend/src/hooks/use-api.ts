@@ -480,11 +480,20 @@ export function useRemoveDiagramFromDraft() {
   })
 }
 
+/** Slim entry returned by GET /diagrams/{id}/drafts */
+export interface DiagramDraftEntry {
+  draft_id: string
+  draft_name: string
+  draft_status: string
+  source_diagram_id: string
+  forked_diagram_id: string
+}
+
 export function useDraftsForDiagram(diagramId: string | undefined) {
   return useQuery({
     queryKey: ['diagrams', diagramId, 'drafts'],
     queryFn: async () => {
-      const { data } = await api.get<Draft[]>(`/diagrams/${diagramId}/drafts`)
+      const { data } = await api.get<DiagramDraftEntry[]>(`/diagrams/${diagramId}/drafts`)
       return data
     },
     enabled: !!diagramId,

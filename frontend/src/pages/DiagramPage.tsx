@@ -18,6 +18,7 @@ import {
   useDiscardDraft,
   useDraft,
   useDraftsForDiagram,
+  type DiagramDraftEntry,
 } from '../hooks/use-api'
 import { useAuthStore } from '../stores/auth-store'
 import { useCanvasStore } from '../stores/canvas-store'
@@ -48,7 +49,7 @@ export function DiagramPage() {
   const { data: draftsForDiagram = [] } = useDraftsForDiagram(
     isLiveDiagram ? diagramId : undefined,
   )
-  const openDraftsForThisDiagram = draftsForDiagram.filter((d) => d.status === 'open')
+  const openDraftsForThisDiagram = draftsForDiagram.filter((d) => d.draft_status === 'open')
 
   const handleStartDraft = () => {
     forkDraft.reset()
@@ -207,49 +208,44 @@ export function DiagramPage() {
                           boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
                           zIndex: 50, minWidth: 260, overflow: 'hidden',
                         }}>
-                          {openDraftsForThisDiagram.map((d) => {
-                            const forkEntry = d.diagrams.find((dd) => dd.source_diagram_id === diagramId)
-                            return (
-                              <div key={d.id} style={{
-                                padding: '10px 14px',
-                                borderBottom: '1px solid #262626',
-                              }}>
-                                <div style={{ fontSize: 12, fontWeight: 600, color: '#d4d4d4', marginBottom: 6 }}>
-                                  {d.name}
-                                </div>
-                                <div style={{ display: 'flex', gap: 8 }}>
-                                  {forkEntry && (
-                                    <button
-                                      onClick={() => {
-                                        setDraftsDropdownOpen(false)
-                                        navigate(`/diagram/${forkEntry.forked_diagram_id}`)
-                                      }}
-                                      style={{
-                                        fontSize: 11, padding: '3px 8px',
-                                        background: 'transparent', border: '1px solid #3b82f6',
-                                        borderRadius: 4, color: '#93c5fd', cursor: 'pointer',
-                                      }}
-                                    >
-                                      Open fork
-                                    </button>
-                                  )}
-                                  <button
-                                    onClick={() => {
-                                      setDraftsDropdownOpen(false)
-                                      navigate(`/drafts/${d.id}`)
-                                    }}
-                                    style={{
-                                      fontSize: 11, padding: '3px 8px',
-                                      background: 'transparent', border: '1px solid #404040',
-                                      borderRadius: 4, color: '#a3a3a3', cursor: 'pointer',
-                                    }}
-                                  >
-                                    Feature dashboard
-                                  </button>
-                                </div>
+                          {openDraftsForThisDiagram.map((d: DiagramDraftEntry) => (
+                            <div key={d.draft_id} style={{
+                              padding: '10px 14px',
+                              borderBottom: '1px solid #262626',
+                            }}>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: '#d4d4d4', marginBottom: 6 }}>
+                                {d.draft_name}
                               </div>
-                            )
-                          })}
+                              <div style={{ display: 'flex', gap: 8 }}>
+                                <button
+                                  onClick={() => {
+                                    setDraftsDropdownOpen(false)
+                                    navigate(`/diagram/${d.forked_diagram_id}`)
+                                  }}
+                                  style={{
+                                    fontSize: 11, padding: '3px 8px',
+                                    background: 'transparent', border: '1px solid #3b82f6',
+                                    borderRadius: 4, color: '#93c5fd', cursor: 'pointer',
+                                  }}
+                                >
+                                  Open fork
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setDraftsDropdownOpen(false)
+                                    navigate(`/drafts/${d.draft_id}`)
+                                  }}
+                                  style={{
+                                    fontSize: 11, padding: '3px 8px',
+                                    background: 'transparent', border: '1px solid #404040',
+                                    borderRadius: 4, color: '#a3a3a3', cursor: 'pointer',
+                                  }}
+                                >
+                                  Feature dashboard
+                                </button>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </>
                     )}
