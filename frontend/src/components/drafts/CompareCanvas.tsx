@@ -1,5 +1,6 @@
 import {
   Background,
+  ConnectionMode,
   MarkerType,
   MiniMap,
   ReactFlow,
@@ -23,9 +24,9 @@ import {
 import { useDiagram } from '../../hooks/use-diagrams'
 import type {
   Connection,
-  DraftDiff,
   DraftDiffStatusFork,
   DraftDiffStatusSource,
+  PerDiagramDiffEntry,
 } from '../../types/model'
 import { ActorNode } from '../canvas/ActorNode'
 import { C4Edge } from '../canvas/C4Edge'
@@ -75,7 +76,7 @@ function connectionToEdge(conn: Connection): Edge {
 interface CompareCanvasProps {
   diagramId: string
   side: 'source' | 'fork'
-  diff: DraftDiff | undefined
+  diff: PerDiagramDiffEntry | undefined
   /** Which forked diagram's draft is this — used to fetch fork-scoped rows. */
   draftId: string | null
   /** True when the mouse is over this side — only then it emits viewport changes. */
@@ -254,6 +255,7 @@ export function CompareCanvas({
         nodesDraggable={false}
         nodesConnectable={false}
         elementsSelectable={false}
+        connectionMode={ConnectionMode.Loose}
         panOnDrag
         zoomOnScroll
         zoomOnPinch

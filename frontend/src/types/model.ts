@@ -196,14 +196,23 @@ export interface FlowUpdate {
 
 export type DraftStatus = 'open' | 'merged' | 'discarded'
 
+export interface DraftDiagram {
+  id: string
+  draft_id: string
+  source_diagram_id: string
+  forked_diagram_id: string
+  source_diagram_name: string | null
+  forked_diagram_name: string | null
+  created_at: string
+}
+
 export interface Draft {
   id: string
   name: string
   description: string | null
   status: DraftStatus
   author_id: string | null
-  source_diagram_id: string | null
-  forked_diagram_id: string | null
+  diagrams: DraftDiagram[]
   created_at: string
   updated_at: string
 }
@@ -232,8 +241,11 @@ export interface DraftDiffSummary {
   resized_objects: number
 }
 
-export interface DraftDiff {
-  summary: DraftDiffSummary
+export interface PerDiagramDiffEntry {
+  source_diagram_id: string
+  forked_diagram_id: string
+  source_diagram_name: string | null
+  forked_diagram_name: string | null
   source_objects: Record<string, DraftDiffStatusSource>
   fork_objects: Record<string, DraftDiffStatusFork>
   source_connections: Record<string, DraftDiffStatusSource>
@@ -241,4 +253,10 @@ export interface DraftDiff {
   moved_on_fork: string[]
   resized_on_fork: string[]
   object_names: Record<string, string>
+  summary: DraftDiffSummary
+}
+
+export interface DraftDiff {
+  total_summary: DraftDiffSummary
+  per_diagram: PerDiagramDiffEntry[]
 }
