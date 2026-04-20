@@ -77,6 +77,11 @@ class ModelObject(Base, UUIDMixin, TimestampMixin):
         ForeignKey("model_objects.id", ondelete="SET NULL"),
         default=None,
     )
+    workspace_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="SET NULL"),
+        default=None,
+    )
 
     # Relationships
     parent = relationship(

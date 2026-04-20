@@ -12,6 +12,7 @@ from app.core.security import (
 )
 from app.models.user import User
 from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserResponse
+from app.services import workspace_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -30,6 +31,10 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
     db.add(user)
     await db.flush()
     await db.refresh(user)
+
+    # Every user ships with a private org + "Personal" workspace so they can
+    # start building before they think about collaborators.
+    await workspace_service.create_personal_workspace(db, user)
 
     return TokenResponse(
         access_token=create_access_token(str(user.id)),

@@ -303,3 +303,14 @@ export interface WebhookCreate {
   url: string
   events: string[]
 }
+
+export type WorkspaceRole = 'owner' | 'admin' | 'editor' | 'reviewer' | 'viewer'
+
+export interface Workspace {
+  id: string
+  org_id: string
+  name: string
+  slug: string
+  role: WorkspaceRole
+  created_at: string
+}

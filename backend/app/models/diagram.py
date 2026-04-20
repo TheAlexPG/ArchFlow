@@ -34,6 +34,11 @@ class Diagram(Base, UUIDMixin, TimestampMixin):
         ForeignKey("drafts.id", ondelete="CASCADE"),
         default=None,
     )
+    workspace_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="SET NULL"),
+        default=None,
+    )
 
     # Relationships
     scope_object = relationship("ModelObject", foreign_keys=[scope_object_id])
