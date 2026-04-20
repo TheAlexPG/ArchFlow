@@ -117,21 +117,20 @@ export function CreateChildDiagramModal({
         </>
       }
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {/* Level label */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {/* Level badge — appears right under the modal title, above the input */}
         <div
           style={{
             fontSize: 10,
             color: '#525252',
             textTransform: 'uppercase',
             letterSpacing: '0.05em',
-            marginBottom: 2,
+            marginBottom: 4,
           }}
         >
-          {levelLabel(object.type)}
+          {levelLabel(object.type)} &middot; scoped to {object.name}
         </div>
 
-        <label style={{ fontSize: 12, color: '#a3a3a3' }}>Diagram name</label>
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -152,7 +151,6 @@ export function CreateChildDiagramModal({
             boxSizing: 'border-box',
           }}
         />
-        <div style={{ fontSize: 11, color: '#525252' }}>Scoped to: {object.name}</div>
       </div>
     </Modal>
   )
