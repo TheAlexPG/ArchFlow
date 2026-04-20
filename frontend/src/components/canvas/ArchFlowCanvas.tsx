@@ -672,7 +672,7 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
       onlyRenderVisibleElements
       fitView
       snapToGrid
-      snapGrid={[20, 20]}
+      snapGrid={[10, 10]}
       defaultEdgeOptions={{
         type: 'c4',
         markerEnd: { type: MarkerType.ArrowClosed, color: '#525252' },
@@ -682,7 +682,7 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
         cursor: commentComposeType ? 'crosshair' : undefined,
       }}
     >
-      <Background color="#333" gap={20} size={1} />
+      <Background color="#333" gap={10} size={1} />
       <Controls />
       <MiniMap
         nodeColor="#3b82f6"

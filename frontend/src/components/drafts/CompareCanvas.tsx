@@ -284,7 +284,7 @@ export function CompareCanvas({
       proOptions={{ hideAttribution: true }}
       style={{ background: '#0a0a0a' }}
     >
-      <Background color="#262626" gap={20} size={1} />
+      <Background color="#262626" gap={10} size={1} />
       <MiniMap
         nodeColor="#3b82f6"
         maskColor="rgba(0,0,0,0.75)"
