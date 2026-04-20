@@ -6,6 +6,9 @@ context:
   in_progress: []
   blocked: []
   recent_completed:
+  - id: versions-003
+    title: Revert to previous version (creates new version, non-destructive)
+    completed: 2026-04-21T00:41
   - id: versions-001
     title: Versions table + immutable snapshot on draft apply
     completed: 2026-04-21T00:32
@@ -15,10 +18,10 @@ context:
   next_up: []
   stats:
     total: 16
-    done: 2
+    done: 3
     in_progress: 0
     in_review: 0
-    todo: 14
+    todo: 13
     blocked: 0
     archived: 77
   active_phase:
@@ -26,10 +29,10 @@ context:
     name: Versions + Conflicts
     stats:
       total: 4
-      todo: 2
+      todo: 1
       in-progress: 0
       in-review: 0
-      done: 2
+      done: 3
       blocked: 0
       archived: 0
     target_date: null
@@ -1292,12 +1295,17 @@ epics:
     completed: 2026-04-21T00:32
   - id: versions-003
     title: Revert to previous version (creates new version, non-destructive)
-    status: todo
+    status: done
     priority: medium
     created: 2026-04-20T11:00
     notes: POST /versions/{id}/revert → replays snapshot onto main, creates new version.
     estimate: M
     phase: versions-conflicts
+    last_referenced: 2026-04-21T00:41
+    started: 2026-04-21T00:36
+    branch: feature/versions-revert
+    worktree: .worktrees/versions-revert
+    completed: 2026-04-21T00:41
   - id: versions-004
     title: Scheduled auto-snapshot (cron, weekly default)
     status: todo

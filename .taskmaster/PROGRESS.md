@@ -25,14 +25,14 @@
 | Edge Details & Customization | Planned | 0/0 | — |
 | Node Customization & Styling | Planned | 0/0 | — |
 | Phase 8 Polish + Enterprise | Archived | 0/0 | — |
-| Model Versions & Conflict Resolution | Planned | 2/5 | — |
+| Model Versions & Conflict Resolution | Planned | 3/5 | — |
 | Teams, Roles & Workspaces | Archived | 0/0 | — |
 | Real-time Collaboration | Planned | 0/4 | — |
 | API Keys, Webhooks, Rate Limiting | Archived | 0/0 | — |
 | AI Features (beyond insights) | Planned | 0/4 | — |
 | Enterprise SSO & Compliance | Planned | 0/3 | — |
 
-**Active Phase:** Versions + Conflicts (2/4 done)
+**Active Phase:** Versions + Conflicts (3/4 done)
 **Phases:** >> Versions + Conflicts | ... Real-time Collaboration | ... AI Features (extended) | ... Enterprise SSO
 
 **In Progress:** —
@@ -42,6 +42,21 @@
 ---
 
 ## Changelog
+
+### 2026-04-21 — Revert to previous version
+**Done:**
+- revert_to_snapshot service upserts + deletes per kind, scoped to workspace\nReplays placements after restoring diagrams\nPOST /versions/{id}/revert endpoint (admin)\nRevert button on VersionsPage with confirm\nFires version.reverted webhook\n2 new tests (round-trip + rename restoration)
+
+**Decisions:**
+- Upsert-in-place rather than delete-all-then-insert — avoids touching FKs that point at object ids (placements, connections, etc.). Renames show up as updates on the existing row instead of new rows.
+
+**Issues:**
+- None.
+
+**Tasks touched:** N/A
+
+---
+
 
 ### 2026-04-21 — Conflict detection on draft apply
 **Done:**
