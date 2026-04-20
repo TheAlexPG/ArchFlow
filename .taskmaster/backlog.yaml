@@ -1,21 +1,39 @@
 meta:
   project: ArchFlow
-  updated: '2026-04-20'
+  updated: '2026-04-21'
 context:
   active_epic: canvas-polish
   in_progress: []
   blocked: []
-  recent_completed: []
+  recent_completed:
+  - id: versions-001
+    title: Versions table + immutable snapshot on draft apply
+    completed: 2026-04-21T00:32
+  - id: versions-002
+    title: Conflict detection on draft apply (main moved since fork)
+    completed: 2026-04-21T00:32
   next_up: []
   stats:
-    total: 15
-    done: 0
+    total: 16
+    done: 2
     in_progress: 0
     in_review: 0
-    todo: 15
+    todo: 14
     blocked: 0
     archived: 77
-  active_phase: null
+  active_phase:
+    id: versions-conflicts
+    name: Versions + Conflicts
+    stats:
+      total: 4
+      todo: 2
+      in-progress: 0
+      in-review: 0
+      done: 2
+      blocked: 0
+      archived: 0
+    target_date: null
+    start_date: '2026-04-21'
   stale: []
 epics:
 - id: canvas-polish
@@ -1243,7 +1261,7 @@ epics:
   tasks:
   - id: versions-001
     title: Versions table + immutable snapshot on draft apply
-    status: todo
+    status: done
     priority: high
     created: 2026-04-20T11:00
     notes: New versions table with snapshot_data JSONB (full model JSON), label (auto
@@ -1252,9 +1270,14 @@ epics:
       /versions/compare.
     estimate: L
     phase: versions-conflicts
+    last_referenced: 2026-04-21T00:32
+    started: 2026-04-21T00:21
+    branch: feature/versions
+    worktree: .worktrees/versions
+    completed: 2026-04-21T00:32
   - id: versions-002
     title: Conflict detection on draft apply (main moved since fork)
-    status: todo
+    status: done
     priority: high
     created: 2026-04-20T11:00
     notes: Track base_version_id on draft. On apply, compare current main with fork
@@ -1262,6 +1285,11 @@ epics:
       types. Surface conflicts UI before merging.
     estimate: L
     phase: versions-conflicts
+    last_referenced: 2026-04-21T00:32
+    started: 2026-04-21T00:21
+    branch: feature/versions
+    worktree: .worktrees/versions
+    completed: 2026-04-21T00:32
   - id: versions-003
     title: Revert to previous version (creates new version, non-destructive)
     status: todo
@@ -1278,6 +1306,17 @@ epics:
     notes: Background task persists version at configurable interval.
     estimate: M
     phase: versions-conflicts
+  - id: versions-005
+    title: Diagram packs — folder-like groups on Diagrams page
+    status: todo
+    priority: medium
+    created: 2026-04-21T00:22
+    last_referenced: 2026-04-21T00:22
+    notes: Packs are organizational containers orthogonal to C4 parent hierarchy.
+      Create/rename/delete, assign diagrams, show grouped on /diagrams page. Orthogonal
+      to team ACL — a pack just groups, it doesn't gate access.
+    estimate: M
+    phase: realtime
 - id: teams-roles
   name: Teams, Roles & Workspaces
   status: archived
@@ -1613,10 +1652,11 @@ phases:
   completed: 2026-04-20T12:45
 - id: versions-conflicts
   name: Versions + Conflicts
-  status: planned
+  status: active
   order: 10
   description: Snapshot on merge, conflict detection, revert, scheduled snapshots.
   created: 2026-04-20T11:00
+  start_date: '2026-04-21'
 - id: teams-roles
   name: Teams, Roles, Workspaces
   status: archived

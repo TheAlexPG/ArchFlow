@@ -25,14 +25,15 @@
 | Edge Details & Customization | Planned | 0/0 | — |
 | Node Customization & Styling | Planned | 0/0 | — |
 | Phase 8 Polish + Enterprise | Archived | 0/0 | — |
-| Model Versions & Conflict Resolution | Planned | 0/4 | — |
+| Model Versions & Conflict Resolution | Planned | 2/5 | — |
 | Teams, Roles & Workspaces | Archived | 0/0 | — |
 | Real-time Collaboration | Planned | 0/4 | — |
 | API Keys, Webhooks, Rate Limiting | Archived | 0/0 | — |
 | AI Features (beyond insights) | Planned | 0/4 | — |
 | Enterprise SSO & Compliance | Planned | 0/3 | — |
 
-**Phases:** ... Versions + Conflicts | ... Real-time Collaboration | ... AI Features (extended) | ... Enterprise SSO
+**Active Phase:** Versions + Conflicts (2/4 done)
+**Phases:** >> Versions + Conflicts | ... Real-time Collaboration | ... AI Features (extended) | ... Enterprise SSO
 
 **In Progress:** —
 **Blocked:** —
@@ -41,6 +42,36 @@
 ---
 
 ## Changelog
+
+### 2026-04-21 — Conflict detection on draft apply
+**Done:**
+- conflict_service.compute_conflicts diffs main vs fork against base_version\nThree conflict types surfaced: both_edited, main_deleted_fork_edited, fork_deleted_main_edited\nGET /drafts/{id}/conflicts\nPOST /drafts/{id}/apply returns 409 with report body; ?force=true to override\nFrontend banner + Force-apply dialog on DraftDetailPage\nE2E test proves 409 without force and 200 with force
+
+**Decisions:**
+- Conflict gate is opt-in via 409 + force. Won't ever silently drop the fork's changes — the admin has to actively click Force apply. Matches how Git/GitHub surface merge conflicts.
+
+**Issues:**
+- Fork deletions not explicitly tracked yet (fork-delete/main-edit conflict type exists but can only fire if the user deletes on the fork via a tombstone — that path isn't in the service yet). Good enough for MVP: the common collision (both edit same node) is caught.
+
+**Tasks touched:** N/A
+
+---
+
+
+### 2026-04-21 — Versions table + snapshot on apply
+**Done:**
+- versions table + drafts.base_version_id + VersionSource enum\nversion_service.create_snapshot serialises full workspace state to JSONB\napply_draft now snapshots post-merge via conflict_service.apply_with_snapshot\nGET /versions + /snapshot + /{id} + /compare endpoints\nVersionsPage UI with compare + source pills
+
+**Decisions:**
+- Snapshot = full workspace blob, not delta. Simpler diffs, fine at current scale, can switch to compacted deltas later if payload grows.\nFork auto-takes a base snapshot if none exists yet — otherwise the first ever draft would have no base to detect conflicts against.
+
+**Issues:**
+- None blocking. Snapshot label is monotonic v1.N — no semver intent yet; picking major/minor needs UX input.
+
+**Tasks touched:** N/A
+
+---
+
 
 ### 2026-04-20 — Google OAuth stub
 **Done:**
