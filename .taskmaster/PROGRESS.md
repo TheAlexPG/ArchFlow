@@ -26,14 +26,14 @@
 | Node Customization & Styling | Planned | 0/0 | — |
 | Phase 8 Polish + Enterprise | Archived | 0/0 | — |
 | Model Versions & Conflict Resolution | Planned | 0/4 | — |
-| Teams, Roles & Workspaces | Planned | 0/4 | — |
+| Teams, Roles & Workspaces | Planned | 1/4 | — |
 | Real-time Collaboration | Planned | 0/4 | — |
-| API Keys, Webhooks, Rate Limiting | Planned | 3/3 | — |
+| API Keys, Webhooks, Rate Limiting | Archived | 0/0 | — |
 | AI Features (beyond insights) | Planned | 0/4 | — |
 | Enterprise SSO & Compliance | Planned | 0/3 | — |
 
-**Active Phase:** API Keys & Webhooks (3/3 done)
-**Phases:** ... Versions + Conflicts | ... Teams, Roles, Workspaces | ... Real-time Collaboration | >> API Keys & Webhooks | ... AI Features (extended) | ... Enterprise SSO
+**Active Phase:** Teams, Roles, Workspaces (1/4 done)
+**Phases:** ... Versions + Conflicts | >> Teams, Roles, Workspaces | ... Real-time Collaboration | ... AI Features (extended) | ... Enterprise SSO
 
 **In Progress:** —
 **Blocked:** —
@@ -42,6 +42,21 @@
 ---
 
 ## Changelog
+
+### 2026-04-20 — Orgs + Workspaces schema + auto-provisioning
+**Done:**
+- orgs + workspaces + workspace_members tables with workspace_role enum\nAuto-create personal org+workspace+owner membership on /auth/register\nGET /workspaces + GET /workspaces/{id} with membership check (404 for non-members)\nget_current_workspace dependency resolves X-Workspace-ID header and falls back to personal ws\nNullable workspace_id FK on model_objects + diagrams + backfill\nFrontend: workspace-store zustand, axios interceptor, WorkspaceSwitcher in sidebar\n3 new tests — all 13 green
+
+**Decisions:**
+- Header-based workspace selection (X-Workspace-ID) over JWT claim. Reason: workspace can change per-request without reminting tokens, matches how orgs ship in Linear/GitHub/Slack; JWT gets reserved for identity.\nEnum values_callable — avoids the Python-attribute-name-vs-Postgres-label mismatch that bit this task on the first test run.
+
+**Issues:**
+- Scoping queries by current workspace is NOT enforced in this task. Most endpoints remain unauthenticated — retrofitting auth across the whole API is a separate follow-up that properly belongs under teams-roles-002 (roles & permissions). Same story for adding workspace_id to connections/comments/flows/activity_log — done only on model_objects + diagrams for now.
+
+**Tasks touched:** N/A
+
+---
+
 
 ### 2026-04-20 — Rate limiting via Redis
 **Done:**

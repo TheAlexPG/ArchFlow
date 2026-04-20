@@ -6,33 +6,27 @@ context:
   in_progress: []
   blocked: []
   recent_completed:
-  - id: api-keys-003
-    title: Rate limiting via Redis
-    completed: 2026-04-20T20:01
-  - id: api-keys-002
-    title: Webhooks — subscribe to model-change events
-    completed: 2026-04-20T19:58
-  - id: api-keys-001
-    title: API keys table + Bearer key auth scheme
-    completed: 2026-04-20T19:51
+  - id: teams-roles-001
+    title: Organizations + Workspaces schema and scoping
+    completed: 2026-04-20T20:08
   next_up: []
   stats:
-    total: 22
-    done: 3
+    total: 19
+    done: 1
     in_progress: 0
     in_review: 0
-    todo: 19
+    todo: 18
     blocked: 0
-    archived: 70
+    archived: 73
   active_phase:
-    id: api-surface
-    name: API Keys & Webhooks
+    id: teams-roles
+    name: Teams, Roles, Workspaces
     stats:
-      total: 3
-      todo: 0
+      total: 4
+      todo: 3
       in-progress: 0
       in-review: 0
-      done: 3
+      done: 1
       blocked: 0
       archived: 0
     target_date: null
@@ -1308,7 +1302,7 @@ epics:
   tasks:
   - id: teams-roles-001
     title: Organizations + Workspaces schema and scoping
-    status: todo
+    status: done
     priority: high
     created: 2026-04-20T11:00
     notes: Spec §6.1. org/workspace tables; every resource (model_objects, connections,
@@ -1316,6 +1310,11 @@ epics:
       by current workspace.
     estimate: XL
     phase: teams-roles
+    last_referenced: 2026-04-20T20:08
+    started: 2026-04-20T20:02
+    branch: feature/teams-roles-001
+    worktree: .worktrees/teams-roles-001
+    completed: 2026-04-20T20:08
   - id: teams-roles-002
     title: Roles & permissions (Owner/Admin/Editor/Reviewer/Viewer)
     status: todo
@@ -1385,14 +1384,14 @@ epics:
     phase: realtime
 - id: api-keys-webhooks
   name: API Keys, Webhooks, Rate Limiting
-  status: planned
+  status: archived
   description: 'Programmable access: scoped API keys, outbound webhooks, request rate
     limiting. (MCP server intentionally descoped for now — REST API is enough.)'
   created: 2026-04-20T11:00
   tasks:
   - id: api-keys-001
     title: API keys table + Bearer key auth scheme
-    status: done
+    status: archived
     priority: high
     created: 2026-04-20T11:00
     notes: Spec §7.1. api_keys (org_id, workspace_id, key_hash, permissions[], expires_at).
@@ -1404,9 +1403,11 @@ epics:
     branch: feature/api-keys-001
     worktree: .worktrees/api-keys-001
     completed: 2026-04-20T19:51
+    archive_reason: done
+    archived: 2026-04-20T20:01
   - id: api-keys-002
     title: Webhooks — subscribe to model-change events
-    status: done
+    status: archived
     priority: medium
     created: 2026-04-20T11:00
     notes: Spec §7.3. webhooks table (url, events[], secret). Outbound delivery with
@@ -1418,9 +1419,11 @@ epics:
     branch: feature/api-keys-002
     worktree: .worktrees/api-keys-002
     completed: 2026-04-20T19:58
+    archive_reason: done
+    archived: 2026-04-20T20:01
   - id: api-keys-003
     title: Rate limiting via Redis
-    status: done
+    status: archived
     priority: medium
     created: 2026-04-20T11:00
     notes: Sliding-window rate limiter keyed on user/api_key id. Configurable limits.
@@ -1431,6 +1434,10 @@ epics:
     branch: feature/api-keys-003
     worktree: .worktrees/api-keys-003
     completed: 2026-04-20T20:01
+    archive_reason: done
+    archived: 2026-04-20T20:01
+  archive_reason: done
+  archived: 2026-04-20T20:01
 - id: ai-more
   name: AI Features (beyond insights)
   status: planned
@@ -1602,10 +1609,11 @@ phases:
   created: 2026-04-20T11:00
 - id: teams-roles
   name: Teams, Roles, Workspaces
-  status: planned
+  status: active
   order: 11
   description: Multi-tenancy, RBAC, teams, OAuth.
   created: 2026-04-20T11:00
+  start_date: '2026-04-20'
 - id: realtime
   name: Real-time Collaboration
   status: planned
@@ -1614,7 +1622,7 @@ phases:
   created: 2026-04-20T11:00
 - id: api-surface
   name: API Keys & Webhooks
-  status: active
+  status: archived
   order: 13
   description: API keys, outbound webhooks, rate limiting. (No MCP.)
   created: 2026-04-20T11:00
