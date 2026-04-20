@@ -7,11 +7,35 @@ import {
 } from '../../hooks/use-api'
 import { useDiagram } from '../../hooks/use-diagrams'
 import { useCanvasStore } from '../../stores/canvas-store'
-import type { CommentType, ObjectType } from '../../types/model'
+import type { CommentType, DiagramType, ObjectType } from '../../types/model'
 import { TYPE_ICONS, TYPE_LABELS } from '../canvas/node-utils'
 import { ObjectContextMenu } from '../common/ObjectContextMenu'
 
-const QUICK_TYPES: ObjectType[] = ['system', 'actor', 'external_system', 'app', 'store', 'group']
+const ALL_QUICK_TYPES: ObjectType[] = ['system', 'actor', 'external_system', 'app', 'store', 'group']
+
+const DIAGRAM_LEVEL_LABEL: Record<DiagramType, string> = {
+  system_landscape: 'L1 · System Landscape',
+  system_context: 'L1 · System Context',
+  container: 'L2 · Container',
+  component: 'L3 · Component',
+  custom: 'Custom',
+}
+
+function getQuickTypesForDiagram(diagramType: DiagramType | undefined): ObjectType[] {
+  if (!diagramType) return ALL_QUICK_TYPES
+  switch (diagramType) {
+    case 'system_landscape':
+    case 'system_context':
+      return ['system', 'actor', 'external_system', 'group']
+    case 'container':
+      return ['app', 'store', 'component', 'group']
+    case 'component':
+      return ['component', 'group']
+    case 'custom':
+    default:
+      return ALL_QUICK_TYPES
+  }
+}
 
 // Canvas comment types — dropping one of these enters compose mode; the
 // next click on empty canvas places the pin at that position.
@@ -33,6 +57,8 @@ export function AddObjectToolbar({ diagramId }: AddObjectToolbarProps) {
   // draft so they don't leak into the live model.
   const { data: diagram } = useDiagram(diagramId)
   const draftId = diagram?.draft_id ?? null
+  const quickTypes = getQuickTypesForDiagram(diagram?.type as DiagramType | undefined)
+  const levelLabel = diagram?.type ? DIAGRAM_LEVEL_LABEL[diagram.type as DiagramType] : null
   const { data: objects = [] } = useObjects(draftId)
   const { data: diagramObjects = [] } = useDiagramObjects(diagramId)
   const createObject = useCreateObject(draftId)
@@ -126,9 +152,14 @@ export function AddObjectToolbar({ diagramId }: AddObjectToolbarProps) {
           }}>
             {/* Header */}
             <div style={{ padding: '10px 12px', borderBottom: '1px solid #262626' }}>
-              <div style={{ fontSize: 11, color: '#737373', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              <div style={{ fontSize: 11, color: '#737373', marginBottom: 2, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 Model objects
               </div>
+              {levelLabel && (
+                <div style={{ fontSize: 10, color: '#525252', marginBottom: 6 }}>
+                  {levelLabel}
+                </div>
+              )}
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -209,7 +240,7 @@ export function AddObjectToolbar({ diagramId }: AddObjectToolbarProps) {
                 Or create new
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                {QUICK_TYPES.map((type) => (
+                {quickTypes.map((type) => (
                   <button
                     key={type}
                     onClick={() => handleCreateNew(type)}
