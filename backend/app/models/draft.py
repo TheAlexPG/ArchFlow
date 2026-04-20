@@ -1,7 +1,7 @@
 import enum
 import uuid
 
-from sqlalchemy import Enum, ForeignKey, String, Text
+from sqlalchemy import Enum, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -15,19 +15,16 @@ class DraftStatus(str, enum.Enum):
 
 
 class Draft(Base, UUIDMixin, TimestampMixin):
-    """Named branch of a diagram.
+    """Named feature branch that can contain N forked diagrams at once.
 
     When the user clicks "Draft new feature" on a diagram, we create a
-    Draft row, then fork the whole diagram (clone its Diagram row plus
-    every ModelObject, Connection, and DiagramObject it references) and
-    point ``forked_diagram_id`` at the clone. The user edits the clone on
-    the normal canvas in isolation; draft-scoped rows carry ``draft_id``
-    so default reads of the live model skip them.
+    Draft row plus a DraftDiagram row that points at the source and its
+    fork clone. Multiple live diagrams can be added to the same draft;
+    each gets its own DraftDiagram row.
 
-    ``apply`` copies the forked state onto the live source objects (via
-    their ``source_object_id`` / ``source_connection_id`` back-pointers)
-    and deletes what's left of the fork. ``discard`` just deletes the
-    fork and keeps the Draft row for the audit trail.
+    ``apply`` iterates all DraftDiagrams and merges each fork back onto
+    its source. ``discard`` deletes all fork clones and marks the Draft
+    discarded for the audit trail.
     """
 
     __tablename__ = "drafts"
@@ -43,22 +40,40 @@ class Draft(Base, UUIDMixin, TimestampMixin):
         default=None,
     )
 
-    # Which live diagram this draft was forked from.
-    source_diagram_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("diagrams.id", ondelete="SET NULL"),
-        default=None,
-    )
-    # The cloned diagram the user edits inside this draft.
-    forked_diagram_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("diagrams.id", ondelete="SET NULL"),
-        default=None,
+    diagrams: Mapped[list["DraftDiagram"]] = relationship(
+        "DraftDiagram",
+        back_populates="draft",
+        cascade="all, delete-orphan",
     )
 
+
+class DraftDiagram(Base, UUIDMixin, TimestampMixin):
+    """Junction table: one row per (draft, source diagram) pair.
+
+    A live diagram can appear in multiple open drafts simultaneously;
+    each draft keeps its own isolated fork clone.
+    """
+
+    __tablename__ = "draft_diagrams"
+
+    draft_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("drafts.id", ondelete="CASCADE")
+    )
+    source_diagram_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("diagrams.id", ondelete="CASCADE")
+    )
+    forked_diagram_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("diagrams.id", ondelete="CASCADE")
+    )
+
+    draft: Mapped["Draft"] = relationship("Draft", back_populates="diagrams")
     source_diagram = relationship(
         "Diagram", foreign_keys=[source_diagram_id], viewonly=True
     )
     forked_diagram = relationship(
         "Diagram", foreign_keys=[forked_diagram_id], viewonly=True
+    )
+
+    __table_args__ = (
+        UniqueConstraint("draft_id", "source_diagram_id", name="uq_draft_source_diagram"),
     )

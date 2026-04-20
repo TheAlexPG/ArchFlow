@@ -1,18 +1,16 @@
-"""Draft = forked branch of a diagram.
+"""Draft = feature branch that can fork N diagrams at once.
 
-The user clicks "Draft new feature" on a live diagram, this service clones
-the whole diagram (its Diagram row, the ModelObjects that appear on it,
-the Connections between those objects, and the DiagramObject placements)
-into a parallel set of rows tagged with ``draft_id``. The user edits that
-forked diagram on the normal canvas; live reads skip draft-owned rows.
+The user clicks "Draft new feature" on a live diagram. This service:
+  1. Creates a Draft row.
+  2. Creates a DraftDiagram row linking the source to a forked clone.
 
-On ``apply`` we walk the fork and, using the ``source_object_id`` /
-``source_connection_id`` back-pointers we set during the fork, copy each
-forked row's editable fields onto its live source; brand-new forked rows
-(no source) get promoted by clearing their draft_id. Then we remove the
-forked diagram itself and mark the Draft merged.
+Additional live diagrams can be added later via add_diagram_to_draft.
 
-On ``discard`` we just delete the fork and mark the Draft discarded.
+On ``apply`` we iterate every DraftDiagram, copy each fork back onto its
+source (using source_object_id / source_connection_id back-pointers), then
+delete all remaining draft-scoped rows and mark the Draft MERGED.
+
+On ``discard`` we delete every fork clone and mark the Draft DISCARDED.
 """
 
 import uuid
@@ -24,10 +22,9 @@ from sqlalchemy.orm import selectinload
 
 from app.models.connection import Connection
 from app.models.diagram import Diagram, DiagramObject
-from app.models.draft import Draft, DraftStatus
+from app.models.draft import Draft, DraftDiagram, DraftStatus
 from app.models.object import ModelObject
 from app.schemas.draft import DraftCreate, DraftUpdate
-
 
 # Editable fields copied during fork + apply. Keep in sync with ObjectCreate
 # / ConnectionCreate; skipping internal/bookkeeping columns.
@@ -59,13 +56,25 @@ _CONNECTION_EDITABLE_FIELDS = (
 
 async def list_drafts(db: AsyncSession) -> list[Draft]:
     result = await db.execute(
-        select(Draft).order_by(Draft.created_at.desc())
+        select(Draft)
+        .options(
+            selectinload(Draft.diagrams).selectinload(DraftDiagram.source_diagram),
+            selectinload(Draft.diagrams).selectinload(DraftDiagram.forked_diagram),
+        )
+        .order_by(Draft.created_at.desc())
     )
     return list(result.scalars().all())
 
 
 async def get_draft(db: AsyncSession, draft_id: uuid.UUID) -> Draft | None:
-    result = await db.execute(select(Draft).where(Draft.id == draft_id))
+    result = await db.execute(
+        select(Draft)
+        .where(Draft.id == draft_id)
+        .options(
+            selectinload(Draft.diagrams).selectinload(DraftDiagram.source_diagram),
+            selectinload(Draft.diagrams).selectinload(DraftDiagram.forked_diagram),
+        )
+    )
     return result.scalar_one_or_none()
 
 
@@ -79,16 +88,19 @@ async def create_draft(
     )
     db.add(draft)
     await db.flush()
-    await db.refresh(draft)
-    return draft
+    # Re-query with eager-loaded relationships (new draft has no DraftDiagrams yet).
+    loaded = await get_draft(db, draft.id)
+    return loaded  # type: ignore[return-value]
 
 
 async def update_draft(db: AsyncSession, draft: Draft, data: DraftUpdate) -> Draft:
     for field, value in data.model_dump(exclude_unset=True).items():
         setattr(draft, field, value)
     await db.flush()
-    await db.refresh(draft)
-    return draft
+    # Expire so get_draft re-fetches all relationships cleanly.
+    db.expire(draft)
+    loaded = await get_draft(db, draft.id)
+    return loaded  # type: ignore[return-value]
 
 
 async def delete_draft(db: AsyncSession, draft: Draft) -> None:
@@ -103,14 +115,13 @@ def _copy_fields(source: Any, dest: Any, fields: tuple[str, ...]) -> None:
         setattr(dest, field, getattr(source, field))
 
 
-async def fork_diagram_into_draft(
+async def _clone_diagram(
     db: AsyncSession, draft: Draft, source_diagram: Diagram
 ) -> Diagram:
     """Clone ``source_diagram`` and everything it references into the draft.
 
-    Returns the new forked Diagram. Both ``draft.source_diagram_id`` and
-    ``draft.forked_diagram_id`` are set. The caller's transaction commits
-    everything together.
+    Returns the new forked Diagram. Does NOT touch any Draft column —
+    the caller creates the DraftDiagram row.
     """
     # 1) Clone the diagram row.
     forked_diagram = Diagram(
@@ -123,9 +134,6 @@ async def fork_diagram_into_draft(
     )
     db.add(forked_diagram)
     await db.flush()
-
-    draft.source_diagram_id = source_diagram.id
-    draft.forked_diagram_id = forked_diagram.id
 
     # 2) Fetch all DiagramObject rows on the source diagram.
     do_rows = (
@@ -209,21 +217,111 @@ async def fork_diagram_into_draft(
     return forked_diagram
 
 
-async def apply_draft(db: AsyncSession, draft: Draft) -> dict:
-    """Merge fork back onto the live source diagram.
+# Keep the old name as an alias so existing call-sites inside the file still work.
+fork_diagram_into_draft = _clone_diagram
 
-    Field updates for forked rows that have a source are copied onto the
-    source row. Forked rows without a source (newly added in the draft)
-    get their draft_id cleared and become live. Forked-only rows that the
-    user removed from the fork simply stay deleted — there's nothing to
-    propagate. Missing live objects that the user deleted from the fork
-    are deleted on the source.
+
+async def add_diagram_to_draft(
+    db: AsyncSession, draft: Draft, source_diagram_id: uuid.UUID
+) -> DraftDiagram:
+    """Add a live diagram to an existing open draft.
+
+    Raises ValueError when:
+    - The draft is not OPEN.
+    - The source diagram is itself a fork (draft_id IS NOT NULL).
+    - A DraftDiagram for this (draft, source) pair already exists.
     """
     if draft.status != DraftStatus.OPEN:
-        raise ValueError(f"Draft is {draft.status.value}, cannot apply")
-    if not draft.forked_diagram_id or not draft.source_diagram_id:
-        raise ValueError("Draft has no forked diagram to apply")
+        raise ValueError(f"Draft is {draft.status.value}, cannot add diagrams")
 
+    source_diagram = await db.get(Diagram, source_diagram_id)
+    if source_diagram is None:
+        raise ValueError("Source diagram not found")
+    if source_diagram.draft_id is not None:
+        raise ValueError("Cannot add a fork to a draft")
+
+    # Check for duplicate.
+    existing = (
+        await db.execute(
+            select(DraftDiagram).where(
+                DraftDiagram.draft_id == draft.id,
+                DraftDiagram.source_diagram_id == source_diagram_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        raise ValueError("Diagram already in this draft")
+
+    forked = await _clone_diagram(db, draft, source_diagram)
+
+    dd = DraftDiagram(
+        draft_id=draft.id,
+        source_diagram_id=source_diagram_id,
+        forked_diagram_id=forked.id,
+    )
+    db.add(dd)
+    await db.flush()
+    await db.refresh(dd)
+    return dd
+
+
+async def remove_diagram_from_draft(
+    db: AsyncSession, draft: Draft, source_diagram_id: uuid.UUID
+) -> None:
+    """Remove a diagram from the draft; deletes the fork clone."""
+    dd = (
+        await db.execute(
+            select(DraftDiagram).where(
+                DraftDiagram.draft_id == draft.id,
+                DraftDiagram.source_diagram_id == source_diagram_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if dd is None:
+        raise ValueError("Diagram not found in this draft")
+
+    # Delete all draft-scoped connections and objects for this fork.
+    forked_diagram = await db.get(Diagram, dd.forked_diagram_id)
+
+    # Get forked object ids to clean up connections scoped to this draft
+    # (connections carry draft_id but may span multiple forked diagrams in
+    # edge cases; we scope deletion to objects of THIS fork).
+    forked_placements = (
+        await db.execute(
+            select(DiagramObject).where(
+                DiagramObject.diagram_id == dd.forked_diagram_id
+            )
+        )
+    ).scalars().all()
+    forked_obj_ids = [p.object_id for p in forked_placements]
+
+    if forked_obj_ids:
+        await db.execute(
+            delete(Connection).where(
+                Connection.draft_id == draft.id,
+                Connection.source_id.in_(forked_obj_ids),
+            )
+        )
+        await db.execute(
+            delete(ModelObject).where(
+                ModelObject.draft_id == draft.id,
+                ModelObject.id.in_(forked_obj_ids),
+            )
+        )
+
+    if forked_diagram is not None:
+        await db.delete(forked_diagram)
+
+    await db.delete(dd)
+    await db.flush()
+
+
+async def _apply_single_diagram(
+    db: AsyncSession,
+    draft: Draft,
+    dd: DraftDiagram,
+) -> dict:
+    """Apply a single DraftDiagram fork onto its source. Returns count summary."""
     updated_objects = 0
     created_objects = 0
     updated_connections = 0
@@ -232,17 +330,28 @@ async def apply_draft(db: AsyncSession, draft: Draft) -> dict:
     deleted_connections = 0
 
     # ── Objects ───────────────────────────────────────────────────
+    # Only objects that belong to THIS fork (placed on the forked diagram).
+    fork_placements = (
+        await db.execute(
+            select(DiagramObject).where(
+                DiagramObject.diagram_id == dd.forked_diagram_id
+            )
+        )
+    ).scalars().all()
+    fork_object_ids = {p.object_id for p in fork_placements}
+
     forked_objects = list(
         (
             await db.execute(
-                select(ModelObject).where(ModelObject.draft_id == draft.id)
+                select(ModelObject).where(
+                    ModelObject.draft_id == draft.id,
+                    ModelObject.id.in_(fork_object_ids),
+                )
             )
         ).scalars().all()
     )
 
     promoted_object_ids: dict[uuid.UUID, uuid.UUID] = {}
-    # maps forked_obj.id -> the live id it represents (either its source,
-    # or its own id after promotion). Used to rewire connection FKs.
 
     live_objects_by_source: dict[uuid.UUID, ModelObject] = {}
     for fo in forked_objects:
@@ -258,7 +367,7 @@ async def apply_draft(db: AsyncSession, draft: Draft) -> dict:
         for row in (
             await db.execute(
                 select(DiagramObject).where(
-                    DiagramObject.diagram_id == draft.source_diagram_id
+                    DiagramObject.diagram_id == dd.source_diagram_id
                 )
             )
         ).scalars().all()
@@ -278,7 +387,6 @@ async def apply_draft(db: AsyncSession, draft: Draft) -> dict:
         if fo.source_object_id:
             live = live_objects_by_source.get(fo.source_object_id)
             if live is None:
-                # The live source vanished mid-draft; promote the fork instead.
                 fo.draft_id = None
                 fo.source_object_id = None
                 promoted_object_ids[fo.id] = fo.id
@@ -297,20 +405,22 @@ async def apply_draft(db: AsyncSession, draft: Draft) -> dict:
     forked_connections = list(
         (
             await db.execute(
-                select(Connection).where(Connection.draft_id == draft.id)
+                select(Connection).where(
+                    Connection.draft_id == draft.id,
+                    Connection.source_id.in_(fork_object_ids),
+                    Connection.target_id.in_(fork_object_ids),
+                )
             )
         ).scalars().all()
     )
 
-    # Deletes on connections mirror the object rule: source connections not
-    # represented in the fork are gone.
     source_object_ids_set = source_diagram_object_ids
     source_connections = list(
         (
             await db.execute(
                 select(Connection).where(
-                    Connection.source_id.in_(source_object_ids_set),
-                    Connection.target_id.in_(source_object_ids_set),
+                    Connection.source_id.in_(source_object_ids_set or [uuid.uuid4()]),
+                    Connection.target_id.in_(source_object_ids_set or [uuid.uuid4()]),
                     Connection.draft_id.is_(None),
                 )
             )
@@ -325,9 +435,6 @@ async def apply_draft(db: AsyncSession, draft: Draft) -> dict:
             deleted_connections += 1
     await db.flush()
 
-    # Forked objects' new live ids are in promoted_object_ids; forked
-    # connections may reference forked objects, so we need to remap their
-    # source_id/target_id.
     for fc in forked_connections:
         remapped_source = promoted_object_ids.get(fc.source_id, fc.source_id)
         remapped_target = promoted_object_ids.get(fc.target_id, fc.target_id)
@@ -335,7 +442,6 @@ async def apply_draft(db: AsyncSession, draft: Draft) -> dict:
         if fc.source_connection_id:
             live_conn = await db.get(Connection, fc.source_connection_id)
             if live_conn is None:
-                # Promote the forked connection instead.
                 fc.source_id = remapped_source
                 fc.target_id = remapped_target
                 fc.draft_id = None
@@ -354,30 +460,18 @@ async def apply_draft(db: AsyncSession, draft: Draft) -> dict:
             created_connections += 1
     await db.flush()
 
-    # Promoted forked objects need to stay on the SOURCE diagram from now
-    # on, and any forked-only objects need DiagramObject entries on the
-    # source. Rewire placements: take the fork's DiagramObjects, rewrite
-    # object_id via promoted_object_ids, and upsert onto the source diagram.
-    forked_placements = list(
-        (
-            await db.execute(
-                select(DiagramObject).where(
-                    DiagramObject.diagram_id == draft.forked_diagram_id
-                )
-            )
-        ).scalars().all()
-    )
-    # Remove the source diagram's existing placements first so we can
-    # rewrite the full layout from the fork (the user might have moved
-    # things around).
+    # ── Placements ─────────────────────────────────────────────────
+    forked_placements_list = list(fork_placements)
     await db.execute(
-        delete(DiagramObject).where(DiagramObject.diagram_id == draft.source_diagram_id)
+        delete(DiagramObject).where(
+            DiagramObject.diagram_id == dd.source_diagram_id
+        )
     )
-    for fp in forked_placements:
+    for fp in forked_placements_list:
         live_obj_id = promoted_object_ids.get(fp.object_id, fp.object_id)
         db.add(
             DiagramObject(
-                diagram_id=draft.source_diagram_id,
+                diagram_id=dd.source_diagram_id,
                 object_id=live_obj_id,
                 position_x=fp.position_x,
                 position_y=fp.position_y,
@@ -385,27 +479,9 @@ async def apply_draft(db: AsyncSession, draft: Draft) -> dict:
                 height=fp.height,
             )
         )
-
-    # ── Cleanup the fork ────────────────────────────────────────
-    # Promoted forked rows are now live and must not be wiped. Anything
-    # still scoped to this draft is safe to delete.
-    await db.execute(
-        delete(Connection).where(Connection.draft_id == draft.id)
-    )
-    await db.execute(
-        delete(ModelObject).where(ModelObject.draft_id == draft.id)
-    )
-    forked_diagram = await db.get(Diagram, draft.forked_diagram_id)
-    if forked_diagram is not None:
-        await db.delete(forked_diagram)
-
-    draft.status = DraftStatus.MERGED
-    draft.forked_diagram_id = None
     await db.flush()
 
     return {
-        "draft_id": str(draft.id),
-        "status": draft.status.value,
         "updated_objects": updated_objects,
         "created_objects": created_objects,
         "deleted_objects": deleted_objects,
@@ -415,44 +491,84 @@ async def apply_draft(db: AsyncSession, draft: Draft) -> dict:
     }
 
 
+async def apply_draft(db: AsyncSession, draft: Draft) -> dict:
+    """Merge all forks back onto their respective live source diagrams."""
+    if draft.status != DraftStatus.OPEN:
+        raise ValueError(f"Draft is {draft.status.value}, cannot apply")
+
+    # Reload diagrams relationship to ensure it's populated.
+    draft_diagrams = list(
+        (
+            await db.execute(
+                select(DraftDiagram).where(DraftDiagram.draft_id == draft.id)
+            )
+        ).scalars().all()
+    )
+
+    if not draft_diagrams:
+        raise ValueError("Draft is empty")
+
+    totals: dict[str, int] = {
+        "updated_objects": 0,
+        "created_objects": 0,
+        "deleted_objects": 0,
+        "updated_connections": 0,
+        "created_connections": 0,
+        "deleted_connections": 0,
+        "applied_diagrams": 0,
+    }
+
+    for dd in draft_diagrams:
+        counts = await _apply_single_diagram(db, draft, dd)
+        for k, v in counts.items():
+            totals[k] += v
+        totals["applied_diagrams"] += 1
+
+    # Cleanup: delete any remaining draft-scoped rows (orphans after promote).
+    await db.execute(delete(Connection).where(Connection.draft_id == draft.id))
+    await db.execute(delete(ModelObject).where(ModelObject.draft_id == draft.id))
+
+    # Delete forked diagrams (and DraftDiagram rows via cascade).
+    for dd in draft_diagrams:
+        forked = await db.get(Diagram, dd.forked_diagram_id)
+        if forked is not None:
+            await db.delete(forked)
+
+    draft.status = DraftStatus.MERGED
+    await db.flush()
+    await db.refresh(draft, ["diagrams"])
+
+    return {
+        "draft_id": str(draft.id),
+        "status": draft.status.value,
+        **totals,
+    }
+
+
 def _object_fields_equal(a: ModelObject, b: ModelObject) -> bool:
     """True iff the two objects have identical editable fields."""
-    for field in _OBJECT_EDITABLE_FIELDS:
-        if getattr(a, field) != getattr(b, field):
-            return False
-    return True
+    return all(getattr(a, field) == getattr(b, field) for field in _OBJECT_EDITABLE_FIELDS)
 
 
 def _connection_fields_equal(a: Connection, b: Connection) -> bool:
-    for field in _CONNECTION_EDITABLE_FIELDS:
-        if getattr(a, field) != getattr(b, field):
-            return False
-    return True
+    return all(getattr(a, field) == getattr(b, field) for field in _CONNECTION_EDITABLE_FIELDS)
 
 
-async def compute_diff(db: AsyncSession, draft: Draft) -> dict:
-    """Compute a per-row status map used by the compare UI.
-
-    On the source canvas every live row is either ``unchanged``, ``modified``,
-    or ``deleted`` (the fork has no forked clone for it). On the fork canvas
-    every forked row is either ``unchanged``, ``modified``, or ``new``.
-    """
-    if not draft.forked_diagram_id or not draft.source_diagram_id:
-        raise ValueError("Draft has no fork to diff")
-
-    # ── Placements on each side, for "which live objects live on the source
-    #    diagram" and "which forked rows live on the fork diagram".
+async def _compute_single_diagram_diff(
+    db: AsyncSession, draft: Draft, dd: DraftDiagram
+) -> dict:
+    """Compute diff for one DraftDiagram. Returns per-diagram diff dict."""
     source_placements = (
         await db.execute(
             select(DiagramObject).where(
-                DiagramObject.diagram_id == draft.source_diagram_id
+                DiagramObject.diagram_id == dd.source_diagram_id
             )
         )
     ).scalars().all()
     fork_placements = (
         await db.execute(
             select(DiagramObject).where(
-                DiagramObject.diagram_id == draft.forked_diagram_id
+                DiagramObject.diagram_id == dd.forked_diagram_id
             )
         )
     ).scalars().all()
@@ -460,7 +576,6 @@ async def compute_diff(db: AsyncSession, draft: Draft) -> dict:
     source_object_ids = {p.object_id for p in source_placements}
     fork_object_ids = {p.object_id for p in fork_placements}
 
-    # Live objects on the source diagram (by id).
     live_objects_by_id: dict[uuid.UUID, ModelObject] = {}
     if source_object_ids:
         rows = (
@@ -470,7 +585,6 @@ async def compute_diff(db: AsyncSession, draft: Draft) -> dict:
         ).scalars().all()
         live_objects_by_id = {o.id: o for o in rows}
 
-    # Forked objects that appear on the fork diagram (by id).
     forked_objects_by_id: dict[uuid.UUID, ModelObject] = {}
     if fork_object_ids:
         rows = (
@@ -480,16 +594,14 @@ async def compute_diff(db: AsyncSession, draft: Draft) -> dict:
         ).scalars().all()
         forked_objects_by_id = {o.id: o for o in rows}
 
-    # For each forked obj placed on the fork diagram, what's its live source?
     fork_source_ids: set[uuid.UUID] = set()
-    source_objects = {}
-    fork_objects = {}
+    source_objects: dict[str, str] = {}
+    fork_objects: dict[str, str] = {}
     moved_on_fork: list[str] = []
     resized_on_fork: list[str] = []
     added = 0
     modified_objs = 0
 
-    # Index placements for quick position/size lookup.
     src_pos: dict[uuid.UUID, DiagramObject] = {p.object_id: p for p in source_placements}
     fork_pos: dict[uuid.UUID, DiagramObject] = {p.object_id: p for p in fork_placements}
 
@@ -509,7 +621,6 @@ async def compute_diff(db: AsyncSession, draft: Draft) -> dict:
         else:
             fork_objects[str(fid)] = "modified"
             modified_objs += 1
-        # Position / size compared through the pairing.
         sp = src_pos.get(fobj.source_object_id)
         fp = fork_pos.get(fid)
         if sp and fp:
@@ -519,10 +630,8 @@ async def compute_diff(db: AsyncSession, draft: Draft) -> dict:
                 resized_on_fork.append(str(fid))
 
     deleted = 0
-    for lid, lobj in live_objects_by_id.items():
+    for lid in live_objects_by_id:
         if lid in fork_source_ids:
-            # Matched — find the forked entry's status and mirror for source.
-            # Find forked obj with source_object_id == lid.
             matched_status = "unchanged"
             for fid, fobj in forked_objects_by_id.items():
                 if fobj.source_object_id == lid:
@@ -536,8 +645,6 @@ async def compute_diff(db: AsyncSession, draft: Draft) -> dict:
             deleted += 1
 
     # ── Connections ────────────────────────────────────────────
-    # Only connections actually renderable on each diagram. A connection
-    # renders when both endpoints are placed on the diagram.
     source_conns = (
         await db.execute(
             select(Connection).where(
@@ -547,18 +654,13 @@ async def compute_diff(db: AsyncSession, draft: Draft) -> dict:
             )
         )
     ).scalars().all()
-    fork_conns = (
+    fork_conns_all = (
         await db.execute(
-            select(Connection).where(
-                Connection.draft_id == draft.id,
-            )
+            select(Connection).where(Connection.draft_id == draft.id)
         )
     ).scalars().all()
-    # Fork connections may reference forked objects (normal case) or live
-    # objects (if the user wired a fresh connection to a live object they
-    # also added). For rendering, both endpoints must be on the fork diagram.
     fork_conns = [
-        c for c in fork_conns
+        c for c in fork_conns_all
         if c.source_id in fork_object_ids and c.target_id in fork_object_ids
     ]
 
@@ -602,14 +704,28 @@ async def compute_diff(db: AsyncSession, draft: Draft) -> dict:
             source_connections[str(sc.id)] = "deleted"
             deleted_conn += 1
 
-    # Names keyed by id — covers both sides for the summary strip.
     object_names: dict[str, str] = {}
     for lid, lo in live_objects_by_id.items():
         object_names[str(lid)] = lo.name
     for fid, fo in forked_objects_by_id.items():
         object_names[str(fid)] = fo.name
 
+    # Fetch names for source/forked diagrams.
+    source_diag = await db.get(Diagram, dd.source_diagram_id)
+    forked_diag = await db.get(Diagram, dd.forked_diagram_id)
+
     return {
+        "source_diagram_id": str(dd.source_diagram_id),
+        "forked_diagram_id": str(dd.forked_diagram_id),
+        "source_diagram_name": source_diag.name if source_diag else None,
+        "forked_diagram_name": forked_diag.name if forked_diag else None,
+        "source_objects": source_objects,
+        "fork_objects": fork_objects,
+        "source_connections": source_connections,
+        "fork_connections": fork_connections,
+        "moved_on_fork": moved_on_fork,
+        "resized_on_fork": resized_on_fork,
+        "object_names": object_names,
         "summary": {
             "added_objects": added,
             "modified_objects": modified_objs,
@@ -620,32 +736,73 @@ async def compute_diff(db: AsyncSession, draft: Draft) -> dict:
             "moved_objects": len(moved_on_fork),
             "resized_objects": len(resized_on_fork),
         },
-        "source_objects": source_objects,
-        "fork_objects": fork_objects,
-        "source_connections": source_connections,
-        "fork_connections": fork_connections,
-        "moved_on_fork": moved_on_fork,
-        "resized_on_fork": resized_on_fork,
-        "object_names": object_names,
     }
 
 
+async def compute_diff(db: AsyncSession, draft: Draft) -> dict:
+    """Compute a per-diagram diff for the compare UI."""
+    draft_diagrams = list(
+        (
+            await db.execute(
+                select(DraftDiagram).where(DraftDiagram.draft_id == draft.id)
+            )
+        ).scalars().all()
+    )
+
+    if not draft_diagrams:
+        zeros = {
+            "added_objects": 0,
+            "modified_objects": 0,
+            "deleted_objects": 0,
+            "added_connections": 0,
+            "modified_connections": 0,
+            "deleted_connections": 0,
+            "moved_objects": 0,
+            "resized_objects": 0,
+        }
+        return {"diagrams": [], "total_summary": zeros}
+
+    diagrams_diff = []
+    totals: dict[str, int] = {
+        "added_objects": 0,
+        "modified_objects": 0,
+        "deleted_objects": 0,
+        "added_connections": 0,
+        "modified_connections": 0,
+        "deleted_connections": 0,
+        "moved_objects": 0,
+        "resized_objects": 0,
+    }
+
+    for dd in draft_diagrams:
+        per_diag = await _compute_single_diagram_diff(db, draft, dd)
+        diagrams_diff.append(per_diag)
+        for k in totals:
+            totals[k] += per_diag["summary"].get(k, 0)
+
+    return {"diagrams": diagrams_diff, "total_summary": totals}
+
+
 async def discard_draft(db: AsyncSession, draft: Draft) -> Draft:
-    # CASCADE on draft_id FKs removes the fork clone entirely when we
-    # null out the marker; but we prefer to explicitly delete so stats
-    # are clear and we keep the Draft row for audit.
-    await db.execute(
-        delete(Connection).where(Connection.draft_id == draft.id)
+    """Delete all fork clones and mark draft DISCARDED."""
+    draft_diagrams = list(
+        (
+            await db.execute(
+                select(DraftDiagram).where(DraftDiagram.draft_id == draft.id)
+            )
+        ).scalars().all()
     )
-    await db.execute(
-        delete(ModelObject).where(ModelObject.draft_id == draft.id)
-    )
-    if draft.forked_diagram_id is not None:
-        forked = await db.get(Diagram, draft.forked_diagram_id)
+
+    # Delete all draft-scoped connections and objects.
+    await db.execute(delete(Connection).where(Connection.draft_id == draft.id))
+    await db.execute(delete(ModelObject).where(ModelObject.draft_id == draft.id))
+
+    for dd in draft_diagrams:
+        forked = await db.get(Diagram, dd.forked_diagram_id)
         if forked is not None:
             await db.delete(forked)
+
     draft.status = DraftStatus.DISCARDED
-    draft.forked_diagram_id = None
     await db.flush()
     await db.refresh(draft)
     return draft
@@ -656,9 +813,11 @@ async def fork_existing_diagram(
     source_diagram_id: uuid.UUID,
     draft_data: DraftCreate,
     author_id: uuid.UUID | None = None,
-) -> tuple[Draft, Diagram]:
-    """One-shot helper used by the API endpoint that starts a draft from
-    an existing diagram."""
+) -> tuple[Draft, DraftDiagram]:
+    """One-shot helper: create a Draft and fork one diagram into it.
+
+    Returns (Draft, DraftDiagram).
+    """
     source = await db.execute(
         select(Diagram)
         .where(Diagram.id == source_diagram_id, Diagram.draft_id.is_(None))
@@ -669,11 +828,52 @@ async def fork_existing_diagram(
         raise ValueError("Source diagram not found (or is itself a forked draft)")
 
     draft = await create_draft(db, draft_data, author_id=author_id)
-    forked = await fork_diagram_into_draft(db, draft, source_diagram)
-    # Our mutations on draft (source_diagram_id, forked_diagram_id) update
-    # server-side timestamps via onupdate=func.now(); the Python attribute
-    # expires on flush and needs a SELECT to be refilled. Refresh so the
-    # response serializer doesn't trigger a lazy load on an already-
-    # committed session (which throws MissingGreenlet).
+    forked = await _clone_diagram(db, draft, source_diagram)
+
+    dd = DraftDiagram(
+        draft_id=draft.id,
+        source_diagram_id=source_diagram_id,
+        forked_diagram_id=forked.id,
+    )
+    db.add(dd)
+    await db.flush()
+
+    # Expire the in-memory Draft so selectinload in get_draft re-fetches the
+    # now-populated diagrams collection (the identity map would otherwise
+    # return the stale empty list).
     await db.refresh(draft)
-    return draft, forked
+    db.expire(draft, ["diagrams"])
+
+    # Re-query so that DraftDiagram sub-relationships (source_diagram,
+    # forked_diagram) are eagerly loaded before returning.
+    loaded_draft = await get_draft(db, draft.id)
+    return loaded_draft, dd
+
+
+async def get_drafts_for_diagram(
+    db: AsyncSession, source_diagram_id: uuid.UUID
+) -> list[dict]:
+    """Return all OPEN drafts that include the given source diagram."""
+    rows = (
+        await db.execute(
+            select(DraftDiagram, Draft)
+            .join(Draft, Draft.id == DraftDiagram.draft_id)
+            .where(
+                DraftDiagram.source_diagram_id == source_diagram_id,
+                Draft.status == DraftStatus.OPEN,
+            )
+        )
+    ).all()
+
+    result = []
+    for dd, draft in rows:
+        result.append(
+            {
+                "draft_id": str(draft.id),
+                "draft_name": draft.name,
+                "draft_status": draft.status.value,
+                "source_diagram_id": str(dd.source_diagram_id),
+                "forked_diagram_id": str(dd.forked_diagram_id),
+            }
+        )
+    return result
