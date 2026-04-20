@@ -25,9 +25,9 @@
 | Edge Details & Customization | Planned | 0/0 | — |
 | Node Customization & Styling | Planned | 0/0 | — |
 | Phase 8 Polish + Enterprise | Archived | 0/0 | — |
-| Model Versions & Conflict Resolution | Planned | 3/5 | — |
+| Model Versions & Conflict Resolution | Planned | 3/5 | Diagram packs — folder-like groups on Diagrams page |
 | Teams, Roles & Workspaces | Archived | 0/0 | — |
-| Real-time Collaboration | Planned | 1/4 | — |
+| Real-time Collaboration | Planned | 1/4 | Cursor presence on canvas (see other users) |
 | API Keys, Webhooks, Rate Limiting | Archived | 0/0 | — |
 | AI Features (beyond insights) | Planned | 0/4 | — |
 | Enterprise SSO & Compliance | Planned | 0/3 | — |
@@ -35,7 +35,7 @@
 **Active Phase:** Real-time Collaboration (1/5 done)
 **Phases:** >> Real-time Collaboration | ... AI Features (extended) | ... Enterprise SSO
 
-**In Progress:** —
+**In Progress:** versions-005 Diagram packs — folder-like groups on Diagrams page, realtime-002 Cursor presence on canvas (see other users), realtime-003 Live object updates broadcast to open diagrams, realtime-004 Notifications (mentions in comments, in-app + email)
 **Blocked:** —
 **Next Up:** —
 

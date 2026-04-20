@@ -1,12 +1,13 @@
 import { memo } from 'react'
-import type { CursorState } from '../../hooks/use-realtime'
+import type { CursorState, SelectionState } from '../../hooks/use-realtime'
 
 interface Props {
   cursors: Record<string, CursorState>
+  selections?: Record<string, SelectionState>
 }
 
 // Deterministic hue from a user_id string (simple djb2-style hash).
-function hueFromId(id: string): number {
+export function hueFromId(id: string): number {
   let h = 5381
   for (let i = 0; i < id.length; i++) {
     h = ((h << 5) + h) ^ id.charCodeAt(i)
@@ -85,3 +86,49 @@ export const CursorsOverlay = memo(function CursorsOverlay({ cursors }: Props) {
     </>
   )
 })
+
+/**
+ * Paints a thin colored outline on every node another user has selected.
+ * Lives on top of the React Flow node layer, reads the node rect each
+ * render from the DOM (via `.react-flow__node[data-id="..."]`) so we
+ * don't have to plumb node positions through props.
+ */
+export const RemoteSelectionsOverlay = memo(function RemoteSelectionsOverlay({
+  selections,
+}: {
+  selections: Record<string, SelectionState>
+}) {
+  const entries = Object.entries(selections)
+  if (entries.length === 0) return null
+
+  return (
+    <>
+      {entries.flatMap(([userId, state]) =>
+        state.ids.map((nodeId) => (
+          <RemoteSelectionRing key={`${userId}:${nodeId}`} userId={userId} nodeId={nodeId} />
+        )),
+      )}
+    </>
+  )
+})
+
+function RemoteSelectionRing({ userId, nodeId }: { userId: string; nodeId: string }) {
+  const hue = hueFromId(userId)
+  // CSS-only: absolute-positioned against the ReactFlow pane root, targets
+  // the node by attribute selector via ::before? No — we rely on ReactFlow
+  // rendering each node into an absolutely-positioned wrapper. We use a
+  // neighbour selector + a fixed outline. Simplest: render a ring that
+  // sits inside the node-wrapper via React portal... but getting the DOM
+  // node requires a ref. For the MVP we just push a CSS rule that draws
+  // a thin ring around the targeted node via a style injection; resilient
+  // enough and renders no extra DOM in the flow layer.
+  const selector = `.react-flow__node[data-id="${cssEscape(nodeId)}"]`
+  const css = `${selector} { box-shadow: 0 0 0 2px hsl(${hue}, 70%, 60%) !important; border-radius: 6px; }`
+  return <style>{css}</style>
+}
+
+function cssEscape(s: string): string {
+  // Node ids are UUIDs → safe. Guard anyway in case a caller passes a
+  // synthetic id with a quote.
+  return s.replace(/["\\]/g, '\\$&')
+}

@@ -314,6 +314,16 @@ export interface WebhookCreate {
 
 export type WorkspaceRole = 'owner' | 'admin' | 'editor' | 'reviewer' | 'viewer'
 
+export interface Notification {
+  id: string
+  kind: string
+  title: string
+  body: string | null
+  target_url: string | null
+  read_at: string | null
+  created_at: string
+}
+
 export interface Workspace {
   id: string
   org_id: string

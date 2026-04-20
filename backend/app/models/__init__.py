@@ -8,6 +8,7 @@ from app.models.draft import Draft, DraftDiagram, DraftStatus
 from app.models.flow import Flow
 from app.models.object import ModelObject, ObjectScope, ObjectStatus, ObjectType
 from app.models.invite import WorkspaceInvite
+from app.models.notification import Notification
 from app.models.pack import DiagramPack
 from app.models.team import AccessLevel, DiagramAccess, Team, TeamMember
 from app.models.user import User
@@ -39,6 +40,7 @@ __all__ = [
     "ObjectStatus",
     "AccessLevel",
     "DiagramAccess",
+    "Notification",
     "ObjectType",
     "Organization",
     "Role",

@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { useAuthStore } from '../../stores/auth-store'
+import { NotificationsBell } from './NotificationsBell'
 import { WorkspaceSwitcher } from './WorkspaceSwitcher'
 
 const NAV_ITEMS = [
@@ -34,8 +35,17 @@ export function AppSidebar() {
         background: '#111',
       }}
     >
-      <div style={{ padding: '0 16px', marginBottom: 16 }}>
+      <div
+        style={{
+          padding: '0 16px',
+          marginBottom: 16,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}
+      >
         <div style={{ fontWeight: 700, fontSize: 16 }}>ArchFlow</div>
+        <NotificationsBell />
       </div>
 
       <WorkspaceSwitcher />
