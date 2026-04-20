@@ -4,6 +4,7 @@ import {
   useConnections,
   useDeleteObject,
   useObject,
+  useObjectChildren,
   useObjectHistory,
   useObjects,
   useUpdateObject,
@@ -201,6 +202,11 @@ export function ObjectSidebar() {
               <DrillIntoSection obj={obj} />
             )}
 
+            {/* Group members — only for group type */}
+            {obj.type === 'group' && (
+              <GroupMembersSection groupId={obj.id} />
+            )}
+
             {/* Delete */}
             <button
               onClick={handleDelete}
@@ -374,6 +380,62 @@ function CrossReferences({ objectId }: { objectId: string }) {
           </div>
         ) : (
           <span className="text-neutral-600">None</span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function GroupMembersSection({ groupId }: { groupId: string }) {
+  const { data: children = [], isLoading } = useObjectChildren(groupId)
+  const { selectNode } = useCanvasStore()
+
+  return (
+    <div>
+      <div className="text-xs text-neutral-500 mb-1">Members</div>
+      <div
+        style={{
+          background: '#0f0f0f',
+          border: '1px solid #262626',
+          borderRadius: 6,
+          overflow: 'hidden',
+        }}
+      >
+        {isLoading ? (
+          <div style={{ padding: '8px 10px', fontSize: 12, color: '#525252' }}>Loading…</div>
+        ) : children.length === 0 ? (
+          <div style={{ padding: '8px 10px', fontSize: 12, color: '#525252', fontStyle: 'italic' }}>
+            No objects in this group yet.
+          </div>
+        ) : (
+          children.map((child) => (
+            <button
+              key={child.id}
+              onClick={() => selectNode(child.id)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                width: '100%',
+                padding: '6px 10px',
+                background: 'transparent',
+                border: 'none',
+                borderBottom: '1px solid #1a1a1a',
+                color: '#d4d4d4',
+                cursor: 'pointer',
+                fontSize: 12,
+                textAlign: 'left',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = '#1c1c1c')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+            >
+              <span style={{ opacity: 0.5, fontSize: 13 }}>{TYPE_ICONS[child.type]}</span>
+              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {child.name}
+              </span>
+              <span style={{ fontSize: 10, color: '#525252' }}>{TYPE_LABELS[child.type]}</span>
+            </button>
+          ))
         )}
       </div>
     </div>

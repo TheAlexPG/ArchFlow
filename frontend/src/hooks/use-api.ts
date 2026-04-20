@@ -68,6 +68,17 @@ export interface ActivityLogEntry {
   created_at: string
 }
 
+export function useObjectChildren(id: string | null) {
+  return useQuery({
+    queryKey: ['objects', id, 'children'],
+    queryFn: async () => {
+      const { data } = await api.get<ModelObject[]>(`/objects/${id}/children`)
+      return data
+    },
+    enabled: !!id,
+  })
+}
+
 export function useObjectHistory(id: string | null) {
   return useQuery({
     queryKey: ['objects', id, 'history'],
