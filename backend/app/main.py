@@ -16,6 +16,7 @@ from app.api.v1.flows import router as flows_router
 from app.api.v1.objects import router as objects_router
 from app.api.v1.webhooks import router as webhooks_router
 from app.api.v1.diagram_access import router as diagram_access_router
+from app.api.v1.invites import router as invites_router
 from app.api.v1.members import router as members_router
 from app.api.v1.oauth_stub import router as oauth_router
 from app.api.v1.teams import router as teams_router
@@ -62,6 +63,7 @@ def create_app() -> FastAPI:
     app.include_router(teams_router, prefix="/api/v1")
     app.include_router(diagram_access_router, prefix="/api/v1")
     app.include_router(oauth_router, prefix="/api/v1")
+    app.include_router(invites_router, prefix="/api/v1")
 
     @app.get("/health")
     async def health():

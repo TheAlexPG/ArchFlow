@@ -345,7 +345,9 @@ export interface TeamMember {
 
 export type DiagramAccessLevel = 'read' | 'write' | 'admin'
 
+/** Exactly one of team_id / user_id is non-null. */
 export interface DiagramGrant {
-  team_id: string
+  team_id: string | null
+  user_id: string | null
   access_level: DiagramAccessLevel
 }

@@ -3,6 +3,7 @@ import { AppSidebar } from '../components/nav/AppSidebar'
 import {
   useInviteMember,
   useRemoveMember,
+  useTeams,
   useUpdateMemberRole,
   useWorkspaceMembers,
 } from '../hooks/use-api'
@@ -18,8 +19,11 @@ export function MembersPage() {
   const updateRole = useUpdateMemberRole(wsId)
   const remove = useRemoveMember(wsId)
 
+  const { data: teams = [] } = useTeams(wsId)
+
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<WorkspaceRole>('editor')
+  const [selectedTeams, setSelectedTeams] = useState<string[]>([])
   const [inviteLink, setInviteLink] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
 
@@ -27,8 +31,13 @@ export function MembersPage() {
     setErr(null)
     setInviteLink(null)
     try {
-      const result = await invite.mutateAsync({ email: email.trim(), role })
+      const result = await invite.mutateAsync({
+        email: email.trim(),
+        role,
+        team_ids: selectedTeams,
+      })
       setEmail('')
+      setSelectedTeams([])
       if (result.type === 'invite_created') {
         setInviteLink(
           `${window.location.origin}/accept-invite?token=${result.invite.token}`,
@@ -76,6 +85,42 @@ export function MembersPage() {
               {invite.isPending ? 'Sending…' : 'Invite'}
             </button>
           </div>
+
+          {teams.length > 0 && (
+            <div className="mt-3">
+              <label className="block text-xs text-neutral-400 mb-1">
+                Add to teams ({selectedTeams.length} selected) — they'll see
+                only what these teams can access
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {teams.map((t) => {
+                  const on = selectedTeams.includes(t.id)
+                  return (
+                    <button
+                      type="button"
+                      key={t.id}
+                      onClick={() =>
+                        setSelectedTeams(
+                          on
+                            ? selectedTeams.filter((x) => x !== t.id)
+                            : [...selectedTeams, t.id],
+                        )
+                      }
+                      className={`text-xs px-2 py-1 rounded border ${
+                        on
+                          ? 'bg-blue-600/20 border-blue-500 text-blue-300'
+                          : 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:border-neutral-500'
+                      }`}
+                    >
+                      {on ? '✓ ' : '+ '}
+                      {t.name}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
           {err && <div className="text-xs text-red-400 mt-2">{err}</div>}
           {inviteLink && (
             <div className="text-xs text-amber-300 mt-2 break-all">
