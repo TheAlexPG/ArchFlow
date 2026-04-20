@@ -17,7 +17,7 @@ import {
   useCreateDraftFromDiagram,
   useDiscardDraft,
   useDraft,
-  useDrafts,
+  useDraftsForDiagram,
 } from '../hooks/use-api'
 import { useAuthStore } from '../stores/auth-store'
 import { useCanvasStore } from '../stores/canvas-store'
@@ -31,6 +31,10 @@ export function DiagramPage() {
   const { selectedEdgeId, treeOpen, toggleTree } = useCanvasStore()
   const [searchOpen, setSearchOpen] = useState(false)
   const [draftModalOpen, setDraftModalOpen] = useState(false)
+  const [draftsDropdownOpen, setDraftsDropdownOpen] = useState(false)
+
+  const isForkedDiagram = !!diagram?.draft_id
+  const isLiveDiagram = !!diagram && !diagram.draft_id
 
   // ── Draft context ──────────────────────────────────────────
   // This diagram is forked if it carries a draft_id. We fetch the draft
@@ -40,18 +44,11 @@ export function DiagramPage() {
   const applyDraft = useApplyDraft()
   const discardDraft = useDiscardDraft()
   const { data: currentDraft } = useDraft(diagram?.draft_id ?? null)
-  // For live diagrams we surface "already has an open draft" so the user
-  // can jump to it instead of forking another.
-  const { data: drafts = [] } = useDrafts()
-  const openDraftForThisDiagram = drafts.find(
-    (d) =>
-      d.status === 'open' &&
-      diagramId &&
-      d.source_diagram_id === diagramId,
+  // For live diagrams: fetch all open features that include this diagram as a source
+  const { data: draftsForDiagram = [] } = useDraftsForDiagram(
+    isLiveDiagram ? diagramId : undefined,
   )
-
-  const isForkedDiagram = !!diagram?.draft_id
-  const isLiveDiagram = !!diagram && !diagram.draft_id
+  const openDraftsForThisDiagram = draftsForDiagram.filter((d) => d.status === 'open')
 
   const handleStartDraft = () => {
     forkDraft.reset()
@@ -65,8 +62,9 @@ export function DiagramPage() {
       {
         onSuccess: (draft) => {
           setDraftModalOpen(false)
-          if (draft.forked_diagram_id) {
-            navigate(`/diagram/${draft.forked_diagram_id}`)
+          const forkedId = draft.diagrams[0]?.forked_diagram_id
+          if (forkedId) {
+            navigate(`/diagram/${forkedId}`)
           }
         },
       },
@@ -84,29 +82,17 @@ export function DiagramPage() {
 
   const handleApply = () => {
     if (!currentDraft) return
-    if (!confirm(`Apply "${currentDraft.name}" to the source diagram?`)) return
+    if (!confirm(`Apply feature "${currentDraft.name}" — merges all diagram changes into their source diagrams?`)) return
     applyDraft.mutate(currentDraft.id, {
-      onSuccess: () => {
-        if (currentDraft.source_diagram_id) {
-          navigate(`/diagram/${currentDraft.source_diagram_id}`)
-        } else {
-          navigate('/drafts')
-        }
-      },
+      onSuccess: () => navigate('/drafts'),
     })
   }
 
   const handleDiscard = () => {
     if (!currentDraft) return
-    if (!confirm('Discard this draft? The forked diagram will be deleted.')) return
+    if (!confirm('Discard this feature? All forked diagrams will be deleted.')) return
     discardDraft.mutate(currentDraft.id, {
-      onSuccess: () => {
-        if (currentDraft.source_diagram_id) {
-          navigate(`/diagram/${currentDraft.source_diagram_id}`)
-        } else {
-          navigate('/drafts')
-        }
-      },
+      onSuccess: () => navigate('/drafts'),
     })
   }
 
@@ -196,21 +182,79 @@ export function DiagramPage() {
               </span>
             </button>
             {isLiveDiagram && (
-              openDraftForThisDiagram ? (
-                <button
-                  onClick={() =>
-                    openDraftForThisDiagram.forked_diagram_id &&
-                    navigate(`/diagram/${openDraftForThisDiagram.forked_diagram_id}`)
-                  }
-                  style={{
-                    background: '#1e3a5f', border: '1px solid #3b82f6', borderRadius: 6,
-                    color: '#93c5fd', cursor: 'pointer', fontSize: 12, padding: '4px 10px',
-                  }}
-                  title="Open existing draft for this diagram"
-                >
-                  ✎ Draft in progress: {openDraftForThisDiagram.name}
-                </button>
-              ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, position: 'relative' }}>
+                {openDraftsForThisDiagram.length > 0 && (
+                  <div style={{ position: 'relative' }}>
+                    <button
+                      onClick={() => setDraftsDropdownOpen((v) => !v)}
+                      style={{
+                        background: '#1e3a5f', border: '1px solid #3b82f6', borderRadius: 6,
+                        color: '#93c5fd', cursor: 'pointer', fontSize: 12, padding: '4px 10px',
+                      }}
+                      title="Open features that include this diagram"
+                    >
+                      Drafts ({openDraftsForThisDiagram.length}) ▾
+                    </button>
+                    {draftsDropdownOpen && (
+                      <>
+                        <div
+                          style={{ position: 'fixed', inset: 0, zIndex: 49 }}
+                          onClick={() => setDraftsDropdownOpen(false)}
+                        />
+                        <div style={{
+                          position: 'absolute', top: '100%', right: 0, marginTop: 4,
+                          background: '#171717', border: '1px solid #333', borderRadius: 8,
+                          boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+                          zIndex: 50, minWidth: 260, overflow: 'hidden',
+                        }}>
+                          {openDraftsForThisDiagram.map((d) => {
+                            const forkEntry = d.diagrams.find((dd) => dd.source_diagram_id === diagramId)
+                            return (
+                              <div key={d.id} style={{
+                                padding: '10px 14px',
+                                borderBottom: '1px solid #262626',
+                              }}>
+                                <div style={{ fontSize: 12, fontWeight: 600, color: '#d4d4d4', marginBottom: 6 }}>
+                                  {d.name}
+                                </div>
+                                <div style={{ display: 'flex', gap: 8 }}>
+                                  {forkEntry && (
+                                    <button
+                                      onClick={() => {
+                                        setDraftsDropdownOpen(false)
+                                        navigate(`/diagram/${forkEntry.forked_diagram_id}`)
+                                      }}
+                                      style={{
+                                        fontSize: 11, padding: '3px 8px',
+                                        background: 'transparent', border: '1px solid #3b82f6',
+                                        borderRadius: 4, color: '#93c5fd', cursor: 'pointer',
+                                      }}
+                                    >
+                                      Open fork
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={() => {
+                                      setDraftsDropdownOpen(false)
+                                      navigate(`/drafts/${d.id}`)
+                                    }}
+                                    style={{
+                                      fontSize: 11, padding: '3px 8px',
+                                      background: 'transparent', border: '1px solid #404040',
+                                      borderRadius: 4, color: '#a3a3a3', cursor: 'pointer',
+                                    }}
+                                  >
+                                    Feature dashboard
+                                  </button>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
                 <button
                   onClick={handleStartDraft}
                   disabled={forkDraft.isPending}
@@ -218,11 +262,11 @@ export function DiagramPage() {
                     background: '#1a1a1a', border: '1px solid #3b82f6', borderRadius: 6,
                     color: '#93c5fd', cursor: 'pointer', fontSize: 12, padding: '4px 10px',
                   }}
-                  title="Start a draft forked from this diagram"
+                  title="Start a new feature draft forked from this diagram"
                 >
                   ✎ Draft new feature
                 </button>
-              )
+              </div>
             )}
             <button
               onClick={async () => {
@@ -269,8 +313,8 @@ export function DiagramPage() {
           }}>
             <span>✎</span>
             <span>
-              Editing draft: <b style={{ color: '#f5f5f5' }}>{currentDraft.name}</b> —
-              edits stay on the fork; Apply merges them into the source diagram.
+              Editing feature: <b style={{ color: '#f5f5f5' }}>{currentDraft.name}</b> —
+              edits stay on the fork; Apply merges all feature changes into their source diagrams.
             </span>
             <span style={{ flex: 1 }} />
             <button
@@ -303,7 +347,7 @@ export function DiagramPage() {
                 opacity: applyDraft.isPending ? 0.5 : 1,
               }}
             >
-              Apply to source
+              Apply feature changes to source diagrams
             </button>
           </div>
         )}
