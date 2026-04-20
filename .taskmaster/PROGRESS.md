@@ -25,15 +25,14 @@
 | Edge Details & Customization | Planned | 0/0 | — |
 | Node Customization & Styling | Planned | 0/0 | — |
 | Phase 8 Polish + Enterprise | Archived | 0/0 | — |
-| Model Versions & Conflict Resolution | Planned | 4/5 | — |
+| Model Versions & Conflict Resolution | Archived | 0/0 | — |
 | Teams, Roles & Workspaces | Archived | 0/0 | — |
-| Real-time Collaboration | Planned | 4/4 | — |
+| Real-time Collaboration | Archived | 0/0 | — |
 | API Keys, Webhooks, Rate Limiting | Archived | 0/0 | — |
 | AI Features (beyond insights) | Planned | 0/4 | — |
 | Enterprise SSO & Compliance | Planned | 0/3 | — |
 
-**Active Phase:** Real-time Collaboration (5/5 done)
-**Phases:** >> Real-time Collaboration | ... AI Features (extended) | ... Enterprise SSO
+**Phases:** ... AI Features (extended) | ... Enterprise SSO
 
 **In Progress:** —
 **Blocked:** —

@@ -5,44 +5,17 @@ context:
   active_epic: canvas-polish
   in_progress: []
   blocked: []
-  recent_completed:
-  - id: versions-005
-    title: Diagram packs — folder-like groups on Diagrams page
-    completed: 2026-04-21T01:08
-  - id: realtime-002
-    title: Cursor presence on canvas (see other users)
-    completed: 2026-04-21T01:08
-  - id: realtime-003
-    title: Live object updates broadcast to open diagrams
-    completed: 2026-04-21T01:08
-  - id: realtime-004
-    title: Notifications (mentions in comments, in-app + email)
-    completed: 2026-04-21T01:08
-  - id: realtime-001
-    title: WebSocket endpoint + Redis pub/sub backbone
-    completed: 2026-04-21T00:49
+  recent_completed: []
   next_up: []
   stats:
-    total: 16
-    done: 8
+    total: 7
+    done: 0
     in_progress: 0
     in_review: 0
-    todo: 8
+    todo: 7
     blocked: 0
-    archived: 77
-  active_phase:
-    id: realtime
-    name: Real-time Collaboration
-    stats:
-      total: 5
-      todo: 0
-      in-progress: 0
-      in-review: 0
-      done: 5
-      blocked: 0
-      archived: 0
-    target_date: null
-    start_date: '2026-04-21'
+    archived: 86
+  active_phase: null
   stale: []
 epics:
 - id: canvas-polish
@@ -1263,14 +1236,14 @@ epics:
   archived: 2026-04-20T19:43
 - id: versions
   name: Model Versions & Conflict Resolution
-  status: planned
+  status: archived
   description: Immutable version snapshot on draft merge; conflict detection when
     main moved since fork; revert; scheduled versions.
   created: 2026-04-20T11:00
   tasks:
   - id: versions-001
     title: Versions table + immutable snapshot on draft apply
-    status: done
+    status: archived
     priority: high
     created: 2026-04-20T11:00
     notes: New versions table with snapshot_data JSONB (full model JSON), label (auto
@@ -1284,9 +1257,11 @@ epics:
     branch: feature/versions
     worktree: .worktrees/versions
     completed: 2026-04-21T00:32
+    archive_reason: done
+    archived: 2026-04-21T01:08
   - id: versions-002
     title: Conflict detection on draft apply (main moved since fork)
-    status: done
+    status: archived
     priority: high
     created: 2026-04-20T11:00
     notes: Track base_version_id on draft. On apply, compare current main with fork
@@ -1299,9 +1274,11 @@ epics:
     branch: feature/versions
     worktree: .worktrees/versions
     completed: 2026-04-21T00:32
+    archive_reason: done
+    archived: 2026-04-21T01:08
   - id: versions-003
     title: Revert to previous version (creates new version, non-destructive)
-    status: done
+    status: archived
     priority: medium
     created: 2026-04-20T11:00
     notes: POST /versions/{id}/revert → replays snapshot onto main, creates new version.
@@ -1312,17 +1289,21 @@ epics:
     branch: feature/versions-revert
     worktree: .worktrees/versions-revert
     completed: 2026-04-21T00:41
+    archive_reason: done
+    archived: 2026-04-21T01:08
   - id: versions-004
     title: Scheduled auto-snapshot (cron, weekly default)
-    status: todo
+    status: archived
     priority: low
     created: 2026-04-20T11:00
     notes: Background task persists version at configurable interval.
     estimate: M
     phase: versions-conflicts
+    archive_reason: done
+    archived: 2026-04-21T01:08
   - id: versions-005
     title: Diagram packs — folder-like groups on Diagrams page
-    status: done
+    status: archived
     priority: medium
     created: 2026-04-21T00:22
     last_referenced: 2026-04-21T01:08
@@ -1334,6 +1315,10 @@ epics:
     started: 2026-04-21T00:55
     branch: feature/packs
     completed: 2026-04-21T01:08
+    archive_reason: done
+    archived: 2026-04-21T01:08
+  archive_reason: done
+  archived: 2026-04-21T01:08
 - id: teams-roles
   name: Teams, Roles & Workspaces
   status: archived
@@ -1409,14 +1394,14 @@ epics:
   archived: 2026-04-20T21:10
 - id: realtime
   name: Real-time Collaboration
-  status: planned
+  status: archived
   description: WebSocket-based cursor presence, live object updates, Redis pub/sub
     for multi-instance.
   created: 2026-04-20T11:00
   tasks:
   - id: realtime-001
     title: WebSocket endpoint + Redis pub/sub backbone
-    status: done
+    status: archived
     priority: high
     created: 2026-04-20T11:00
     notes: Spec §9.3. /ws/diagrams/{id} connection; broadcast object create/update/delete
@@ -1428,9 +1413,11 @@ epics:
     branch: feature/realtime-001
     worktree: .worktrees/realtime-001
     completed: 2026-04-21T00:49
+    archive_reason: done
+    archived: 2026-04-21T01:08
   - id: realtime-002
     title: Cursor presence on canvas (see other users)
-    status: done
+    status: archived
     priority: medium
     created: 2026-04-20T11:00
     notes: Render remote cursors on ReactFlow, throttled position updates over WS.
@@ -1440,9 +1427,11 @@ epics:
     started: 2026-04-21T00:55
     branch: feature/realtime-polish
     completed: 2026-04-21T01:08
+    archive_reason: done
+    archived: 2026-04-21T01:08
   - id: realtime-003
     title: Live object updates broadcast to open diagrams
-    status: done
+    status: archived
     priority: medium
     created: 2026-04-20T11:00
     notes: When a user edits, others see the change within ~100ms. Optimistic local
@@ -1453,9 +1442,11 @@ epics:
     started: 2026-04-21T00:55
     branch: feature/realtime-polish
     completed: 2026-04-21T01:08
+    archive_reason: done
+    archived: 2026-04-21T01:08
   - id: realtime-004
     title: Notifications (mentions in comments, in-app + email)
-    status: done
+    status: archived
     priority: low
     created: 2026-04-20T11:00
     notes: Spec §6.4. notifications table, in-app badge, email via SMTP.
@@ -1465,6 +1456,10 @@ epics:
     started: 2026-04-21T00:55
     branch: feature/realtime-polish
     completed: 2026-04-21T01:08
+    archive_reason: done
+    archived: 2026-04-21T01:08
+  archive_reason: done
+  archived: 2026-04-21T01:08
 - id: api-keys-webhooks
   name: API Keys, Webhooks, Rate Limiting
   status: archived
@@ -1700,7 +1695,7 @@ phases:
   start_date: '2026-04-20'
 - id: realtime
   name: Real-time Collaboration
-  status: active
+  status: archived
   order: 12
   description: WebSocket presence + live updates + notifications.
   created: 2026-04-20T11:00
