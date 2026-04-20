@@ -42,11 +42,11 @@ export function DraftsPage() {
         </div>
 
         <p className="text-xs text-neutral-500 mb-6 max-w-3xl">
-          A draft is a forked copy of a diagram. Open any diagram → click{' '}
-          <span className="text-neutral-300">✎ Draft</span> in the header → you
+          A feature draft can include one or more diagram forks. Open any diagram → click{' '}
+          <span className="text-neutral-300">✎ Draft new feature</span> in the header → you
           get a private sandbox where you can redraw without touching the live
-          model. When the feature is ready, hit <b>Apply</b> and the changes
-          land on the source diagram.
+          model. When the feature is ready, hit <b>Apply</b> and all changes
+          land on their source diagrams.
         </p>
 
         {isLoading && <div className="text-sm text-neutral-500">Loading…</div>}
@@ -61,17 +61,14 @@ export function DraftsPage() {
             <DraftCard
               key={d.id}
               draft={d}
-              // Clicking the card takes you to the compare view — that's
-              // where the diff is visible. Editing the fork is a separate
-              // action on the card for open drafts.
               onOpen={() => navigate(`/drafts/${d.id}`)}
               onEdit={
-                d.status === 'open' && d.forked_diagram_id
-                  ? () => navigate(`/diagram/${d.forked_diagram_id}`)
+                d.status === 'open' && d.diagrams.length === 1
+                  ? () => navigate(`/diagram/${d.diagrams[0].forked_diagram_id}`)
                   : undefined
               }
               onDelete={() => {
-                if (confirm(`Delete draft "${d.name}" (and its fork)?`))
+                if (confirm(`Delete feature "${d.name}" and all its forks?`))
                   deleteDraft.mutate(d.id)
               }}
             />
@@ -119,10 +116,18 @@ function DraftCard({
           {draft.description}
         </div>
       )}
+      <div className="text-[10px] text-neutral-600 mb-1.5">
+        {draft.diagrams.length} diagram{draft.diagrams.length !== 1 ? 's' : ''}
+        {draft.diagrams.length > 0 && (
+          <span className="text-neutral-700">
+            {' '}· {draft.diagrams.map((d) => d.source_diagram_name ?? d.source_diagram_id).join(', ')}
+          </span>
+        )}
+      </div>
       <div className="text-[10px] text-neutral-600 flex items-center justify-between">
         <span>
           {draft.status === 'open'
-            ? 'Click to compare with source'
+            ? 'Click to view feature dashboard'
             : `Archived ${new Date(draft.updated_at).toLocaleDateString()}`}
         </span>
         <div className="flex items-center gap-2">
