@@ -1,88 +1,89 @@
 meta:
   project: ArchFlow
-  updated: '2026-04-16'
+  updated: '2026-04-20'
 context:
-  active_epic: phase8-polish
+  active_epic: c4-nesting
   in_progress:
-  - id: frontend-canvas-008
-    title: Implement color-coding overlays based on active filter (tag/tech/status/team)
-    epic: frontend-canvas
+  - id: c4-nesting-001
+    title: Quick-create palette filtered by current diagram level (L1/L2/L3)
+    epic: c4-nesting
     branch: ''
-  - id: frontend-canvas-009
-    title: Add flow alternative paths (branching) support
-    epic: frontend-canvas
+  - id: c4-nesting-002
+    title: Inline "Create child diagram" from node drill icon
+    epic: c4-nesting
     branch: ''
-  - id: frontend-canvas-010
-    title: Show numbered step labels on canvas connections during flow playback
-    epic: frontend-canvas
-    branch: ''
-  - id: frontend-canvas-012
-    title: Implement "Get insights" AI feature for object analysis
-    epic: frontend-canvas
-    branch: ''
-  - id: detail-sidebar-004
-    title: Implement per-object history tab (change log scoped to selected object)
-    epic: detail-sidebar
-    branch: ''
-  - id: detail-sidebar-005
-    title: Implement typed comments (question, inaccuracy, idea) with icons
-    epic: detail-sidebar
-    branch: ''
-  - id: detail-sidebar-007
-    title: Add "note" comment type alongside question/inaccurate/idea
-    epic: detail-sidebar
-    branch: ''
-  - id: groups-002
-    title: Add groups as layout containers with drag-to-reorganize chips at canvas
-      bottom
-    epic: groups
-    branch: ''
-  - id: phase8-polish-001
-    title: Import Structurizr DSL — parse objects + relationships
-    epic: phase8-polish
-    branch: ''
-  - id: phase8-polish-002
-    title: Import Mermaid flowchart / C4 diagrams
-    epic: phase8-polish
-    branch: ''
-  - id: phase8-polish-003
-    title: Global activity feed page (audit log view)
-    epic: phase8-polish
-    branch: ''
-  - id: phase8-polish-004
-    title: 'Canvas performance: onlyRenderVisibleElements + lazy children'
-    epic: phase8-polish
-    branch: ''
-  - id: phase8-polish-005
-    title: Helm chart skeleton for self-hosted deployment
-    epic: phase8-polish
+  - id: c4-nesting-003
+    title: Breadcrumbs reflect C4 parent chain up the scope_object_id trail
+    epic: c4-nesting
     branch: ''
   blocked: []
   recent_completed: []
   next_up: []
   stats:
-    total: 13
+    total: 82
     done: 0
-    in_progress: 0
-    in_review: 13
-    todo: 0
+    in_progress: 3
+    in_review: 0
+    todo: 22
     blocked: 0
-    archived: 44
+    archived: 57
   active_phase:
-    id: enterprise
-    name: Polish + Enterprise
+    id: c4-nesting
+    name: C4 Nesting UX
+    target_date: null
+    start_date: '2026-04-20'
     stats:
-      total: 5
+      total: 3
       todo: 0
-      in-progress: 0
-      in-review: 5
+      in-progress: 3
+      in-review: 0
       done: 0
       blocked: 0
       archived: 0
-    target_date: null
-    start_date: '2026-04-16'
   stale: []
 epics:
+- id: c4-nesting
+  name: C4 Nesting UX (L1 → L2 → L3 drill-down)
+  status: active
+  description: 'Make the C4 hierarchy buildable from the canvas: level-aware quick-create, inline child-diagram
+    creation, breadcrumb parent chain.'
+  created: 2026-04-20T11:00
+  tasks:
+  - id: c4-nesting-001
+    title: Quick-create palette filtered by current diagram level (L1/L2/L3)
+    status: in-progress
+    priority: critical
+    created: 2026-04-20T11:00
+    started: 2026-04-20T11:00
+    notes: 'AddObjectToolbar QUICK_TYPES currently hardcoded to [system,actor,external_system,app,store,group].
+      Compute per diagram.type: L1 (system_landscape/context) → system,actor,external_system,group; L2
+      (container) → app,store,component,group; L3 (component) → component,group; custom → all. Show level
+      label in popup header.'
+    estimate: M
+    phase: c4-nesting
+  - id: c4-nesting-002
+    title: Inline "Create child diagram" from node drill icon
+    status: in-progress
+    priority: critical
+    created: 2026-04-20T11:00
+    started: 2026-04-20T11:00
+    notes: C4Node drill icon only shows when childDiagrams.length>0 — so first drill-down is impossible.
+      Show icon on system/app/store nodes always. On click with 0 children, open a small modal "Create
+      container/component diagram for <parent>" with an auto-filled name, create via POST /diagrams (scope_object_id=parent.id,
+      type=container|component), navigate to it.
+    estimate: L
+    phase: c4-nesting
+  - id: c4-nesting-003
+    title: Breadcrumbs reflect C4 parent chain up the scope_object_id trail
+    status: in-progress
+    priority: high
+    created: 2026-04-20T11:00
+    started: 2026-04-20T11:00
+    notes: 'DiagramPage breadcrumbs currently Home › Diagrams › <name>. Replace with the scope chain:
+      walk diagram.scope_object_id → parent object → find diagrams containing it, compose a clickable
+      trail (Home › Landscape › <System> › <App/Store>). Each crumb navigates to that parent diagram.'
+    estimate: M
+    phase: c4-nesting
 - id: project-setup
   name: Project Setup & Infrastructure
   status: active
@@ -95,8 +96,7 @@ epics:
     priority: critical
     created: 2026-04-15T11:34
     last_referenced: 2026-04-15T12:18
-    notes: Create directory structure, root package.json/pyproject.toml, .gitignore,
-      .editorconfig
+    notes: Create directory structure, root package.json/pyproject.toml, .gitignore, .editorconfig
     estimate: S
     phase: core-model
     started: 2026-04-15T12:15
@@ -111,8 +111,8 @@ epics:
     priority: critical
     created: 2026-04-15T11:34
     last_referenced: 2026-04-15T12:19
-    notes: docker-compose.yml with backend, frontend, postgres, redis, caddy services.
-      Include health checks.
+    notes: docker-compose.yml with backend, frontend, postgres, redis, caddy services. Include health
+      checks.
     estimate: M
     phase: core-model
     started: 2026-04-15T12:18
@@ -122,8 +122,7 @@ epics:
 - id: backend-api
   name: Backend API Foundation
   status: active
-  description: FastAPI app, PostgreSQL models, CRUD endpoints for model objects and
-    connections
+  description: FastAPI app, PostgreSQL models, CRUD endpoints for model objects and connections
   created: 2026-04-15T11:34
   tasks:
   - id: backend-api-001
@@ -132,8 +131,7 @@ epics:
     priority: critical
     created: 2026-04-15T11:34
     last_referenced: 2026-04-15T12:20
-    notes: FastAPI app factory, async SQLAlchemy engine, Alembic config, health endpoint,
-      CORS middleware
+    notes: FastAPI app factory, async SQLAlchemy engine, Alembic config, health endpoint, CORS middleware
     estimate: M
     phase: core-model
     started: 2026-04-15T12:19
@@ -148,9 +146,9 @@ epics:
     priority: critical
     created: 2026-04-15T11:34
     last_referenced: 2026-04-15T12:21
-    notes: 'SQLAlchemy models per spec section 9.2: model_objects (UUID, type enum,
-      parent_id, technology[], tags[], metadata JSONB, position_data) and connections
-      (source_id, target_id, label, protocol, direction enum, tags[])'
+    notes: 'SQLAlchemy models per spec section 9.2: model_objects (UUID, type enum, parent_id, technology[],
+      tags[], metadata JSONB, position_data) and connections (source_id, target_id, label, protocol, direction
+      enum, tags[])'
     estimate: M
     phase: core-model
     started: 2026-04-15T12:20
@@ -164,8 +162,8 @@ epics:
     priority: critical
     created: 2026-04-15T11:34
     last_referenced: 2026-04-15T12:23
-    notes: GET/POST/PUT/DELETE /objects, GET /objects/{id}/children, GET /objects/{id}/dependencies.
-      Pydantic schemas with validation.
+    notes: GET/POST/PUT/DELETE /objects, GET /objects/{id}/children, GET /objects/{id}/dependencies. Pydantic
+      schemas with validation.
     estimate: L
     phase: core-model
     started: 2026-04-15T12:22
@@ -178,8 +176,8 @@ epics:
     priority: high
     created: 2026-04-15T11:34
     last_referenced: 2026-04-15T12:23
-    notes: GET/POST/PUT/DELETE /connections, GET /connections/between?src={}&tgt={}.
-      Validate source/target exist.
+    notes: GET/POST/PUT/DELETE /connections, GET /connections/between?src={}&tgt={}. Validate source/target
+      exist.
     estimate: M
     phase: core-model
     started: 2026-04-15T12:23
@@ -187,15 +185,14 @@ epics:
     archive_reason: done
     archived: 2026-04-15T14:34
   - id: backend-api-005
-    title: Add lifecycle status field (live/future/deprecated/removed) to model_objects
-      schema
+    title: Add lifecycle status field (live/future/deprecated/removed) to model_objects schema
     status: archived
     priority: high
     created: 2026-04-15T11:42
     last_referenced: 2026-04-15T12:21
-    notes: 'IcePanel reference: every object has a lifecycle status (Live, Future,
-      Deprecated, Removed). Add status enum field to model_objects table and Pydantic
-      schemas. This is a core property, not just an overlay. Default to "live".'
+    notes: 'IcePanel reference: every object has a lifecycle status (Live, Future, Deprecated, Removed).
+      Add status enum field to model_objects table and Pydantic schemas. This is a core property, not
+      just an overlay. Default to "live".'
     estimate: S
     phase: core-model
     started: 2026-04-15T12:21
@@ -208,8 +205,8 @@ epics:
     priority: high
     created: 2026-04-15T11:49
     last_referenced: 2026-04-15T12:21
-    notes: 'IcePanel: each object has Scope (Internal/External) and a customizable
-      Icon. Add scope enum and icon string fields to model_objects table.'
+    notes: 'IcePanel: each object has Scope (Internal/External) and a customizable Icon. Add scope enum
+      and icon string fields to model_objects table.'
     estimate: S
     phase: core-model
     started: 2026-04-15T12:21
@@ -222,9 +219,9 @@ epics:
     priority: high
     created: 2026-04-15T11:49
     last_referenced: 2026-04-15T12:22
-    notes: 'IcePanel has: System, Actor, Group, App, Store as quick-create types.
-      Extend our type enum: system, container, component, actor, external_system,
-      group, app (container subtype), store (container subtype).'
+    notes: 'IcePanel has: System, Actor, Group, App, Store as quick-create types. Extend our type enum:
+      system, container, component, actor, external_system, group, app (container subtype), store (container
+      subtype).'
     estimate: S
     phase: core-model
     started: 2026-04-15T12:21
@@ -234,8 +231,7 @@ epics:
 - id: frontend-canvas
   name: Frontend Canvas
   status: active
-  description: React + TypeScript app, React Flow canvas, object/connection rendering,
-    basic interactions
+  description: React + TypeScript app, React Flow canvas, object/connection rendering, basic interactions
   created: 2026-04-15T11:34
   tasks:
   - id: frontend-canvas-001
@@ -244,8 +240,8 @@ epics:
     priority: critical
     created: 2026-04-15T11:34
     last_referenced: 2026-04-15T12:26
-    notes: Vite + React 18 + TypeScript, TailwindCSS, Zustand store skeleton, React
-      Router, API client setup
+    notes: Vite + React 18 + TypeScript, TailwindCSS, Zustand store skeleton, React Router, API client
+      setup
     estimate: M
     phase: core-model
     started: 2026-04-15T12:26
@@ -258,9 +254,8 @@ epics:
     priority: critical
     created: 2026-04-15T11:34
     last_referenced: 2026-04-15T12:32
-    notes: React Flow (xyflow) canvas, custom node components for system/container/component/actor
-      types, custom edge component for connections. Display name, type icon, technology
-      tags.
+    notes: React Flow (xyflow) canvas, custom node components for system/container/component/actor types,
+      custom edge component for connections. Display name, type icon, technology tags.
     estimate: L
     phase: core-model
     started: 2026-04-15T12:26
@@ -274,8 +269,8 @@ epics:
     priority: high
     created: 2026-04-15T11:34
     last_referenced: 2026-04-15T12:32
-    notes: 'Right sidebar panel: select node to view/edit name, description, type,
-      technology, tags, owner_team, external_links, metadata. Save changes via API.'
+    notes: 'Right sidebar panel: select node to view/edit name, description, type, technology, tags, owner_team,
+      external_links, metadata. Save changes via API.'
     estimate: M
     phase: core-model
     started: 2026-04-15T12:32
@@ -288,8 +283,8 @@ epics:
     priority: high
     created: 2026-04-15T11:34
     last_referenced: 2026-04-15T12:32
-    notes: Toolbar for adding new objects by type, delete selected, drag to move,
-      connect handles for drawing edges, context menu. Persist position changes.
+    notes: Toolbar for adding new objects by type, delete selected, drag to move, connect handles for
+      drawing edges, context menu. Persist position changes.
     estimate: L
     phase: core-model
     started: 2026-04-15T12:32
@@ -302,8 +297,8 @@ epics:
     priority: high
     created: 2026-04-15T11:34
     last_referenced: 2026-04-15T12:32
-    notes: Zustand store for objects/connections, fetch on load, optimistic updates,
-      error handling. API client with typed endpoints.
+    notes: Zustand store for objects/connections, fetch on load, optimistic updates, error handling. API
+      client with typed endpoints.
     estimate: M
     phase: core-model
     started: 2026-04-15T12:32
@@ -316,8 +311,8 @@ epics:
     priority: high
     created: 2026-04-15T11:42
     last_referenced: 2026-04-15T12:32
-    notes: 'IcePanel reference: nodes show colored status indicator (green=Live, purple=Future,
-      orange=Deprecated, red=Removed). Status editable in object inspector sidebar.'
+    notes: 'IcePanel reference: nodes show colored status indicator (green=Live, purple=Future, orange=Deprecated,
+      red=Removed). Status editable in object inspector sidebar.'
     estimate: S
     phase: core-model
     started: 2026-04-15T12:32
@@ -330,10 +325,9 @@ epics:
     priority: high
     created: 2026-04-15T11:43
     last_referenced: 2026-04-15T14:43
-    notes: 'IcePanel reference: bottom toolbar with tabs (Tags, Technology, Status,
-      Teams). Each tab shows filterable chips. Selecting a filter highlights/dims
-      nodes on canvas. Status tab shows counts (e.g. "Live 17"). Technology shows
-      unique tech stacks. Teams shows owner_team values.'
+    notes: 'IcePanel reference: bottom toolbar with tabs (Tags, Technology, Status, Teams). Each tab shows
+      filterable chips. Selecting a filter highlights/dims nodes on canvas. Status tab shows counts (e.g.
+      "Live 17"). Technology shows unique tech stacks. Teams shows owner_team values.'
     estimate: L
     phase: c4-zoom
     started: 2026-04-15T14:42
@@ -342,49 +336,58 @@ epics:
     archived: 2026-04-16T12:59
   - id: frontend-canvas-008
     title: Implement color-coding overlays based on active filter (tag/tech/status/team)
-    status: in-review
+    status: archived
     priority: medium
     created: 2026-04-15T11:43
     last_referenced: 2026-04-16T13:16
-    notes: When a filter tab is active, color-code nodes by the selected dimension.
-      Non-matching nodes dim to ~30% opacity. Saved as named perspectives per spec
-      section 3.2.
+    notes: When a filter tab is active, color-code nodes by the selected dimension. Non-matching nodes
+      dim to ~30% opacity. Saved as named perspectives per spec section 3.2.
     estimate: L
     phase: overlays-flows
     started: 2026-04-16T13:14
+    completed: 2026-04-20T11:00
+    archive_reason: done
+    archived: 2026-04-20T11:00
+    verification: overlay-utils + canvas-store active filter with color outlines — verified in 5aa85de
   - id: frontend-canvas-009
     title: Add flow alternative paths (branching) support
-    status: in-review
+    status: archived
     priority: medium
     created: 2026-04-15T11:50
     last_referenced: 2026-04-16T13:21
-    notes: 'IcePanel: flows can have alternative paths (e.g. "Google OAuth alternative").
-      A branch point in the flow with a different sequence. Needs flow_branches table
-      or parent_step_id for branching.'
+    notes: 'IcePanel: flows can have alternative paths (e.g. "Google OAuth alternative"). A branch point
+      in the flow with a different sequence. Needs flow_branches table or parent_step_id for branching.'
     estimate: L
     phase: overlays-flows
     started: 2026-04-16T13:16
+    completed: 2026-04-20T11:00
+    archive_reason: done
+    archived: 2026-04-20T11:00
+    verification: flow steps carry optional branch tag; playback respects branch — verified
   - id: frontend-canvas-010
     title: Show numbered step labels on canvas connections during flow playback
-    status: in-review
+    status: archived
     priority: medium
     created: 2026-04-15T11:50
     last_referenced: 2026-04-16T13:21
-    notes: 'IcePanel: when a flow is active, connections show numbered labels (1,
-      2, 3...) with step descriptions. Active step is highlighted.'
+    notes: 'IcePanel: when a flow is active, connections show numbered labels (1, 2, 3...) with step descriptions.
+      Active step is highlighted.'
     estimate: M
     phase: overlays-flows
     started: 2026-04-16T13:21
+    completed: 2026-04-20T11:00
+    archive_reason: done
+    archived: 2026-04-20T11:00
+    verification: C4Edge renders numbered circular badge on active flow branch — verified
   - id: frontend-canvas-011
     title: Implement "View dependencies" visual overlay (highlight upstream/downstream)
     status: archived
     priority: medium
     created: 2026-04-16T11:30
     last_referenced: 2026-04-16T12:59
-    notes: 'IcePanel: context menu "View dependencies" highlights all upstream/downstream
-      connected objects on canvas, dims others. Backend API /objects/{id}/dependencies
-      already exists. Need: visual overlay with dim/highlight states, configurable
-      depth (1/2/n hops).'
+    notes: 'IcePanel: context menu "View dependencies" highlights all upstream/downstream connected objects
+      on canvas, dims others. Backend API /objects/{id}/dependencies already exists. Need: visual overlay
+      with dim/highlight states, configurable depth (1/2/n hops).'
     estimate: M
     phase: overlays-flows
     started: 2026-04-16T12:59
@@ -393,17 +396,20 @@ epics:
     archived: 2026-04-16T13:24
   - id: frontend-canvas-012
     title: Implement "Get insights" AI feature for object analysis
-    status: in-review
+    status: archived
     priority: low
     created: 2026-04-16T11:30
     last_referenced: 2026-04-16T13:13
-    notes: 'IcePanel: context menu "Get insights" triggers AI analysis of object —
-      generates description, suggests related objects, detects potential issues. Backend
-      needs LLM integration (per spec section 8). Frontend modal/panel with streaming
-      AI response.'
+    notes: 'IcePanel: context menu "Get insights" triggers AI analysis of object — generates description,
+      suggests related objects, detects potential issues. Backend needs LLM integration (per spec section
+      8). Frontend modal/panel with streaming AI response.'
     estimate: M
     phase: ai-features
     started: 2026-04-16T13:11
+    completed: 2026-04-20T11:00
+    archive_reason: done
+    archived: 2026-04-20T11:00
+    verification: AI insights modal gated on ANTHROPIC_API_KEY — verified
 - id: auth
   name: Basic Authentication
   status: active
@@ -416,8 +422,8 @@ epics:
     priority: high
     created: 2026-04-15T11:34
     last_referenced: 2026-04-15T12:32
-    notes: Users table, bcrypt password hashing, JWT access + refresh tokens, /auth/register,
-      /auth/login, /auth/refresh endpoints. Protected route middleware.
+    notes: Users table, bcrypt password hashing, JWT access + refresh tokens, /auth/register, /auth/login,
+      /auth/refresh endpoints. Protected route middleware.
     estimate: M
     phase: core-model
     started: 2026-04-15T12:32
@@ -430,8 +436,8 @@ epics:
     priority: high
     created: 2026-04-15T11:34
     last_referenced: 2026-04-15T12:32
-    notes: Login and register forms, token storage, auth context provider, protected
-      route wrapper, redirect to login if unauthenticated
+    notes: Login and register forms, token storage, auth context provider, protected route wrapper, redirect
+      to login if unauthenticated
     estimate: M
     phase: core-model
     started: 2026-04-15T12:32
@@ -450,8 +456,7 @@ epics:
     priority: medium
     created: 2026-04-15T11:34
     last_referenced: 2026-04-15T12:32
-    notes: GET /export — returns full model (objects + connections) as JSON. Frontend
-      download button.
+    notes: GET /export — returns full model (objects + connections) as JSON. Frontend download button.
     estimate: M
     phase: core-model
     started: 2026-04-15T12:32
@@ -464,8 +469,8 @@ epics:
     priority: medium
     created: 2026-04-15T11:34
     last_referenced: 2026-04-15T12:33
-    notes: POST /import — accepts JSON model, validates schema, creates objects +
-      connections. Frontend file upload dialog with validation feedback.
+    notes: POST /import — accepts JSON model, validates schema, creates objects + connections. Frontend
+      file upload dialog with validation feedback.
     estimate: M
     phase: core-model
     started: 2026-04-15T12:32
@@ -478,8 +483,7 @@ epics:
     priority: low
     created: 2026-04-15T11:50
     last_referenced: 2026-04-15T14:46
-    notes: 'IcePanel: camera icon next to Flows dropdown. One-click export current
-      canvas view as PNG.'
+    notes: 'IcePanel: camera icon next to Flows dropdown. One-click export current canvas view as PNG.'
     estimate: S
     phase: c4-zoom
     started: 2026-04-15T14:45
@@ -489,8 +493,8 @@ epics:
 - id: object-tree
   name: Model Objects Tree Panel
   status: planned
-  description: Hierarchical tree panel with search, filter, and quick-create for all
-    model objects (IcePanel reference)
+  description: Hierarchical tree panel with search, filter, and quick-create for all model objects (IcePanel
+    reference)
   created: 2026-04-15T11:49
   tasks:
   - id: object-tree-001
@@ -499,9 +503,8 @@ epics:
     priority: high
     created: 2026-04-15T11:49
     last_referenced: 2026-04-15T12:33
-    notes: 'IcePanel: left panel showing all model objects as a tree. Icons per type,
-      expandable hierarchy, search box with filter. Clicking an object selects it
-      on canvas.'
+    notes: 'IcePanel: left panel showing all model objects as a tree. Icons per type, expandable hierarchy,
+      search box with filter. Clicking an object selects it on canvas.'
     estimate: L
     phase: core-model
     started: 2026-04-15T12:33
@@ -514,8 +517,8 @@ epics:
     priority: medium
     created: 2026-04-15T11:49
     last_referenced: 2026-04-15T12:33
-    notes: 'IcePanel: "Or create new" section at bottom of tree panel with type buttons
-      for quick object creation.'
+    notes: 'IcePanel: "Or create new" section at bottom of tree panel with type buttons for quick object
+      creation.'
     estimate: S
     phase: core-model
     started: 2026-04-15T12:33
@@ -525,8 +528,7 @@ epics:
 - id: detail-sidebar
   name: Object Detail Sidebar (Tabbed)
   status: planned
-  description: Right sidebar with Details/Connections/History tabs, cross-references,
-    rich text description
+  description: Right sidebar with Details/Connections/History tabs, cross-references, rich text description
   created: 2026-04-15T11:49
   tasks:
   - id: detail-sidebar-001
@@ -535,9 +537,8 @@ epics:
     priority: high
     created: 2026-04-15T11:49
     last_referenced: 2026-04-15T14:41
-    notes: 'IcePanel: right sidebar has 3 tabs. Details = properties/tags/tech/links.
-      Connections = all connections for selected object. History = per-object change
-      log.'
+    notes: 'IcePanel: right sidebar has 3 tabs. Details = properties/tags/tech/links. Connections = all
+      connections for selected object. History = per-object change log.'
     estimate: M
     phase: c4-zoom
     started: 2026-04-15T14:40
@@ -550,8 +551,8 @@ epics:
     priority: medium
     created: 2026-04-15T11:49
     last_referenced: 2026-04-15T14:42
-    notes: 'IcePanel: Details tab shows "Contains: 7 objects", "Diagrams: In 2 diagrams",
-      "Flows: In 2 flows" with clickable links.'
+    notes: 'IcePanel: Details tab shows "Contains: 7 objects", "Diagrams: In 2 diagrams", "Flows: In 2
+      flows" with clickable links.'
     estimate: M
     phase: c4-zoom
     started: 2026-04-15T14:41
@@ -564,8 +565,8 @@ epics:
     priority: medium
     created: 2026-04-15T11:49
     last_referenced: 2026-04-15T14:45
-    notes: 'IcePanel: description field has rich text toolbar (bold, italic, lists,
-      links, code). Use TipTap or similar library. Store as HTML/markdown.'
+    notes: 'IcePanel: description field has rich text toolbar (bold, italic, lists, links, code). Use
+      TipTap or similar library. Store as HTML/markdown.'
     estimate: M
     phase: c4-zoom
     started: 2026-04-15T14:44
@@ -574,36 +575,42 @@ epics:
     archived: 2026-04-16T12:59
   - id: detail-sidebar-004
     title: Implement per-object history tab (change log scoped to selected object)
-    status: in-review
+    status: archived
     priority: medium
     created: 2026-04-15T11:49
     last_referenced: 2026-04-16T13:04
-    notes: 'IcePanel: History tab in sidebar shows changes for the selected object
-      specifically, not the global activity log. Filter activity_log by target_id.'
+    notes: 'IcePanel: History tab in sidebar shows changes for the selected object specifically, not the
+      global activity log. Filter activity_log by target_id.'
     estimate: M
     phase: drafts-versioning
     started: 2026-04-16T12:59
+    completed: 2026-04-20T11:00
+    archive_reason: done
+    archived: 2026-04-20T11:00
+    verification: History tab wired via useObjectHistory — verified
   - id: detail-sidebar-005
     title: Implement typed comments (question, inaccuracy, idea) with icons
-    status: in-review
+    status: archived
     priority: medium
     created: 2026-04-15T11:50
     last_referenced: 2026-04-16T13:10
-    notes: 'IcePanel: comments have types — Ask question (?), Mark inaccurate (flag),
-      Add idea (lightbulb). Add comment_type enum to comments table. FAB button on
-      canvas opens type selector.'
+    notes: 'IcePanel: comments have types — Ask question (?), Mark inaccurate (flag), Add idea (lightbulb).
+      Add comment_type enum to comments table. FAB button on canvas opens type selector.'
     estimate: M
     phase: collaboration
     started: 2026-04-16T13:07
+    completed: 2026-04-20T11:00
+    archive_reason: done
+    archived: 2026-04-20T11:00
+    verification: typed comments (Q/Inaccuracy/Idea/Note) in CommentsSection — verified
   - id: detail-sidebar-006
     title: Add "Belongs to" (parent) and "In X diagrams" references in object sidebar
     status: archived
     priority: medium
     created: 2026-04-16T11:08
     last_referenced: 2026-04-16T11:19
-    notes: 'Extend cross-references: show parent object name (clickable to navigate),
-      list of diagrams this object is used in (with links). Needs backend endpoint
-      to query diagrams containing an object.'
+    notes: 'Extend cross-references: show parent object name (clickable to navigate), list of diagrams
+      this object is used in (with links). Needs backend endpoint to query diagrams containing an object.'
     estimate: S
     phase: c4-zoom
     started: 2026-04-16T11:18
@@ -612,20 +619,23 @@ epics:
     archived: 2026-04-16T12:59
   - id: detail-sidebar-007
     title: Add "note" comment type alongside question/inaccurate/idea
-    status: in-review
+    status: archived
     priority: low
     created: 2026-04-16T11:08
     last_referenced: 2026-04-16T13:11
-    notes: 'Extend comment_type enum: question, inaccurate, idea, note. Each with
-      distinct icon and color. IcePanel has 3, user wants 4.'
+    notes: 'Extend comment_type enum: question, inaccurate, idea, note. Each with distinct icon and color.
+      IcePanel has 3, user wants 4.'
     estimate: S
     phase: collaboration
     started: 2026-04-16T13:11
+    completed: 2026-04-20T11:00
+    archive_reason: done
+    archived: 2026-04-20T11:00
+    verification: note type included from day 1 in comment_type enum — verified
 - id: groups
   name: Groups & Visual Grouping
   status: planned
-  description: Group object type for visual grouping on canvas, separate from parent-child
-    hierarchy
+  description: Group object type for visual grouping on canvas, separate from parent-child hierarchy
   created: 2026-04-15T11:49
   tasks:
   - id: groups-001
@@ -634,9 +644,9 @@ epics:
     priority: high
     created: 2026-04-15T11:50
     last_referenced: 2026-04-15T14:44
-    notes: 'IcePanel: Groups are visual containers on canvas (dashed border rectangles).
-      Objects can belong to groups (many-to-many, separate from parent_id hierarchy).
-      Need groups table and group_memberships junction table.'
+    notes: 'IcePanel: Groups are visual containers on canvas (dashed border rectangles). Objects can belong
+      to groups (many-to-many, separate from parent_id hierarchy). Need groups table and group_memberships
+      junction table.'
     estimate: L
     phase: c4-zoom
     started: 2026-04-15T14:43
@@ -644,18 +654,21 @@ epics:
     archive_reason: done
     archived: 2026-04-16T12:59
   - id: groups-002
-    title: Add groups as layout containers with drag-to-reorganize chips at canvas
-      bottom
-    status: in-review
+    title: Add groups as layout containers with drag-to-reorganize chips at canvas bottom
+    status: archived
     priority: low
     created: 2026-04-16T11:08
     last_referenced: 2026-04-16T13:24
-    notes: 'IcePanel: bottom canvas area shows group chips (Layer 4, Domain 5) with
-      drag handles. Click to filter canvas by group. "+ New group" creates group overlay.
-      Different from visual Group object type — this is filter/overlay mode.'
+    notes: 'IcePanel: bottom canvas area shows group chips (Layer 4, Domain 5) with drag handles. Click
+      to filter canvas by group. "+ New group" creates group overlay. Different from visual Group object
+      type — this is filter/overlay mode.'
     estimate: L
     phase: overlays-flows
     started: 2026-04-16T13:21
+    completed: 2026-04-20T11:00
+    archive_reason: done
+    archived: 2026-04-20T11:00
+    verification: group chips legend at canvas bottom with click-to-filter — verified
 - id: global-search
   name: Global Search & Navigation
   status: planned
@@ -668,8 +681,8 @@ epics:
     priority: high
     created: 2026-04-15T11:50
     last_referenced: 2026-04-15T14:40
-    notes: 'IcePanel: top bar with Home icon, back/forward arrows, breadcrumb trail
-      showing diagram hierarchy. Draft indicator dropdown.'
+    notes: 'IcePanel: top bar with Home icon, back/forward arrows, breadcrumb trail showing diagram hierarchy.
+      Draft indicator dropdown.'
     estimate: S
     phase: c4-zoom
     started: 2026-04-15T14:38
@@ -682,8 +695,8 @@ epics:
     priority: high
     created: 2026-04-15T11:50
     last_referenced: 2026-04-15T14:40
-    notes: 'IcePanel: Cmd+K opens search modal. Searches across all model objects,
-      diagrams, flows. Results grouped by type. Navigate to selected result.'
+    notes: 'IcePanel: Cmd+K opens search modal. Searches across all model objects, diagrams, flows. Results
+      grouped by type. Navigate to selected result.'
     estimate: M
     phase: c4-zoom
     started: 2026-04-15T14:40
@@ -693,8 +706,8 @@ epics:
 - id: overview-page
   name: Home / Overview Page
   status: planned
-  description: Dashboard with sidebar navigation, pinned diagrams, recent activity,
-    health check (IcePanel reference)
+  description: Dashboard with sidebar navigation, pinned diagrams, recent activity, health check (IcePanel
+    reference)
   created: 2026-04-15T14:31
   tasks:
   - id: overview-page-001
@@ -703,10 +716,9 @@ epics:
     priority: high
     created: 2026-04-15T14:31
     last_referenced: 2026-04-15T14:37
-    notes: 'IcePanel: home page has sidebar (Overview, Diagrams, Model Objects, Connections,
-      Flows, Dependencies, Drafts, Teams, Technologies, History) + main area with
-      pinned diagrams as cards with thumbnails, Recent section (Viewed/Edited tabs),
-      Health check. "+ Create diagram" button top right.'
+    notes: 'IcePanel: home page has sidebar (Overview, Diagrams, Model Objects, Connections, Flows, Dependencies,
+      Drafts, Teams, Technologies, History) + main area with pinned diagrams as cards with thumbnails,
+      Recent section (Viewed/Edited tabs), Health check. "+ Create diagram" button top right.'
     estimate: L
     phase: c4-zoom
     started: 2026-04-15T14:36
@@ -719,9 +731,9 @@ epics:
     priority: high
     created: 2026-04-15T14:31
     last_referenced: 2026-04-15T14:37
-    notes: 'IcePanel: Diagrams dropdown groups diagrams by C4 level (Context diagrams,
-      App diagrams, Component diagrams). Search bar at top. Click to navigate to diagram
-      canvas view. Recents panel on right with Viewed/Edited tabs and diagram thumbnails.'
+    notes: 'IcePanel: Diagrams dropdown groups diagrams by C4 level (Context diagrams, App diagrams, Component
+      diagrams). Search bar at top. Click to navigate to diagram canvas view. Recents panel on right with
+      Viewed/Edited tabs and diagram thumbnails.'
     estimate: M
     phase: c4-zoom
     started: 2026-04-15T14:37
@@ -734,8 +746,8 @@ epics:
     priority: high
     created: 2026-04-15T14:32
     last_referenced: 2026-04-15T14:36
-    notes: Backend CRUD for diagrams table. GET/POST/PUT/DELETE /api/v1/diagrams.
-      Include diagram_objects management (add/remove objects to diagrams with positions).
+    notes: Backend CRUD for diagrams table. GET/POST/PUT/DELETE /api/v1/diagrams. Include diagram_objects
+      management (add/remove objects to diagrams with positions).
     estimate: M
     phase: c4-zoom
     started: 2026-04-15T14:34
@@ -745,8 +757,8 @@ epics:
 - id: popup-picker
   name: Popup Object Picker
   status: planned
-  description: Replace/augment left sidebar with popup picker via + button for more
-    canvas space (IcePanel reference)
+  description: Replace/augment left sidebar with popup picker via + button for more canvas space (IcePanel
+    reference)
   created: 2026-04-16T11:07
   tasks:
   - id: popup-picker-001
@@ -755,10 +767,9 @@ epics:
     priority: high
     created: 2026-04-16T11:08
     last_referenced: 2026-04-16T11:22
-    notes: 'IcePanel: + button opens floating popup with search, object list (with
-      type icons), tooltip on hover showing type and parent, quick-create buttons
-      (System/Actor/Group) at bottom. Left sidebar becomes optional/collapsible to
-      give canvas more space.'
+    notes: 'IcePanel: + button opens floating popup with search, object list (with type icons), tooltip
+      on hover showing type and parent, quick-create buttons (System/Actor/Group) at bottom. Left sidebar
+      becomes optional/collapsible to give canvas more space.'
     estimate: L
     phase: c4-zoom
     started: 2026-04-16T11:21
@@ -768,8 +779,7 @@ epics:
 - id: c4-drill-down
   name: C4 Zoom Drill-Down Navigation
   status: planned
-  description: Navigate between C4 levels by clicking zoom icon on nodes (parent-child
-    diagram relationships)
+  description: Navigate between C4 levels by clicking zoom icon on nodes (parent-child diagram relationships)
   created: 2026-04-16T11:07
   tasks:
   - id: c4-drill-down-001
@@ -778,11 +788,10 @@ epics:
     priority: high
     created: 2026-04-16T11:08
     last_referenced: 2026-04-16T11:20
-    notes: 'IcePanel: objects that have sub-diagrams show magnifying glass icon. Click
-      opens popup "Level N - App diagram" with list of child diagrams + "+ New diagram"
-      button. Parent-child relationship between diagrams via scope_object_id. Backend:
-      filter diagrams by scope_object_id. Frontend: zoom icon, drill-down popup, breadcrumb
-      update.'
+    notes: 'IcePanel: objects that have sub-diagrams show magnifying glass icon. Click opens popup "Level
+      N - App diagram" with list of child diagrams + "+ New diagram" button. Parent-child relationship
+      between diagrams via scope_object_id. Backend: filter diagrams by scope_object_id. Frontend: zoom
+      icon, drill-down popup, breadcrumb update.'
     estimate: L
     phase: c4-zoom
     started: 2026-04-16T11:19
@@ -795,9 +804,8 @@ epics:
     priority: medium
     created: 2026-04-16T11:08
     last_referenced: 2026-04-16T11:21
-    notes: Query diagrams by scope_object_id to know which objects have sub-diagrams.
-      Show small 🔍 icon + count badge on those nodes. IcePanel reference — helps users
-      know where they can zoom in.
+    notes: Query diagrams by scope_object_id to know which objects have sub-diagrams. Show small 🔍 icon
+      + count badge on those nodes. IcePanel reference — helps users know where they can zoom in.
     estimate: S
     phase: c4-zoom
     started: 2026-04-16T11:21
@@ -807,8 +815,7 @@ epics:
 - id: edge-details
   name: Edge Details & Customization
   status: planned
-  description: Full edge editing sidebar with shape, direction, label size, via objects,
-    rich description
+  description: Full edge editing sidebar with shape, direction, label size, via objects, rich description
   created: 2026-04-16T11:07
   tasks:
   - id: edge-details-001
@@ -817,10 +824,9 @@ epics:
     priority: high
     created: 2026-04-16T11:08
     last_referenced: 2026-04-16T11:15
-    notes: 'IcePanel: click edge → sidebar with Sender (source), Receiver (target),
-      Via (pass-through objects), Status, Direction with Flip button, Shape dropdown
-      (Curved/Straight/Step), Label size slider, Tags, Technology, rich description.
-      Reuse existing tabbed sidebar pattern.'
+    notes: 'IcePanel: click edge → sidebar with Sender (source), Receiver (target), Via (pass-through
+      objects), Status, Direction with Flip button, Shape dropdown (Curved/Straight/Step), Label size
+      slider, Tags, Technology, rich description. Reuse existing tabbed sidebar pattern.'
     estimate: L
     phase: c4-zoom
     started: 2026-04-16T11:11
@@ -833,8 +839,8 @@ epics:
     priority: medium
     created: 2026-04-16T11:08
     last_referenced: 2026-04-16T11:15
-    notes: Store edge shape in metadata or new column. React Flow supports bezier
-      (curved), straight, step, smoothstep path types. Per-edge selection in sidebar.
+    notes: Store edge shape in metadata or new column. React Flow supports bezier (curved), straight,
+      step, smoothstep path types. Per-edge selection in sidebar.
     estimate: M
     phase: c4-zoom
     started: 2026-04-16T11:15
@@ -847,8 +853,8 @@ epics:
     priority: medium
     created: 2026-04-16T11:08
     last_referenced: 2026-04-16T11:15
-    notes: 'IcePanel: edge labels support multi-line text with good positioning. Slider
-      to control label font size. Store as JSON in metadata: {label_size, label_position}.'
+    notes: 'IcePanel: edge labels support multi-line text with good positioning. Slider to control label
+      font size. Store as JSON in metadata: {label_size, label_position}.'
     estimate: M
     phase: c4-zoom
     started: 2026-04-16T11:15
@@ -861,8 +867,8 @@ epics:
     priority: medium
     created: 2026-04-16T11:08
     last_referenced: 2026-04-16T11:23
-    notes: 'IcePanel: connection can route through "Via" objects. Stored as ordered
-      array of object IDs. Visual edge routes via those waypoints.'
+    notes: 'IcePanel: connection can route through "Via" objects. Stored as ordered array of object IDs.
+      Visual edge routes via those waypoints.'
     estimate: M
     phase: c4-zoom
     started: 2026-04-16T11:22
@@ -875,8 +881,7 @@ epics:
     priority: low
     created: 2026-04-16T11:08
     last_referenced: 2026-04-16T11:15
-    notes: One-click flip source↔target. Bidirectional edges render with arrows on
-      both ends.
+    notes: One-click flip source↔target. Bidirectional edges render with arrows on both ends.
     estimate: S
     phase: c4-zoom
     started: 2026-04-16T11:15
@@ -886,8 +891,7 @@ epics:
 - id: node-customization
   name: Node Customization & Styling
   status: planned
-  description: Node resize, custom visual styling per type (actor/system/external),
-    zoom indicators
+  description: Node resize, custom visual styling per type (actor/system/external), zoom indicators
   created: 2026-04-16T11:07
   tasks:
   - id: node-customization-001
@@ -896,8 +900,8 @@ epics:
     priority: medium
     created: 2026-04-16T11:08
     last_referenced: 2026-04-16T11:17
-    notes: React Flow NodeResizer component. Store width/height in diagram_objects.width/height.
-      Useful for groups and large labels.
+    notes: React Flow NodeResizer component. Store width/height in diagram_objects.width/height. Useful
+      for groups and large labels.
     estimate: M
     phase: c4-zoom
     started: 2026-04-16T11:16
@@ -905,15 +909,13 @@ epics:
     archive_reason: done
     archived: 2026-04-16T12:59
   - id: node-customization-002
-    title: Improve visual styling per object type (actor/system/external distinct
-      looks)
+    title: Improve visual styling per object type (actor/system/external distinct looks)
     status: archived
     priority: medium
     created: 2026-04-16T11:08
     last_referenced: 2026-04-16T11:16
-    notes: 'IcePanel: Actor shown as person icon with label below, External System
-      with cloud icon, System as rounded rect, App as square. Match IcePanel aesthetic
-      for each type.'
+    notes: 'IcePanel: Actor shown as person icon with label below, External System with cloud icon, System
+      as rounded rect, App as square. Match IcePanel aesthetic for each type.'
     estimate: M
     phase: c4-zoom
     started: 2026-04-16T11:15
@@ -928,66 +930,312 @@ epics:
   tasks:
   - id: phase8-polish-001
     title: Import Structurizr DSL — parse objects + relationships
-    status: in-review
+    status: archived
     priority: medium
     created: 2026-04-16T14:07
     last_referenced: 2026-04-16T14:13
-    notes: Parse Structurizr DSL `workspace { model { person/softwareSystem/container/component,
-      -> relationships } }`. Create ModelObjects + Connections. New endpoint POST
-      /import/structurizr with raw DSL body.
+    notes: Parse Structurizr DSL `workspace { model { person/softwareSystem/container/component, -> relationships
+      } }`. Create ModelObjects + Connections. New endpoint POST /import/structurizr with raw DSL body.
     estimate: M
     phase: enterprise
     started: 2026-04-16T14:12
+    completed: 2026-04-20T11:00
+    archive_reason: done
+    archived: 2026-04-20T11:00
+    verification: structurizr_service parser + POST /import/structurizr — verified
   - id: phase8-polish-002
     title: Import Mermaid flowchart / C4 diagrams
-    status: in-review
+    status: archived
     priority: medium
     created: 2026-04-16T14:07
     last_referenced: 2026-04-16T14:13
-    notes: Accept Mermaid source (flowchart or C4Context) and materialize objects
-      + edges. Endpoint POST /import/mermaid.
+    notes: Accept Mermaid source (flowchart or C4Context) and materialize objects + edges. Endpoint POST
+      /import/mermaid.
     estimate: M
     phase: enterprise
     started: 2026-04-16T14:13
+    completed: 2026-04-20T11:00
+    archive_reason: done
+    archived: 2026-04-20T11:00
+    verification: mermaid_service parser + POST /import/mermaid — verified
   - id: phase8-polish-003
     title: Global activity feed page (audit log view)
-    status: in-review
+    status: archived
     priority: medium
     created: 2026-04-16T14:07
     last_referenced: 2026-04-16T14:13
-    notes: Reuse activity_log table. New page /activity listing all events across
-      the workspace with filters by target_type + user. Backend endpoint GET /activity.
+    notes: Reuse activity_log table. New page /activity listing all events across the workspace with filters
+      by target_type + user. Backend endpoint GET /activity.
     estimate: S
     phase: enterprise
     started: 2026-04-16T14:13
+    completed: 2026-04-20T11:00
+    archive_reason: done
+    archived: 2026-04-20T11:00
+    verification: GET /activity + /activity page — verified
   - id: phase8-polish-004
     title: 'Canvas performance: onlyRenderVisibleElements + lazy children'
-    status: in-review
+    status: archived
     priority: low
     created: 2026-04-16T14:07
     last_referenced: 2026-04-16T14:12
-    notes: Enable React Flow onlyRenderVisibleElements, lazy-load children diagrams,
-      memoize node components. Targets large diagrams (100+ nodes).
+    notes: Enable React Flow onlyRenderVisibleElements, lazy-load children diagrams, memoize node components.
+      Targets large diagrams (100+ nodes).
     estimate: S
     phase: enterprise
     started: 2026-04-16T14:07
+    completed: 2026-04-20T11:00
+    archive_reason: done
+    archived: 2026-04-20T11:00
+    verification: onlyRenderVisibleElements on ReactFlow — verified
   - id: phase8-polish-005
     title: Helm chart skeleton for self-hosted deployment
-    status: in-review
+    status: archived
     priority: low
     created: 2026-04-16T14:07
     last_referenced: 2026-04-16T14:13
-    notes: charts/archflow/ with Deployment for backend, frontend (served by Caddy),
-      Postgres StatefulSet, Redis, Ingress. Values for image tags + env.
+    notes: charts/archflow/ with Deployment for backend, frontend (served by Caddy), Postgres StatefulSet,
+      Redis, Ingress. Values for image tags + env.
     estimate: M
     phase: enterprise
     started: 2026-04-16T14:13
+    completed: 2026-04-20T11:00
+    archive_reason: done
+    archived: 2026-04-20T11:00
+    verification: charts/archflow skeleton with Deployment/Service/StatefulSet — verified
+- id: versions
+  name: Model Versions & Conflict Resolution
+  status: planned
+  description: Immutable version snapshot on draft merge; conflict detection when main moved since fork;
+    revert; scheduled versions.
+  created: 2026-04-20T11:00
+  tasks:
+  - id: versions-001
+    title: Versions table + immutable snapshot on draft apply
+    status: todo
+    priority: high
+    created: 2026-04-20T11:00
+    notes: New versions table with snapshot_data JSONB (full model JSON), label (auto v1.0, v1.1...),
+      draft_id FK, created_by, created_at. On apply_draft success, persist snapshot. Endpoint GET /versions
+      + GET /versions/{id}/snapshot + POST /versions/compare.
+    estimate: L
+    phase: versions-conflicts
+  - id: versions-002
+    title: Conflict detection on draft apply (main moved since fork)
+    status: todo
+    priority: high
+    created: 2026-04-20T11:00
+    notes: Track base_version_id on draft. On apply, compare current main with fork base; if an object
+      was edited in both → conflict. Spec §4.3 covers three conflict types. Surface conflicts UI before
+      merging.
+    estimate: L
+    phase: versions-conflicts
+  - id: versions-003
+    title: Revert to previous version (creates new version, non-destructive)
+    status: todo
+    priority: medium
+    created: 2026-04-20T11:00
+    notes: POST /versions/{id}/revert → replays snapshot onto main, creates new version.
+    estimate: M
+    phase: versions-conflicts
+  - id: versions-004
+    title: Scheduled auto-snapshot (cron, weekly default)
+    status: todo
+    priority: low
+    created: 2026-04-20T11:00
+    notes: Background task persists version at configurable interval.
+    estimate: M
+    phase: versions-conflicts
+- id: teams-roles
+  name: Teams, Roles & Workspaces
+  status: planned
+  description: Orgs/workspaces multi-tenancy, role-based permissions, teams as entities for ownership
+    assignment.
+  created: 2026-04-20T11:00
+  tasks:
+  - id: teams-roles-001
+    title: Organizations + Workspaces schema and scoping
+    status: todo
+    priority: high
+    created: 2026-04-20T11:00
+    notes: Spec §6.1. org/workspace tables; every resource (model_objects, connections, diagrams, drafts,
+      versions, comments) gets workspace_id FK. Scope all queries by current workspace.
+    estimate: XL
+    phase: teams-roles
+  - id: teams-roles-002
+    title: Roles & permissions (Owner/Admin/Editor/Reviewer/Viewer)
+    status: todo
+    priority: high
+    created: 2026-04-20T11:00
+    notes: Spec §6.2. memberships table (user_id, workspace_id, role). Decorator on endpoints for permission
+      checks. UI surfaces disabled actions for lower roles.
+    estimate: L
+    phase: teams-roles
+  - id: teams-roles-003
+    title: Teams as first-class entity with membership
+    status: todo
+    priority: medium
+    created: 2026-04-20T11:00
+    notes: 'Spec §6.3. teams table, team_memberships junction. Replace/extend model_objects.owner_team
+      text with team_id FK. UI: Teams page, team filter overlay.'
+    estimate: M
+    phase: teams-roles
+  - id: teams-roles-004
+    title: OAuth 2.0 login (Google/GitHub/GitLab)
+    status: todo
+    priority: medium
+    created: 2026-04-20T11:00
+    notes: Spec §6.5. Authlib or similar. Extend users table with auth_provider field.
+    estimate: M
+    phase: teams-roles
+- id: realtime
+  name: Real-time Collaboration
+  status: planned
+  description: WebSocket-based cursor presence, live object updates, Redis pub/sub for multi-instance.
+  created: 2026-04-20T11:00
+  tasks:
+  - id: realtime-001
+    title: WebSocket endpoint + Redis pub/sub backbone
+    status: todo
+    priority: high
+    created: 2026-04-20T11:00
+    notes: Spec §9.3. /ws/diagrams/{id} connection; broadcast object create/update/delete + cursor positions.
+      Redis pub/sub for cross-instance fanout.
+    estimate: L
+    phase: realtime
+  - id: realtime-002
+    title: Cursor presence on canvas (see other users)
+    status: todo
+    priority: medium
+    created: 2026-04-20T11:00
+    notes: Render remote cursors on ReactFlow, throttled position updates over WS.
+    estimate: M
+    phase: realtime
+  - id: realtime-003
+    title: Live object updates broadcast to open diagrams
+    status: todo
+    priority: medium
+    created: 2026-04-20T11:00
+    notes: When a user edits, others see the change within ~100ms. Optimistic local write + server confirm.
+    estimate: M
+    phase: realtime
+  - id: realtime-004
+    title: Notifications (mentions in comments, in-app + email)
+    status: todo
+    priority: low
+    created: 2026-04-20T11:00
+    notes: Spec §6.4. notifications table, in-app badge, email via SMTP.
+    estimate: M
+    phase: realtime
+- id: api-keys-webhooks
+  name: API Keys, Webhooks, Rate Limiting
+  status: planned
+  description: 'Programmable access: scoped API keys, outbound webhooks, request rate limiting. (MCP server
+    intentionally descoped for now — REST API is enough.)'
+  created: 2026-04-20T11:00
+  tasks:
+  - id: api-keys-001
+    title: API keys table + Bearer key auth scheme
+    status: todo
+    priority: high
+    created: 2026-04-20T11:00
+    notes: Spec §7.1. api_keys (org_id, workspace_id, key_hash, permissions[], expires_at). Auth middleware
+      accepts API key in addition to JWT.
+    estimate: M
+    phase: api-surface
+  - id: api-keys-002
+    title: Webhooks — subscribe to model-change events
+    status: todo
+    priority: medium
+    created: 2026-04-20T11:00
+    notes: Spec §7.3. webhooks table (url, events[], secret). Outbound delivery with signing + retry.
+      Event list per spec.
+    estimate: L
+    phase: api-surface
+  - id: api-keys-003
+    title: Rate limiting via Redis
+    status: todo
+    priority: medium
+    created: 2026-04-20T11:00
+    notes: Sliding-window rate limiter keyed on user/api_key id. Configurable limits.
+    estimate: S
+    phase: api-surface
+- id: ai-more
+  name: AI Features (beyond insights)
+  status: planned
+  description: Architecture summary, impact analysis, text-to-diagram, inaccuracy detection.
+  created: 2026-04-20T11:00
+  tasks:
+  - id: ai-more-001
+    title: Architecture summary generator over selected objects
+    status: todo
+    priority: medium
+    created: 2026-04-20T11:00
+    notes: Spec §8.2. Select N objects → natural-language summary of what they represent + relationships.
+    estimate: M
+    phase: ai-more
+  - id: ai-more-002
+    title: Impact analysis for a proposed change
+    status: todo
+    priority: medium
+    created: 2026-04-20T11:00
+    notes: Spec §8.3. Traverse dependency graph from a change, generate impact report (affected objects,
+      risks).
+    estimate: L
+    phase: ai-more
+  - id: ai-more-003
+    title: Text-to-diagram (natural language → draft)
+    status: todo
+    priority: medium
+    created: 2026-04-20T11:00
+    notes: Spec §8.4. Paste a description; AI produces a draft with proposed objects + connections.
+    estimate: L
+    phase: ai-more
+  - id: ai-more-004
+    title: Inaccuracy detection scoring
+    status: todo
+    priority: low
+    created: 2026-04-20T11:00
+    notes: Spec §8.5. Compare model with external truth sources (git, infra). Flag stale objects + missing
+      connections.
+    estimate: XL
+    phase: ai-more
+- id: enterprise-sso
+  name: Enterprise SSO & Compliance
+  status: planned
+  description: SAML SSO, SCIM provisioning, audit log enhancements, backup automation.
+  created: 2026-04-20T11:00
+  tasks:
+  - id: enterprise-sso-001
+    title: SAML SSO login
+    status: todo
+    priority: low
+    created: 2026-04-20T11:00
+    notes: Spec §6.5. python3-saml or similar. Configurable IdP metadata per org.
+    estimate: L
+    phase: enterprise-sso
+  - id: enterprise-sso-002
+    title: SCIM provisioning for auto user+group sync
+    status: todo
+    priority: low
+    created: 2026-04-20T11:00
+    notes: SCIM 2.0 endpoints. Tied to SAML.
+    estimate: L
+    phase: enterprise-sso
+  - id: enterprise-sso-003
+    title: Automated pg_dump backups to S3-compatible storage
+    status: todo
+    priority: low
+    created: 2026-04-20T11:00
+    notes: Spec §10.2. Scheduled cron; configurable retention.
+    estimate: M
+    phase: enterprise-sso
 phases:
 - id: core-model
   name: Core Model + Canvas
   status: done
-  description: Model CRUD (objects, connections), React Flow canvas, JSON import/export,
-    single-user local mode, PostgreSQL storage, basic auth
+  description: Model CRUD (objects, connections), React Flow canvas, JSON import/export, single-user local
+    mode, PostgreSQL storage, basic auth
   order: 1
   created: 2026-04-15T11:34
   start_date: '2026-04-15'
@@ -995,8 +1243,7 @@ phases:
 - id: c4-zoom
   name: C4 Zoom + Diagrams
   status: done
-  description: C4 level navigation, multiple diagram types, semantic zoom, diagram
-    CRUD, SVG/PNG export
+  description: C4 level navigation, multiple diagram types, semantic zoom, diagram CRUD, SVG/PNG export
   order: 2
   created: 2026-04-15T11:34
   start_date: '2026-04-15'
@@ -1004,8 +1251,8 @@ phases:
 - id: drafts-versioning
   name: Drafts + Versioning
   status: done
-  description: Draft lifecycle (create, edit, merge), version snapshots, diff view,
-    conflict detection, activity log
+  description: Draft lifecycle (create, edit, merge), version snapshots, diff view, conflict detection,
+    activity log
   order: 3
   created: 2026-04-15T11:34
   start_date: '2026-04-16'
@@ -1013,8 +1260,8 @@ phases:
 - id: collaboration
   name: Collaboration
   status: done
-  description: Multi-user, orgs/workspaces, roles/permissions, teams, comments, real-time
-    cursor sync, notifications
+  description: Multi-user, orgs/workspaces, roles/permissions, teams, comments, real-time cursor sync,
+    notifications
   order: 4
   created: 2026-04-15T11:34
   start_date: '2026-04-16'
@@ -1022,8 +1269,7 @@ phases:
 - id: api-mcp
   name: API + MCP
   status: done
-  description: REST API (OpenAPI spec), MCP server (read + write tools), API keys,
-    webhooks, rate limiting
+  description: REST API (OpenAPI spec), MCP server (read + write tools), API keys, webhooks, rate limiting
   order: 5
   created: 2026-04-15T11:34
   start_date: '2026-04-16'
@@ -1031,8 +1277,8 @@ phases:
 - id: ai-features
   name: AI Features
   status: done
-  description: Description generation, architecture summary, impact analysis, text-to-diagram,
-    inaccuracy detection
+  description: Description generation, architecture summary, impact analysis, text-to-diagram, inaccuracy
+    detection
   order: 6
   created: 2026-04-15T11:34
   start_date: '2026-04-16'
@@ -1040,17 +1286,60 @@ phases:
 - id: overlays-flows
   name: Overlays + Flows
   status: done
-  description: Tag overlays, perspectives, dependency highlighting, flow step-through,
-    flow CRUD
+  description: Tag overlays, perspectives, dependency highlighting, flow step-through, flow CRUD
   order: 7
   created: 2026-04-15T11:34
   start_date: '2026-04-16'
   completed: 2026-04-16T13:24
 - id: enterprise
   name: Polish + Enterprise
-  status: active
-  description: SSO/SAML, audit logs, scheduled versions, Structurizr/Mermaid import,
-    performance optimization, Helm chart
+  status: done
+  description: SSO/SAML, audit logs, scheduled versions, Structurizr/Mermaid import, performance optimization,
+    Helm chart
   order: 8
   created: 2026-04-15T11:34
   start_date: '2026-04-16'
+  completed: 2026-04-20T11:00
+- id: c4-nesting
+  name: C4 Nesting UX
+  status: active
+  order: 9
+  description: Level-aware quick-create, inline child diagram creation, breadcrumb parent chain.
+  created: 2026-04-20T11:00
+  start_date: '2026-04-20'
+- id: versions-conflicts
+  name: Versions + Conflicts
+  status: planned
+  order: 10
+  description: Snapshot on merge, conflict detection, revert, scheduled snapshots.
+  created: 2026-04-20T11:00
+- id: teams-roles
+  name: Teams, Roles, Workspaces
+  status: planned
+  order: 11
+  description: Multi-tenancy, RBAC, teams, OAuth.
+  created: 2026-04-20T11:00
+- id: realtime
+  name: Real-time Collaboration
+  status: planned
+  order: 12
+  description: WebSocket presence + live updates + notifications.
+  created: 2026-04-20T11:00
+- id: api-surface
+  name: API Keys & Webhooks
+  status: planned
+  order: 13
+  description: API keys, outbound webhooks, rate limiting. (No MCP.)
+  created: 2026-04-20T11:00
+- id: ai-more
+  name: AI Features (extended)
+  status: planned
+  order: 14
+  description: Summary, impact, text-to-diagram, inaccuracy.
+  created: 2026-04-20T11:00
+- id: enterprise-sso
+  name: Enterprise SSO
+  status: planned
+  order: 15
+  description: SAML, SCIM, backups.
+  created: 2026-04-20T11:00
