@@ -190,6 +190,7 @@ export function CompareCanvas({
           selectable: false,
           connectable: false,
           style,
+          zIndex: obj.type === 'group' ? 0 : 1,
         }
         if (dObj.width != null && dObj.height != null) {
           node.width = dObj.width
