@@ -6,26 +6,36 @@
 
 | Workstream | Status | Progress | Current Focus |
 |-----------|--------|----------|---------------|
-| Project Setup & Infrastructure | Active | 0/0 | — |
-| Backend API Foundation | Active | 0/0 | — |
-| Frontend Canvas | Active | 0/4 | Implement color-coding overlays based on active filter (tag/tech/status/team) |
-| Basic Authentication | Active | 0/0 | — |
-| JSON Import/Export | Active | 0/0 | — |
+| Canvas polish | Archived | 0/0 | — |
+| Visual Groups (IcePanel-style spatial grouping) | Archived | 0/0 | — |
+| Multi-diagram drafts (features span many diagrams) | Archived | 0/0 | — |
+| C4 Nesting UX (L1 → L2 → L3 drill-down) | Archived | 0/0 | — |
+| Project Setup & Infrastructure | Archived | 0/0 | — |
+| Backend API Foundation | Archived | 0/0 | — |
+| Frontend Canvas | Archived | 0/0 | — |
+| Basic Authentication | Archived | 0/0 | — |
+| JSON Import/Export | Archived | 0/0 | — |
 | Model Objects Tree Panel | Planned | 0/0 | — |
-| Object Detail Sidebar (Tabbed) | Planned | 0/3 | Implement per-object history tab (change log scoped to selected object) |
-| Groups & Visual Grouping | Planned | 0/1 | Add groups as layout containers with drag-to-reorganize chips at canvas bottom |
+| Object Detail Sidebar (Tabbed) | Planned | 0/0 | — |
+| Groups & Visual Grouping | Planned | 0/0 | — |
 | Global Search & Navigation | Planned | 0/0 | — |
 | Home / Overview Page | Planned | 0/0 | — |
 | Popup Object Picker | Planned | 0/0 | — |
 | C4 Zoom Drill-Down Navigation | Planned | 0/0 | — |
 | Edge Details & Customization | Planned | 0/0 | — |
 | Node Customization & Styling | Planned | 0/0 | — |
-| Phase 8 Polish + Enterprise | Active | 0/5 | Import Structurizr DSL — parse objects + relationships |
+| Phase 8 Polish + Enterprise | Archived | 0/0 | — |
+| Model Versions & Conflict Resolution | Planned | 0/4 | — |
+| Teams, Roles & Workspaces | Planned | 0/4 | — |
+| Real-time Collaboration | Planned | 0/4 | — |
+| API Keys, Webhooks, Rate Limiting | Planned | 0/3 | API keys table + Bearer key auth scheme |
+| AI Features (beyond insights) | Planned | 0/4 | — |
+| Enterprise SSO & Compliance | Planned | 0/3 | — |
 
-**Active Phase:** Polish + Enterprise (0/5 done)
-**Phases:** done Core Model + Canvas | done C4 Zoom + Diagrams | done Drafts + Versioning | done Collaboration | done API + MCP | done AI Features | done Overlays + Flows | >> Polish + Enterprise
+**Active Phase:** API Keys & Webhooks (0/3 done)
+**Phases:** ... Versions + Conflicts | ... Teams, Roles, Workspaces | ... Real-time Collaboration | >> API Keys & Webhooks | ... AI Features (extended) | ... Enterprise SSO
 
-**In Progress:** frontend-canvas-008 Implement color-coding overlays based on active filter (tag/tech/status/team), frontend-canvas-009 Add flow alternative paths (branching) support, frontend-canvas-010 Show numbered step labels on canvas connections during flow playback, frontend-canvas-012 Implement "Get insights" AI feature for object analysis, detail-sidebar-004 Implement per-object history tab (change log scoped to selected object), detail-sidebar-005 Implement typed comments (question, inaccuracy, idea) with icons, detail-sidebar-007 Add "note" comment type alongside question/inaccurate/idea, groups-002 Add groups as layout containers with drag-to-reorganize chips at canvas bottom, phase8-polish-001 Import Structurizr DSL — parse objects + relationships, phase8-polish-002 Import Mermaid flowchart / C4 diagrams, phase8-polish-003 Global activity feed page (audit log view), phase8-polish-004 Canvas performance: onlyRenderVisibleElements + lazy children, phase8-polish-005 Helm chart skeleton for self-hosted deployment
+**In Progress:** api-keys-001 API keys table + Bearer key auth scheme
 **Blocked:** —
 **Next Up:** —
 
