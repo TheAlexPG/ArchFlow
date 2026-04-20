@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.schemas.connection import ConnectionCreate, ConnectionResponse, ConnectionUpdate
 from app.services import connection_service, object_service
+from app.services.webhook_service import fire_and_forget_emit
 
 router = APIRouter(prefix="/connections", tags=["connections"])
 
@@ -47,7 +48,13 @@ async def create_connection(
     target = await object_service.get_object(db, data.target_id)
     if not target:
         raise HTTPException(status_code=400, detail="Target object not found")
-    return await connection_service.create_connection(db, data, draft_id=draft_id)
+    conn = await connection_service.create_connection(db, data, draft_id=draft_id)
+    if draft_id is None:
+        fire_and_forget_emit(
+            "connection.created",
+            ConnectionResponse.model_validate(conn).model_dump(mode="json"),
+        )
+    return conn
 
 
 @router.put("/{connection_id}", response_model=ConnectionResponse)
@@ -59,7 +66,13 @@ async def update_connection(
     conn = await connection_service.get_connection(db, connection_id)
     if not conn:
         raise HTTPException(status_code=404, detail="Connection not found")
-    return await connection_service.update_connection(db, conn, data)
+    conn = await connection_service.update_connection(db, conn, data)
+    if conn.draft_id is None:
+        fire_and_forget_emit(
+            "connection.updated",
+            ConnectionResponse.model_validate(conn).model_dump(mode="json"),
+        )
+    return conn
 
 
 @router.delete("/{connection_id}", status_code=204)
@@ -67,4 +80,8 @@ async def delete_connection(connection_id: uuid.UUID, db: AsyncSession = Depends
     conn = await connection_service.get_connection(db, connection_id)
     if not conn:
         raise HTTPException(status_code=404, detail="Connection not found")
+    was_draft = conn.draft_id is not None
+    conn_id_str = str(conn.id)
     await connection_service.delete_connection(db, conn)
+    if not was_draft:
+        fire_and_forget_emit("connection.deleted", {"id": conn_id_str})

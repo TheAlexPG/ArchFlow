@@ -8,6 +8,7 @@ from app.models.draft import Draft, DraftDiagram, DraftStatus
 from app.models.flow import Flow
 from app.models.object import ModelObject, ObjectScope, ObjectStatus, ObjectType
 from app.models.user import User
+from app.models.webhook import Webhook
 
 __all__ = [
     "ActivityAction",
@@ -32,4 +33,5 @@ __all__ = [
     "ObjectStatus",
     "ObjectType",
     "User",
+    "Webhook",
 ]

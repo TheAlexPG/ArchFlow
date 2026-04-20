@@ -5,6 +5,9 @@ import type {
   ApiKeyCreate,
   ApiKeyWithSecret,
   Comment,
+  Webhook,
+  WebhookCreate,
+  WebhookWithSecret,
   CommentCreate,
   CommentTargetType,
   CommentUpdate,
@@ -600,5 +603,57 @@ export function useRevokeApiKey() {
       await api.delete(`/api-keys/${id}`)
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['api-keys'] }),
+  })
+}
+
+// ─── Webhooks ─────────────────────────────────────────────
+
+export function useWebhooks() {
+  return useQuery({
+    queryKey: ['webhooks'],
+    queryFn: async () => {
+      const { data } = await api.get<Webhook[]>('/webhooks')
+      return data
+    },
+  })
+}
+
+export function useWebhookEventTypes() {
+  return useQuery({
+    queryKey: ['webhooks', 'events'],
+    queryFn: async () => {
+      const { data } = await api.get<string[]>('/webhooks/events')
+      return data
+    },
+    staleTime: 1000 * 60 * 10,
+  })
+}
+
+export function useCreateWebhook() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (payload: WebhookCreate) => {
+      const { data } = await api.post<WebhookWithSecret>('/webhooks', payload)
+      return data
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['webhooks'] }),
+  })
+}
+
+export function useDeleteWebhook() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await api.delete(`/webhooks/${id}`)
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['webhooks'] }),
+  })
+}
+
+export function useTestWebhook() {
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await api.post(`/webhooks/${id}/test`)
+    },
   })
 }

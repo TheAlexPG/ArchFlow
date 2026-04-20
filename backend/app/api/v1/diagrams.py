@@ -13,6 +13,7 @@ from app.schemas.diagram import (
     DiagramUpdate,
 )
 from app.services import diagram_service, draft_service
+from app.services.webhook_service import fire_and_forget_emit
 
 router = APIRouter(prefix="/diagrams", tags=["diagrams"])
 
@@ -39,7 +40,12 @@ async def get_diagram(
 async def create_diagram(
     data: DiagramCreate, db: AsyncSession = Depends(get_db)
 ):
-    return await diagram_service.create_diagram(db, data)
+    diagram = await diagram_service.create_diagram(db, data)
+    fire_and_forget_emit(
+        "diagram.created",
+        DiagramResponse.model_validate(diagram).model_dump(mode="json"),
+    )
+    return diagram
 
 
 @router.put("/{diagram_id}", response_model=DiagramResponse)
@@ -51,7 +57,12 @@ async def update_diagram(
     diagram = await diagram_service.get_diagram(db, diagram_id)
     if not diagram:
         raise HTTPException(status_code=404, detail="Diagram not found")
-    return await diagram_service.update_diagram(db, diagram, data)
+    diagram = await diagram_service.update_diagram(db, diagram, data)
+    fire_and_forget_emit(
+        "diagram.updated",
+        DiagramResponse.model_validate(diagram).model_dump(mode="json"),
+    )
+    return diagram
 
 
 @router.delete("/{diagram_id}", status_code=204)
@@ -61,7 +72,9 @@ async def delete_diagram(
     diagram = await diagram_service.get_diagram(db, diagram_id)
     if not diagram:
         raise HTTPException(status_code=404, detail="Diagram not found")
+    diagram_id_str = str(diagram.id)
     await diagram_service.delete_diagram(db, diagram)
+    fire_and_forget_emit("diagram.deleted", {"id": diagram_id_str})
 
 
 # ─── Diagram Objects (positions per diagram) ─────────────
