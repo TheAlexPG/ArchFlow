@@ -187,3 +187,16 @@ select {
   opacity: 1;
   pointer-events: auto;
 }
+
+/*
+ * Neutralise ReactFlow's built-in .react-flow__node-group background + border.
+ * Our GroupNode renders its own dashed frame / title / footer — the default
+ * styling would layer a semi-opaque white rectangle on top, producing the
+ * "ugly grey square" artifact visible inside group nodes.
+ */
+.react-flow__node-group {
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+}
