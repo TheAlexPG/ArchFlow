@@ -2,44 +2,28 @@ meta:
   project: ArchFlow
   updated: '2026-04-20'
 context:
-  active_epic: multi-diagram-drafts
-  in_progress:
-  - id: multi-diagram-drafts-001
-    title: 'Backend: DraftDiagram junction table + service + API refactor'
-    epic: multi-diagram-drafts
-    branch: ''
-  - id: multi-diagram-drafts-002
-    title: 'Frontend: multi-diagram feature dashboard + per-diagram compare'
-    epic: multi-diagram-drafts
-    branch: ''
-  - id: multi-diagram-drafts-003
-    title: 'Frontend: DiagramPage "Drafts (N)" picker + draft-new-feature'
-    epic: multi-diagram-drafts
-    branch: ''
-  - id: multi-diagram-drafts-004
-    title: 'Fix: edges sometimes missing on compare view side-by-side'
-    epic: multi-diagram-drafts
-    branch: ''
+  active_epic: versions
+  in_progress: []
   blocked: []
   recent_completed: []
   next_up: []
   stats:
     total: 86
     done: 0
-    in_progress: 4
+    in_progress: 0
     in_review: 0
     todo: 22
     blocked: 0
-    archived: 60
+    archived: 64
   active_phase:
-    id: multi-diagram-drafts
-    name: Multi-diagram drafts
+    id: versions-conflicts
+    name: Versions + Conflicts
     target_date: null
-    start_date: '2026-04-20'
+    start_date: null
     stats:
       total: 4
-      todo: 0
-      in-progress: 4
+      todo: 4
+      in-progress: 0
       in-review: 0
       done: 0
       blocked: 0
@@ -56,7 +40,7 @@ epics:
   tasks:
   - id: multi-diagram-drafts-001
     title: 'Backend: DraftDiagram junction table + service + API refactor'
-    status: in-progress
+    status: archived
     priority: critical
     created: 2026-04-20T12:00
     started: 2026-04-20T12:00
@@ -68,9 +52,14 @@ epics:
       a fork (draft_id IS NOT NULL).'
     estimate: L
     phase: multi-diagram-drafts
+    completed: 2026-04-20T12:45
+    archived: 2026-04-20T12:45
+    archive_reason: done
+    verification: backend merged 00e858e+; smoke tested fork/add/reject/remove/apply/discard; /diagrams/{id}/drafts
+      returns slim
   - id: multi-diagram-drafts-002
     title: 'Frontend: multi-diagram feature dashboard + per-diagram compare'
-    status: in-progress
+    status: archived
     priority: critical
     created: 2026-04-20T12:00
     started: 2026-04-20T12:00
@@ -79,9 +68,13 @@ epics:
       diagrams not already in any open feature fork). Compare per-diagram remains side-by-side.'
     estimate: L
     phase: multi-diagram-drafts
+    completed: 2026-04-20T12:45
+    archived: 2026-04-20T12:45
+    archive_reason: done
+    verification: DraftDetailPage rewritten with DiagramCard + AddDiagramToFeatureModal
   - id: multi-diagram-drafts-003
     title: 'Frontend: DiagramPage "Drafts (N)" picker + draft-new-feature'
-    status: in-progress
+    status: archived
     priority: high
     created: 2026-04-20T12:00
     started: 2026-04-20T12:00
@@ -90,9 +83,13 @@ epics:
       banner still shows current feature name + Compare/Apply/Discard.'
     estimate: M
     phase: multi-diagram-drafts
+    completed: 2026-04-20T12:45
+    archived: 2026-04-20T12:45
+    archive_reason: done
+    verification: DiagramPage Drafts(N) dropdown + new-feature entry via useDraftsForDiagram
   - id: multi-diagram-drafts-004
     title: 'Fix: edges sometimes missing on compare view side-by-side'
-    status: in-progress
+    status: archived
     priority: high
     created: 2026-04-20T12:00
     started: 2026-04-20T12:00
@@ -101,6 +98,10 @@ epics:
       new connection plus 1 unchanged connection and see which rendering path drops edges.'
     estimate: S
     phase: multi-diagram-drafts
+    completed: 2026-04-20T12:45
+    archived: 2026-04-20T12:45
+    archive_reason: done
+    verification: ConnectionMode.Loose added on CompareCanvas — strict mode was dropping edges
 - id: c4-nesting
   name: C4 Nesting UX (L1 → L2 → L3 drill-down)
   status: active
@@ -1381,11 +1382,12 @@ phases:
   completed: 2026-04-20T11:30
 - id: multi-diagram-drafts
   name: Multi-diagram drafts
-  status: active
+  status: done
   order: 9.5
   description: Draft as feature spanning N diagrams
   created: 2026-04-20T12:00
   start_date: '2026-04-20'
+  completed: 2026-04-20T12:45
 - id: versions-conflicts
   name: Versions + Conflicts
   status: planned
