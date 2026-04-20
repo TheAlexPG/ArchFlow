@@ -27,13 +27,13 @@
 | Phase 8 Polish + Enterprise | Archived | 0/0 | — |
 | Model Versions & Conflict Resolution | Planned | 3/5 | — |
 | Teams, Roles & Workspaces | Archived | 0/0 | — |
-| Real-time Collaboration | Planned | 0/4 | — |
+| Real-time Collaboration | Planned | 1/4 | — |
 | API Keys, Webhooks, Rate Limiting | Archived | 0/0 | — |
 | AI Features (beyond insights) | Planned | 0/4 | — |
 | Enterprise SSO & Compliance | Planned | 0/3 | — |
 
-**Active Phase:** Versions + Conflicts (3/4 done)
-**Phases:** >> Versions + Conflicts | ... Real-time Collaboration | ... AI Features (extended) | ... Enterprise SSO
+**Active Phase:** Real-time Collaboration (1/5 done)
+**Phases:** >> Real-time Collaboration | ... AI Features (extended) | ... Enterprise SSO
 
 **In Progress:** —
 **Blocked:** —
@@ -42,6 +42,21 @@
 ---
 
 ## Changelog
+
+### 2026-04-21 — WS + Redis backbone + cursor presence
+**Done:**
+- ConnectionManager with per-instance id + Redis pub/sub fan-out\nPer-diagram room for cursors/presence/selection; workspace-level firehose for query invalidation\nJWT auth via query param; cursor author stamped server-side\nREST endpoints publish object/connection/diagram events through fire_and_forget_publish\nFrontend: useDiagramSocket + useWorkspaceSocket + CursorsOverlay with deterministic per-user hues\n5 new plumbing tests — 31 total green
+
+**Decisions:**
+- Redis pattern-subscribe (ws:*) rather than subscribing per room — keeps the subscriber task count constant regardless of open diagrams.\nCursor frames carry _origin so publishing instance skips its own echo — correct Miro-like "don't see your own cursor" behaviour without maintaining a per-send skip list.\nWorkspaceSocketGate at App level rather than per-page so every authenticated view benefits from live query invalidation without touching each component.
+
+**Issues:**
+- End-to-end ws:// smoke through starlette TestClient hits a task-across-loop error with asyncpg — deferred to a browser/e2e harness. The plumbing is covered by direct manager tests which do catch the double-delivery bug that would otherwise break cursor UX.
+
+**Tasks touched:** N/A
+
+---
+
 
 ### 2026-04-21 — Revert to previous version
 **Done:**

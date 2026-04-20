@@ -6,6 +6,9 @@ context:
   in_progress: []
   blocked: []
   recent_completed:
+  - id: realtime-001
+    title: WebSocket endpoint + Redis pub/sub backbone
+    completed: 2026-04-21T00:49
   - id: versions-003
     title: Revert to previous version (creates new version, non-destructive)
     completed: 2026-04-21T00:41
@@ -18,21 +21,21 @@ context:
   next_up: []
   stats:
     total: 16
-    done: 3
+    done: 4
     in_progress: 0
     in_review: 0
-    todo: 13
+    todo: 12
     blocked: 0
     archived: 77
   active_phase:
-    id: versions-conflicts
-    name: Versions + Conflicts
+    id: realtime
+    name: Real-time Collaboration
     stats:
-      total: 4
-      todo: 1
+      total: 5
+      todo: 4
       in-progress: 0
       in-review: 0
-      done: 3
+      done: 1
       blocked: 0
       archived: 0
     target_date: null
@@ -1407,13 +1410,18 @@ epics:
   tasks:
   - id: realtime-001
     title: WebSocket endpoint + Redis pub/sub backbone
-    status: todo
+    status: done
     priority: high
     created: 2026-04-20T11:00
     notes: Spec §9.3. /ws/diagrams/{id} connection; broadcast object create/update/delete
       + cursor positions. Redis pub/sub for cross-instance fanout.
     estimate: L
     phase: realtime
+    last_referenced: 2026-04-21T00:49
+    started: 2026-04-21T00:41
+    branch: feature/realtime-001
+    worktree: .worktrees/realtime-001
+    completed: 2026-04-21T00:49
   - id: realtime-002
     title: Cursor presence on canvas (see other users)
     status: todo
@@ -1660,7 +1668,7 @@ phases:
   completed: 2026-04-20T12:45
 - id: versions-conflicts
   name: Versions + Conflicts
-  status: active
+  status: archived
   order: 10
   description: Snapshot on merge, conflict detection, revert, scheduled snapshots.
   created: 2026-04-20T11:00
@@ -1674,10 +1682,11 @@ phases:
   start_date: '2026-04-20'
 - id: realtime
   name: Real-time Collaboration
-  status: planned
+  status: active
   order: 12
   description: WebSocket presence + live updates + notifications.
   created: 2026-04-20T11:00
+  start_date: '2026-04-21'
 - id: api-surface
   name: API Keys & Webhooks
   status: archived
