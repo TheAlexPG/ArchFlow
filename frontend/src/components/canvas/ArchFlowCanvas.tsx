@@ -137,6 +137,8 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
   const { setNodes, setEdges, getNodes, getEdges, screenToFlowPosition } = useReactFlow()
   const prevKeyRef = useRef<string>('')
   const prevConnsRef = useRef<string>('')
+  // Stores {groupId -> {nodeId -> startPosition}} while a group drag is in progress.
+  const groupDragStartRef = useRef<Map<string, { x: number; y: number }> | null>(null)
 
   // Direct-neighbor dependency chain for the "View dependencies" overlay.
   // Focused node + every object with an incoming/outgoing edge to it within
@@ -353,6 +355,73 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     ? allObjects.find((o) => o.id === dependenciesFocusId)
     : null
 
+  /**
+   * Collect all node IDs that are members of the given group (direct or nested).
+   * Walks the parent_id chain upward for each object on the canvas.
+   */
+  const getGroupMemberIds = useCallback(
+    (groupId: string): string[] => {
+      const objectMap = new Map(allObjects.map((o) => [o.id, o]))
+      const members: string[] = []
+      for (const dObj of diagramObjects) {
+        if (dObj.object_id === groupId) continue
+        let current = objectMap.get(dObj.object_id)
+        while (current) {
+          if (current.parent_id === groupId) {
+            members.push(dObj.object_id)
+            break
+          }
+          current = current.parent_id ? objectMap.get(current.parent_id) : undefined
+        }
+      }
+      return members
+    },
+    [allObjects, diagramObjects],
+  )
+
+  const onNodeDrag = useCallback(
+    (_event: NodeDragEvent, node: Node) => {
+      const obj = allObjects.find((o) => o.id === node.id)
+      if (!obj || obj.type !== 'group') return
+
+      const currentNodes = getNodes()
+      const groupNode = currentNodes.find((n) => n.id === node.id)
+      if (!groupNode) return
+
+      // On the very first drag event, snapshot positions of all members.
+      if (!groupDragStartRef.current) {
+        const memberIds = getGroupMemberIds(node.id)
+        const startPositions = new Map<string, { x: number; y: number }>()
+        startPositions.set(node.id, { x: groupNode.position.x, y: groupNode.position.y })
+        for (const memberId of memberIds) {
+          const memberNode = currentNodes.find((n) => n.id === memberId)
+          if (memberNode) {
+            startPositions.set(memberId, { x: memberNode.position.x, y: memberNode.position.y })
+          }
+        }
+        groupDragStartRef.current = startPositions
+      }
+
+      const startPos = groupDragStartRef.current.get(node.id)
+      if (!startPos) return
+      const dx = node.position.x - startPos.x
+      const dy = node.position.y - startPos.y
+
+      if (dx === 0 && dy === 0) return
+
+      const memberIds = new Set(getGroupMemberIds(node.id))
+      setNodes(
+        currentNodes.map((n) => {
+          if (!memberIds.has(n.id)) return n
+          const memberStart = groupDragStartRef.current?.get(n.id)
+          if (!memberStart) return n
+          return { ...n, position: { x: memberStart.x + dx, y: memberStart.y + dy } }
+        }),
+      )
+    },
+    [allObjects, getGroupMemberIds, getNodes, setNodes],
+  )
+
   const onNodeDragStop = useCallback(
     (_event: NodeDragEvent, node: Node) => {
       if (!diagramId) return
@@ -367,23 +436,52 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
         y: node.position.y,
       })
 
-      // Spatial containment: detect new parent group for the dragged node.
-      // Groups moving don't re-parent their children — only the moved node changes.
-      if (obj && obj.type !== 'group') {
-        const nodeRect = nodeToRect(
-          node.id,
-          node.position,
-          node.width,
-          node.height,
-          allObjects,
-        )
-        const newParentId = detectParentGroup(node.id, nodeRect, diagramObjects, allObjects)
-        if (newParentId !== (obj.parent_id ?? null)) {
-          updateObject.mutate({ id: node.id, parent_id: newParentId })
+      if (obj && obj.type === 'group') {
+        // Persist positions for all children that were dragged with the group.
+        const startPositions = groupDragStartRef.current
+        groupDragStartRef.current = null
+
+        if (startPositions) {
+          const startPos = startPositions.get(node.id)
+          if (startPos) {
+            const dx = node.position.x - startPos.x
+            const dy = node.position.y - startPos.y
+            const currentNodes = getNodes()
+            const memberIds = getGroupMemberIds(node.id)
+            for (const memberId of memberIds) {
+              const memberStart = startPositions.get(memberId)
+              const memberNode = currentNodes.find((n) => n.id === memberId)
+              if (memberStart && memberNode) {
+                saveDiagramPosition.mutate({
+                  diagramId,
+                  objectId: memberId,
+                  x: memberStart.x + dx,
+                  y: memberStart.y + dy,
+                })
+              }
+            }
+          }
+        }
+      } else {
+        // Non-group node: clear stale drag ref if any, then check spatial containment.
+        groupDragStartRef.current = null
+
+        if (obj) {
+          const nodeRect = nodeToRect(
+            node.id,
+            node.position,
+            node.width,
+            node.height,
+            allObjects,
+          )
+          const newParentId = detectParentGroup(node.id, nodeRect, diagramObjects, allObjects)
+          if (newParentId !== (obj.parent_id ?? null)) {
+            updateObject.mutate({ id: node.id, parent_id: newParentId })
+          }
         }
       }
     },
-    [diagramId, saveDiagramPosition, allObjects, diagramObjects, updateObject],
+    [diagramId, saveDiagramPosition, allObjects, diagramObjects, updateObject, getGroupMemberIds, getNodes],
   )
 
 
@@ -535,6 +633,7 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
       defaultNodes={[]}
       defaultEdges={[]}
       connectionMode={ConnectionMode.Loose}
+      onNodeDrag={onNodeDrag}
       onNodeDragStop={onNodeDragStop}
       onConnect={onConnect}
       onSelectionChange={onSelectionChange}
