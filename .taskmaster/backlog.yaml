@@ -2,34 +2,105 @@ meta:
   project: ArchFlow
   updated: '2026-04-20'
 context:
-  active_epic: versions
-  in_progress: []
+  active_epic: multi-diagram-drafts
+  in_progress:
+  - id: multi-diagram-drafts-001
+    title: 'Backend: DraftDiagram junction table + service + API refactor'
+    epic: multi-diagram-drafts
+    branch: ''
+  - id: multi-diagram-drafts-002
+    title: 'Frontend: multi-diagram feature dashboard + per-diagram compare'
+    epic: multi-diagram-drafts
+    branch: ''
+  - id: multi-diagram-drafts-003
+    title: 'Frontend: DiagramPage "Drafts (N)" picker + draft-new-feature'
+    epic: multi-diagram-drafts
+    branch: ''
+  - id: multi-diagram-drafts-004
+    title: 'Fix: edges sometimes missing on compare view side-by-side'
+    epic: multi-diagram-drafts
+    branch: ''
   blocked: []
   recent_completed: []
   next_up: []
   stats:
-    total: 82
+    total: 86
     done: 0
-    in_progress: 0
+    in_progress: 4
     in_review: 0
     todo: 22
     blocked: 0
     archived: 60
   active_phase:
-    id: versions-conflicts
-    name: Versions + Conflicts
+    id: multi-diagram-drafts
+    name: Multi-diagram drafts
     target_date: null
-    start_date: null
+    start_date: '2026-04-20'
     stats:
       total: 4
-      todo: 4
-      in-progress: 0
+      todo: 0
+      in-progress: 4
       in-review: 0
       done: 0
       blocked: 0
       archived: 0
   stale: []
 epics:
+- id: multi-diagram-drafts
+  name: Multi-diagram drafts (features span many diagrams)
+  status: active
+  description: 'Rework Draft from 1-diagram fork to feature-level container: one feature holds N forked
+    diagrams. Diagrams can be member of multiple open features. Feature dashboard lists forks, add/remove
+    diagrams into feature, apply merges all forks.'
+  created: 2026-04-20T12:00
+  tasks:
+  - id: multi-diagram-drafts-001
+    title: 'Backend: DraftDiagram junction table + service + API refactor'
+    status: in-progress
+    priority: critical
+    created: 2026-04-20T12:00
+    started: 2026-04-20T12:00
+    notes: 'New draft_diagrams(draft_id, source_diagram_id, forked_diagram_id, UNIQUE(draft_id,source_diagram_id)).
+      Remove drafts.source_diagram_id / forked_diagram_id (migrate existing rows into junction). Services:
+      fork_existing_diagram creates a DraftDiagram; new add_diagram_to_draft / remove_diagram_from_draft;
+      apply_draft + discard_draft iterate all DraftDiagrams; compute_diff returns per-diagram diff array.
+      New endpoints POST/DELETE /drafts/{id}/diagrams/{diagram_id}. Reject adding a diagram that is itself
+      a fork (draft_id IS NOT NULL).'
+    estimate: L
+    phase: multi-diagram-drafts
+  - id: multi-diagram-drafts-002
+    title: 'Frontend: multi-diagram feature dashboard + per-diagram compare'
+    status: in-progress
+    priority: critical
+    created: 2026-04-20T12:00
+    started: 2026-04-20T12:00
+    notes: 'Update Draft type (has DraftDiagram[]). DraftDetailPage becomes feature dashboard: list of
+      included diagrams with Compare / Edit fork / Remove actions + Add diagram modal (picks from live
+      diagrams not already in any open feature fork). Compare per-diagram remains side-by-side.'
+    estimate: L
+    phase: multi-diagram-drafts
+  - id: multi-diagram-drafts-003
+    title: 'Frontend: DiagramPage "Drafts (N)" picker + draft-new-feature'
+    status: in-progress
+    priority: high
+    created: 2026-04-20T12:00
+    started: 2026-04-20T12:00
+    notes: 'Replace "Draft in progress: X" single pill with dropdown listing all open features including
+      current diagram. "Draft new feature" creates a new draft pre-populated with current diagram. Forked-canvas
+      banner still shows current feature name + Compare/Apply/Discard.'
+    estimate: M
+    phase: multi-diagram-drafts
+  - id: multi-diagram-drafts-004
+    title: 'Fix: edges sometimes missing on compare view side-by-side'
+    status: in-progress
+    priority: high
+    created: 2026-04-20T12:00
+    started: 2026-04-20T12:00
+    notes: 'User reports compare canvases sometimes show nodes without edges. Investigate: check CompareCanvas
+      edge filtering, fitView/viewport race, node handle resolution. Reproduce with a draft that has 1
+      new connection plus 1 unchanged connection and see which rendering path drops edges.'
+    estimate: S
+    phase: multi-diagram-drafts
 - id: c4-nesting
   name: C4 Nesting UX (L1 → L2 → L3 drill-down)
   status: active
@@ -1308,6 +1379,13 @@ phases:
   created: 2026-04-20T11:00
   start_date: '2026-04-20'
   completed: 2026-04-20T11:30
+- id: multi-diagram-drafts
+  name: Multi-diagram drafts
+  status: active
+  order: 9.5
+  description: Draft as feature spanning N diagrams
+  created: 2026-04-20T12:00
+  start_date: '2026-04-20'
 - id: versions-conflicts
   name: Versions + Conflicts
   status: planned
