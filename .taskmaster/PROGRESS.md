@@ -25,23 +25,83 @@
 | Edge Details & Customization | Planned | 0/0 | — |
 | Node Customization & Styling | Planned | 0/0 | — |
 | Phase 8 Polish + Enterprise | Archived | 0/0 | — |
-| Model Versions & Conflict Resolution | Planned | 3/5 | Diagram packs — folder-like groups on Diagrams page |
+| Model Versions & Conflict Resolution | Planned | 4/5 | — |
 | Teams, Roles & Workspaces | Archived | 0/0 | — |
-| Real-time Collaboration | Planned | 1/4 | Cursor presence on canvas (see other users) |
+| Real-time Collaboration | Planned | 4/4 | — |
 | API Keys, Webhooks, Rate Limiting | Archived | 0/0 | — |
 | AI Features (beyond insights) | Planned | 0/4 | — |
 | Enterprise SSO & Compliance | Planned | 0/3 | — |
 
-**Active Phase:** Real-time Collaboration (1/5 done)
+**Active Phase:** Real-time Collaboration (5/5 done)
 **Phases:** >> Real-time Collaboration | ... AI Features (extended) | ... Enterprise SSO
 
-**In Progress:** versions-005 Diagram packs — folder-like groups on Diagrams page, realtime-002 Cursor presence on canvas (see other users), realtime-003 Live object updates broadcast to open diagrams, realtime-004 Notifications (mentions in comments, in-app + email)
+**In Progress:** —
 **Blocked:** —
 **Next Up:** —
 
 ---
 
 ## Changelog
+
+### 2026-04-21 — Diagram packs
+**Done:**
+- diagram_packs table + diagrams.pack_id FK\nService + admin-gated CRUD endpoints + cross-workspace validation\nDiagramsPage regrouped with Unfiled + per-pack sections, "Move to…" picker per row, "+ New pack"\n8 new tests
+
+**Decisions:**
+- ON DELETE SET NULL on pack_id means deleting a pack drops its diagrams to Unfiled, not cascading removal — a pack is a folder, not a container of ownership.
+
+**Issues:**
+- None
+
+**Tasks touched:** N/A
+
+---
+
+
+### 2026-04-21 — Notifications: @mentions + in-app bell
+**Done:**
+- notifications table + model + service (create, list, unread count, mark read, mark-all)\nextract_mentions regex + resolve_mentioned_users by name-prefix or email local-part; no self-notify\nComment create fans out a notification per mentioned user\nGET /notifications + /unread-count + POST /{id}/read + /read-all\nNew /ws/me endpoint joins user:{id} room; notification_service.create publishes notification.new so the bell updates live\nFrontend NotificationsBell in AppSidebar with badge + dropdown + mark-all; useUserSocket keeps the stream alive\n4 new tests — total 43 green
+
+**Decisions:**
+- kind is a free string so new notification types ship without migrations; frontend renders based on it. target_url on the row makes the bell click action a simple route push.
+
+**Issues:**
+- Email delivery is intentionally absent — in-app only. Wire SMTP when SSO epic picks up. Mention resolution is prefix-based per first whitespace token; not perfect for users with whitespace in names but good default.
+
+**Tasks touched:** N/A
+
+---
+
+
+### 2026-04-21 — Optimistic TanStack cache updates
+**Done:**
+- useWorkspaceSocket now setQueriesData directly from WS event payload for object/connection/diagram created+updated+deleted\nmergeEntity helper upserts by id into existing list; delete filters it out\nFallback to invalidate when payload is absent\nnotification.new still invalidates (payload is partial)
+
+**Decisions:**
+- Hot path is setQueriesData, not setQueryData — a single event needs to patch every parameterized variant (e.g. objects?draft_id=...). setQueriesData runs the updater across all matches; slight CPU cost, zero refetch network.
+
+**Issues:**
+- None
+
+**Tasks touched:** N/A
+
+---
+
+
+### 2026-04-21 — Presence roster + selection sync
+**Done:**
+- PresenceRoster component — avatar stack top-right of canvas with deterministic per-user hue matching cursors\nSelection state in useDiagramSocket tracks remote selections by user_id\nRemoteSelectionsOverlay injects a scoped CSS ring on .react-flow__node[data-id] per (user, node) — zero extra DOM\nonSelectionChange broadcasts selected node ids; empty list clears
+
+**Decisions:**
+- CSS attribute selector for selection outline rather than rendering wrapper divs — idempotent, no z-index fights with node interior, and free remount when the node unmounts.
+
+**Issues:**
+- None
+
+**Tasks touched:** N/A
+
+---
+
 
 ### 2026-04-21 — WS + Redis backbone + cursor presence
 **Done:**

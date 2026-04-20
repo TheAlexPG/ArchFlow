@@ -2,47 +2,30 @@ meta:
   project: ArchFlow
   updated: '2026-04-21'
 context:
-  active_epic: realtime
-  in_progress:
-  - id: versions-005
-    title: Diagram packs — folder-like groups on Diagrams page
-    epic: versions
-    branch: feature/packs
-    locked_by: Alexandrs-MacBook-Pro.local-60393-d0858f10
-  - id: realtime-002
-    title: Cursor presence on canvas (see other users)
-    epic: realtime
-    branch: feature/realtime-polish
-    locked_by: Alexandrs-MacBook-Pro.local-60393-d0858f10
-  - id: realtime-003
-    title: Live object updates broadcast to open diagrams
-    epic: realtime
-    branch: feature/realtime-polish
-    locked_by: Alexandrs-MacBook-Pro.local-60393-d0858f10
-  - id: realtime-004
-    title: Notifications (mentions in comments, in-app + email)
-    epic: realtime
-    branch: feature/realtime-polish
-    locked_by: Alexandrs-MacBook-Pro.local-60393-d0858f10
+  active_epic: canvas-polish
+  in_progress: []
   blocked: []
   recent_completed:
+  - id: versions-005
+    title: Diagram packs — folder-like groups on Diagrams page
+    completed: 2026-04-21T01:08
+  - id: realtime-002
+    title: Cursor presence on canvas (see other users)
+    completed: 2026-04-21T01:08
+  - id: realtime-003
+    title: Live object updates broadcast to open diagrams
+    completed: 2026-04-21T01:08
+  - id: realtime-004
+    title: Notifications (mentions in comments, in-app + email)
+    completed: 2026-04-21T01:08
   - id: realtime-001
     title: WebSocket endpoint + Redis pub/sub backbone
     completed: 2026-04-21T00:49
-  - id: versions-003
-    title: Revert to previous version (creates new version, non-destructive)
-    completed: 2026-04-21T00:41
-  - id: versions-001
-    title: Versions table + immutable snapshot on draft apply
-    completed: 2026-04-21T00:32
-  - id: versions-002
-    title: Conflict detection on draft apply (main moved since fork)
-    completed: 2026-04-21T00:32
   next_up: []
   stats:
     total: 16
-    done: 4
-    in_progress: 4
+    done: 8
+    in_progress: 0
     in_review: 0
     todo: 8
     blocked: 0
@@ -53,9 +36,9 @@ context:
     stats:
       total: 5
       todo: 0
-      in-progress: 4
+      in-progress: 0
       in-review: 0
-      done: 1
+      done: 5
       blocked: 0
       archived: 0
     target_date: null
@@ -1339,18 +1322,18 @@ epics:
     phase: versions-conflicts
   - id: versions-005
     title: Diagram packs — folder-like groups on Diagrams page
-    status: in-progress
+    status: done
     priority: medium
     created: 2026-04-21T00:22
-    last_referenced: 2026-04-21T00:55
+    last_referenced: 2026-04-21T01:08
     notes: Packs are organizational containers orthogonal to C4 parent hierarchy.
       Create/rename/delete, assign diagrams, show grouped on /diagrams page. Orthogonal
       to team ACL — a pack just groups, it doesn't gate access.
     estimate: M
     phase: realtime
     started: 2026-04-21T00:55
-    locked_by: Alexandrs-MacBook-Pro.local-60393-d0858f10
     branch: feature/packs
+    completed: 2026-04-21T01:08
 - id: teams-roles
   name: Teams, Roles & Workspaces
   status: archived
@@ -1447,41 +1430,41 @@ epics:
     completed: 2026-04-21T00:49
   - id: realtime-002
     title: Cursor presence on canvas (see other users)
-    status: in-progress
+    status: done
     priority: medium
     created: 2026-04-20T11:00
     notes: Render remote cursors on ReactFlow, throttled position updates over WS.
     estimate: M
     phase: realtime
-    last_referenced: 2026-04-21T00:55
+    last_referenced: 2026-04-21T01:08
     started: 2026-04-21T00:55
-    locked_by: Alexandrs-MacBook-Pro.local-60393-d0858f10
     branch: feature/realtime-polish
+    completed: 2026-04-21T01:08
   - id: realtime-003
     title: Live object updates broadcast to open diagrams
-    status: in-progress
+    status: done
     priority: medium
     created: 2026-04-20T11:00
     notes: When a user edits, others see the change within ~100ms. Optimistic local
       write + server confirm.
     estimate: M
     phase: realtime
-    last_referenced: 2026-04-21T00:55
+    last_referenced: 2026-04-21T01:08
     started: 2026-04-21T00:55
-    locked_by: Alexandrs-MacBook-Pro.local-60393-d0858f10
     branch: feature/realtime-polish
+    completed: 2026-04-21T01:08
   - id: realtime-004
     title: Notifications (mentions in comments, in-app + email)
-    status: in-progress
+    status: done
     priority: low
     created: 2026-04-20T11:00
     notes: Spec §6.4. notifications table, in-app badge, email via SMTP.
     estimate: M
     phase: realtime
-    last_referenced: 2026-04-21T00:55
+    last_referenced: 2026-04-21T01:08
     started: 2026-04-21T00:55
-    locked_by: Alexandrs-MacBook-Pro.local-60393-d0858f10
     branch: feature/realtime-polish
+    completed: 2026-04-21T01:08
 - id: api-keys-webhooks
   name: API Keys, Webhooks, Rate Limiting
   status: archived
