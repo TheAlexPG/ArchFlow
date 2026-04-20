@@ -13,7 +13,7 @@ import {
 import { useDiagrams, useObjectDiagrams } from '../../hooks/use-diagrams'
 import { useCanvasStore } from '../../stores/canvas-store'
 import type { ModelObject, ObjectScope, ObjectStatus } from '../../types/model'
-import { STATUS_COLORS, TYPE_LABELS } from '../canvas/node-utils'
+import { STATUS_COLORS, TYPE_ICONS, TYPE_LABELS } from '../canvas/node-utils'
 import { RichTextEditor } from '../common/RichTextEditor'
 import {
   CreateChildDiagramModal,
