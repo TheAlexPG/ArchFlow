@@ -828,6 +828,30 @@ async def fork_existing_diagram(
         raise ValueError("Source diagram not found (or is itself a forked draft)")
 
     draft = await create_draft(db, draft_data, author_id=author_id)
+
+    # Stamp the fork's base_version — either the workspace's current head
+    # version, or a fresh "manual" snapshot if none exists yet. Later
+    # apply() uses this to detect whether main moved in parallel.
+    if source_diagram.workspace_id is not None:
+        from app.models.version import VersionSource
+        from app.services import version_service
+
+        latest = await version_service.list_versions(
+            db, source_diagram.workspace_id, limit=1
+        )
+        base_version = (
+            latest[0]
+            if latest
+            else await version_service.create_snapshot(
+                db,
+                workspace_id=source_diagram.workspace_id,
+                source=VersionSource.MANUAL,
+                created_by_user_id=author_id,
+            )
+        )
+        draft.base_version_id = base_version.id
+        await db.flush()
+
     forked = await _clone_diagram(db, draft, source_diagram)
 
     dd = DraftDiagram(

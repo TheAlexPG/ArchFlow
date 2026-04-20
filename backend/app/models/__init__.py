@@ -10,6 +10,7 @@ from app.models.object import ModelObject, ObjectScope, ObjectStatus, ObjectType
 from app.models.invite import WorkspaceInvite
 from app.models.team import AccessLevel, DiagramAccess, Team, TeamMember
 from app.models.user import User
+from app.models.version import Version, VersionSource
 from app.models.webhook import Webhook
 from app.models.workspace import Organization, Role, Workspace, WorkspaceMember
 
@@ -42,6 +43,8 @@ __all__ = [
     "Team",
     "TeamMember",
     "User",
+    "Version",
+    "VersionSource",
     "Webhook",
     "Workspace",
     "WorkspaceInvite",

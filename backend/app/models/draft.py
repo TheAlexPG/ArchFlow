@@ -39,6 +39,14 @@ class Draft(Base, UUIDMixin, TimestampMixin):
         ForeignKey("users.id", ondelete="SET NULL"),
         default=None,
     )
+    # Version snapshot that was "current" in the workspace when this draft
+    # was forked. On apply we compare current main to this version to find
+    # changes that happened in parallel — those are potential conflicts.
+    base_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("versions.id", ondelete="SET NULL"),
+        default=None,
+    )
 
     diagrams: Mapped[list["DraftDiagram"]] = relationship(
         "DraftDiagram",
