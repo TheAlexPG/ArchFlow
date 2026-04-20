@@ -12,6 +12,7 @@ import { ObjectsPage } from './pages/ObjectsPage'
 import { OverviewPage } from './pages/OverviewPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { TeamsPage } from './pages/TeamsPage'
+import { VersionsPage } from './pages/VersionsPage'
 import { useAuthStore } from './stores/auth-store'
 import './index.css'
 
@@ -102,6 +103,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <ActivityPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/versions"
+            element={
+              <ProtectedRoute>
+                <VersionsPage />
               </ProtectedRoute>
             }
           />

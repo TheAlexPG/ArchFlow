@@ -5,10 +5,12 @@ import type {
   ApiKeyCreate,
   ApiKeyWithSecret,
   Comment,
+  Conflict,
   DiagramAccessLevel,
   DiagramGrant,
   Team,
   TeamMember,
+  Version,
   Webhook,
   WebhookCreate,
   WebhookWithSecret,
@@ -545,8 +547,10 @@ export function useDeleteDraft() {
 export function useApplyDraft() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (draftId: string) => {
-      const { data } = await api.post(`/drafts/${draftId}/apply`)
+    mutationFn: async ({ draftId, force }: { draftId: string; force?: boolean }) => {
+      const url = force ? `/drafts/${draftId}/apply?force=true` : `/drafts/${draftId}/apply`
+      // 409 is not caught here — axios throws and the caller reads err.response.data
+      const { data } = await api.post(url)
       return data
     },
     onSuccess: () => {
@@ -554,6 +558,7 @@ export function useApplyDraft() {
       qc.invalidateQueries({ queryKey: ['objects'] })
       qc.invalidateQueries({ queryKey: ['connections'] })
       qc.invalidateQueries({ queryKey: ['diagrams'] })
+      qc.invalidateQueries({ queryKey: ['versions'] })
     },
   })
 }
@@ -906,5 +911,79 @@ export function useAcceptInvite() {
       return data
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['workspaces'] }),
+  })
+}
+
+// ─── Versions ─────────────────────────────────────────────
+
+export function useVersions() {
+  return useQuery({
+    queryKey: ['versions'],
+    queryFn: async () => {
+      const { data } = await api.get<Version[]>('/versions')
+      return data
+    },
+  })
+}
+
+export function useVersion(id: string | null) {
+  return useQuery({
+    queryKey: ['versions', id],
+    queryFn: async () => {
+      const { data } = await api.get<Version & { snapshot_data: { objects: unknown[]; connections: unknown[]; diagrams: unknown[] } }>(`/versions/${id}`)
+      return data
+    },
+    enabled: !!id,
+  })
+}
+
+export function useCreateManualSnapshot() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async () => {
+      const { data } = await api.post<Version>('/versions/snapshot')
+      return data
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['versions'] }),
+  })
+}
+
+export function useCompareVersions() {
+  return useMutation({
+    mutationFn: async ({ a, b }: { a: string; b: string }) => {
+      const { data } = await api.post<{
+        a: string
+        b: string
+        diff: unknown
+        summary: {
+          objects_added: number
+          objects_removed: number
+          objects_modified: number
+          connections_added: number
+          connections_removed: number
+          connections_modified: number
+          diagrams_added: number
+          diagrams_removed: number
+          diagrams_modified: number
+        }
+      }>('/versions/compare', { a, b })
+      return data
+    },
+  })
+}
+
+export function useDraftConflicts(draftId: string | null) {
+  return useQuery({
+    queryKey: ['drafts', draftId, 'conflicts'],
+    queryFn: async () => {
+      const { data } = await api.get<{
+        conflicts: Conflict[]
+        base_version_id: string | null
+        main_delta?: Record<string, number>
+        fork_delta?: Record<string, number>
+      }>(`/drafts/${draftId}/conflicts`)
+      return data
+    },
+    enabled: !!draftId,
   })
 }

@@ -10,11 +10,88 @@ import {
   useApplyDraft,
   useDiscardDraft,
   useDraft,
+  useDraftConflicts,
   useDraftDiff,
   useRemoveDiagramFromDraft,
 } from '../hooks/use-api'
 import { useDiagrams } from '../hooks/use-diagrams'
-import type { DraftDiagram, DraftDiffSummary, PerDiagramDiffEntry } from '../types/model'
+import type { Conflict, ConflictReport, DraftDiagram, DraftDiffSummary, PerDiagramDiffEntry } from '../types/model'
+
+const CONFLICT_TYPE_LABEL: Record<string, string> = {
+  both_edited: 'both edited',
+  main_deleted_fork_edited: 'deleted on main, edited in draft',
+  fork_deleted_main_edited: 'edited on main, deleted in draft',
+}
+
+function ConflictBanner({ conflicts }: { conflicts: Conflict[] }) {
+  return (
+    <div className="border-b border-amber-800/60 bg-amber-950/40 px-4 py-3 flex-shrink-0">
+      <div className="flex items-center gap-2 mb-1.5">
+        <span className="text-amber-400 font-semibold text-sm">
+          {conflicts.length} conflict{conflicts.length !== 1 ? 's' : ''} detected against main
+        </span>
+      </div>
+      <ul className="flex flex-col gap-0.5">
+        {conflicts.map((c) => (
+          <li key={`${c.kind}-${c.id}`} className="text-xs text-amber-300/80">
+            <span className="text-amber-500/60">[{c.kind}]</span>{' '}
+            <span className="font-mono text-amber-300">{c.id}</span>{' '}
+            <span className="text-amber-500/80">— {CONFLICT_TYPE_LABEL[c.type] ?? c.type}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function ForceApplyPanel({
+  report,
+  onForce,
+  onDismiss,
+  isPending,
+}: {
+  report: ConflictReport
+  onForce: () => void
+  onDismiss: () => void
+  isPending: boolean
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+      <div className="bg-neutral-900 border border-amber-800/60 rounded-lg p-5 max-w-lg w-full shadow-xl">
+        <div className="text-amber-400 font-semibold text-sm mb-2">
+          Apply blocked — {report.conflicts.length} conflict{report.conflicts.length !== 1 ? 's' : ''}
+        </div>
+        <p className="text-xs text-neutral-400 mb-3">
+          The following objects were modified on main while this draft was open. Force-applying will overwrite those main-branch changes.
+        </p>
+        <ul className="mb-4 flex flex-col gap-1">
+          {report.conflicts.map((c) => (
+            <li key={`${c.kind}-${c.id}`} className="text-xs text-amber-300/80">
+              <span className="text-amber-500/60">[{c.kind}]</span>{' '}
+              <span className="font-mono">{c.id}</span>{' '}
+              — {CONFLICT_TYPE_LABEL[c.type] ?? c.type}
+            </li>
+          ))}
+        </ul>
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={onDismiss}
+            className="text-sm text-neutral-400 border border-neutral-700 hover:border-neutral-500 px-3 py-1.5 rounded"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onForce}
+            disabled={isPending}
+            className="text-sm bg-amber-600 hover:bg-amber-500 text-white px-3 py-1.5 rounded disabled:opacity-40"
+          >
+            {isPending ? 'Applying…' : 'Force apply'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export function DraftDetailPage() {
   const { draftId } = useParams<{ draftId: string }>()
@@ -23,9 +100,13 @@ export function DraftDetailPage() {
   const { data: diff } = useDraftDiff(
     draft?.status === 'open' ? (draftId || null) : null,
   )
+  const { data: conflictsData } = useDraftConflicts(
+    draft?.status === 'open' ? (draftId || null) : null,
+  )
   const applyDraft = useApplyDraft()
   const discardDraft = useDiscardDraft()
   const [addModalOpen, setAddModalOpen] = useState(false)
+  const [conflictReport, setConflictReport] = useState<ConflictReport | null>(null)
 
   if (!draft) {
     return (
@@ -38,14 +119,26 @@ export function DraftDetailPage() {
 
   const isOpen = draft.status === 'open'
   const totalSummary = diff?.total_summary
+  const conflicts = conflictsData?.conflicts ?? []
 
   const handleApply = () => {
     const n = draft.diagrams.length
     if (!confirm(`Apply "${draft.name}" — merges ${n} diagram fork${n !== 1 ? 's' : ''} into their source diagrams?`)) return
-    applyDraft.mutate(draft.id, {
-      onSuccess: () => {
-        navigate('/drafts')
+    applyDraft.mutate({ draftId: draft.id }, {
+      onSuccess: () => navigate('/drafts'),
+      onError: (err) => {
+        const e = err as { response?: { status?: number; data?: ConflictReport } }
+        if (e.response?.status === 409 && e.response.data) {
+          setConflictReport(e.response.data)
+        }
       },
+    })
+  }
+
+  const handleForceApply = () => {
+    applyDraft.mutate({ draftId: draft.id, force: true }, {
+      onSuccess: () => navigate('/drafts'),
+      onError: () => setConflictReport(null),
     })
   }
 
@@ -58,6 +151,14 @@ export function DraftDetailPage() {
 
   return (
     <div className="flex h-screen bg-neutral-950 text-neutral-200">
+      {conflictReport && (
+        <ForceApplyPanel
+          report={conflictReport}
+          onForce={handleForceApply}
+          onDismiss={() => setConflictReport(null)}
+          isPending={applyDraft.isPending}
+        />
+      )}
       <AppSidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
@@ -106,6 +207,9 @@ export function DraftDetailPage() {
             </div>
           )}
         </div>
+
+        {/* Conflict banner — shown when open draft has conflicts against main */}
+        {isOpen && conflicts.length > 0 && <ConflictBanner conflicts={conflicts} />}
 
         {/* Total summary strip */}
         {isOpen && totalSummary && <TotalSummaryStrip summary={totalSummary} diagramCount={draft.diagrams.length} />}

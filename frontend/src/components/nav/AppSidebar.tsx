@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { label: 'Connections', icon: '⇄', path: '/connections' },
   { label: 'Drafts', icon: '✎', path: '/drafts' },
   { label: 'Activity', icon: '⏱', path: '/activity' },
+  { label: 'Versions', icon: '◷', path: '/versions' },
   { label: 'Members', icon: '◌', path: '/members' },
   { label: 'Teams', icon: '◎', path: '/teams' },
   { label: 'Settings', icon: '⚙', path: '/settings' },

@@ -86,7 +86,7 @@ export function DiagramPage() {
   const handleApply = () => {
     if (!currentDraft) return
     if (!confirm(`Apply feature "${currentDraft.name}" — merges all diagram changes into their source diagrams?`)) return
-    applyDraft.mutate(currentDraft.id, {
+    applyDraft.mutate({ draftId: currentDraft.id }, {
       onSuccess: () => navigate('/drafts'),
     })
   }

@@ -20,6 +20,7 @@ from app.api.v1.invites import router as invites_router
 from app.api.v1.members import router as members_router
 from app.api.v1.oauth_stub import router as oauth_router
 from app.api.v1.teams import router as teams_router
+from app.api.v1.versions import router as versions_router
 from app.api.v1.workspaces import router as workspaces_router
 from app.core.config import settings
 from app.core.database import engine
@@ -64,6 +65,7 @@ def create_app() -> FastAPI:
     app.include_router(diagram_access_router, prefix="/api/v1")
     app.include_router(oauth_router, prefix="/api/v1")
     app.include_router(invites_router, prefix="/api/v1")
+    app.include_router(versions_router, prefix="/api/v1")
 
     @app.get("/health")
     async def health():

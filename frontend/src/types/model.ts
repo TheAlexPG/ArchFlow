@@ -343,6 +343,34 @@ export interface TeamMember {
   name: string
 }
 
+export type VersionSource = 'apply' | 'manual' | 'scheduled' | 'revert'
+
+export interface Version {
+  id: string
+  workspace_id: string
+  label: string
+  source: VersionSource
+  draft_id: string | null
+  created_by_user_id: string | null
+  created_at: string
+}
+
+export type ConflictType = 'both_edited' | 'main_deleted_fork_edited' | 'fork_deleted_main_edited'
+
+export interface Conflict {
+  kind: 'objects' | 'connections' | 'diagrams'
+  id: string
+  type: ConflictType
+}
+
+export interface ConflictReport {
+  conflicts: Conflict[]
+  base_version_id: string | null
+  reason?: string
+  main_delta?: Record<string, number>
+  fork_delta?: Record<string, number>
+}
+
 export type DiagramAccessLevel = 'read' | 'write' | 'admin'
 
 /** Exactly one of team_id / user_id is non-null. */

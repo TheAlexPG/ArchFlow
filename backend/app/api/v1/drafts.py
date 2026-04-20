@@ -132,20 +132,50 @@ async def delete_draft(draft_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/{draft_id}/apply")
-async def apply_draft(draft_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+async def apply_draft(
+    draft_id: uuid.UUID,
+    force: bool = False,
+    db: AsyncSession = Depends(get_db),
+):
+    """Merge a draft onto main.
+
+    If the draft's base_version has drifted from current main (someone
+    else changed the same objects in parallel), we return 409 with the
+    conflict report. Caller can inspect it and resubmit with `?force=true`
+    to overwrite.
+    """
+    from app.services import conflict_service
     from app.services.webhook_service import fire_and_forget_emit
 
     draft = await draft_service.get_draft(db, draft_id)
     if not draft:
         raise HTTPException(status_code=404, detail="Draft not found")
     try:
-        result = await draft_service.apply_draft(db, draft)
+        result = await conflict_service.apply_with_snapshot(
+            db, draft, current_user_id=None, force=force
+        )
+    except conflict_service.ConflictError as e:
+        raise HTTPException(status_code=409, detail=e.report) from e
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     fire_and_forget_emit(
         "draft.applied", {"id": str(draft.id), "name": getattr(draft, "name", None)}
     )
     return result
+
+
+@router.get("/{draft_id}/conflicts")
+async def draft_conflicts(
+    draft_id: uuid.UUID, db: AsyncSession = Depends(get_db)
+):
+    """Inspect whether this draft would collide with current main. UI
+    calls this before enabling the "Apply" button."""
+    from app.services import conflict_service
+
+    draft = await draft_service.get_draft(db, draft_id)
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    return await conflict_service.compute_conflicts(db, draft)
 
 
 @router.get("/{draft_id}/diff", response_model=DraftDiffResponse)
