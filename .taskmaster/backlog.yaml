@@ -5,41 +5,17 @@ context:
   active_epic: canvas-polish
   in_progress: []
   blocked: []
-  recent_completed:
-  - id: teams-roles-002
-    title: Roles & permissions (Owner/Admin/Editor/Reviewer/Viewer)
-    completed: 2026-04-20T21:10
-  - id: teams-roles-003
-    title: Teams as first-class entity with membership
-    completed: 2026-04-20T21:10
-  - id: teams-roles-004
-    title: OAuth 2.0 login (Google/GitHub/GitLab)
-    completed: 2026-04-20T21:10
-  - id: teams-roles-001
-    title: Organizations + Workspaces schema and scoping
-    completed: 2026-04-20T20:08
+  recent_completed: []
   next_up: []
   stats:
-    total: 19
-    done: 4
+    total: 15
+    done: 0
     in_progress: 0
     in_review: 0
     todo: 15
     blocked: 0
-    archived: 73
-  active_phase:
-    id: teams-roles
-    name: Teams, Roles, Workspaces
-    stats:
-      total: 4
-      todo: 0
-      in-progress: 0
-      in-review: 0
-      done: 4
-      blocked: 0
-      archived: 0
-    target_date: null
-    start_date: '2026-04-20'
+    archived: 77
+  active_phase: null
   stale: []
 epics:
 - id: canvas-polish
@@ -1304,14 +1280,14 @@ epics:
     phase: versions-conflicts
 - id: teams-roles
   name: Teams, Roles & Workspaces
-  status: planned
+  status: archived
   description: Orgs/workspaces multi-tenancy, role-based permissions, teams as entities
     for ownership assignment.
   created: 2026-04-20T11:00
   tasks:
   - id: teams-roles-001
     title: Organizations + Workspaces schema and scoping
-    status: done
+    status: archived
     priority: high
     created: 2026-04-20T11:00
     notes: Spec §6.1. org/workspace tables; every resource (model_objects, connections,
@@ -1324,9 +1300,11 @@ epics:
     branch: feature/teams-roles-001
     worktree: .worktrees/teams-roles-001
     completed: 2026-04-20T20:08
+    archive_reason: done
+    archived: 2026-04-20T21:10
   - id: teams-roles-002
     title: Roles & permissions (Owner/Admin/Editor/Reviewer/Viewer)
-    status: done
+    status: archived
     priority: high
     created: 2026-04-20T11:00
     notes: Spec §6.2. memberships table (user_id, workspace_id, role). Decorator on
@@ -1338,9 +1316,11 @@ epics:
     branch: feature/teams-permissions
     worktree: .worktrees/teams-permissions
     completed: 2026-04-20T21:10
+    archive_reason: done
+    archived: 2026-04-20T21:10
   - id: teams-roles-003
     title: Teams as first-class entity with membership
-    status: done
+    status: archived
     priority: medium
     created: 2026-04-20T11:00
     notes: 'Spec §6.3. teams table, team_memberships junction. Replace/extend model_objects.owner_team
@@ -1352,9 +1332,11 @@ epics:
     branch: feature/teams-permissions
     worktree: .worktrees/teams-permissions
     completed: 2026-04-20T21:10
+    archive_reason: done
+    archived: 2026-04-20T21:10
   - id: teams-roles-004
     title: OAuth 2.0 login (Google/GitHub/GitLab)
-    status: done
+    status: archived
     priority: medium
     created: 2026-04-20T11:00
     notes: Spec §6.5. Authlib or similar. Extend users table with auth_provider field.
@@ -1365,6 +1347,10 @@ epics:
     branch: feature/teams-permissions
     worktree: .worktrees/teams-permissions
     completed: 2026-04-20T21:10
+    archive_reason: done
+    archived: 2026-04-20T21:10
+  archive_reason: done
+  archived: 2026-04-20T21:10
 - id: realtime
   name: Real-time Collaboration
   status: planned
@@ -1633,7 +1619,7 @@ phases:
   created: 2026-04-20T11:00
 - id: teams-roles
   name: Teams, Roles, Workspaces
-  status: active
+  status: archived
   order: 11
   description: Multi-tenancy, RBAC, teams, OAuth.
   created: 2026-04-20T11:00
