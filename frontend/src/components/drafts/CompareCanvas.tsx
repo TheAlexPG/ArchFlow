@@ -1,5 +1,6 @@
 import {
   Background,
+  ConnectionMode,
   MarkerType,
   MiniMap,
   ReactFlow,
@@ -254,6 +255,7 @@ export function CompareCanvas({
         nodesDraggable={false}
         nodesConnectable={false}
         elementsSelectable={false}
+        connectionMode={ConnectionMode.Loose}
         panOnDrag
         zoomOnScroll
         zoomOnPinch
