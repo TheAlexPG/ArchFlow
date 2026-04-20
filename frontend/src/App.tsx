@@ -7,9 +7,11 @@ import { DiagramPage } from './pages/DiagramPage'
 import { DiagramsPage } from './pages/DiagramsPage'
 import { DraftDetailPage } from './pages/DraftDetailPage'
 import { DraftsPage } from './pages/DraftsPage'
+import { MembersPage } from './pages/MembersPage'
 import { ObjectsPage } from './pages/ObjectsPage'
 import { OverviewPage } from './pages/OverviewPage'
 import { SettingsPage } from './pages/SettingsPage'
+import { TeamsPage } from './pages/TeamsPage'
 import { useAuthStore } from './stores/auth-store'
 import './index.css'
 
@@ -100,6 +102,22 @@ function App() {
             element={
               <ProtectedRoute>
                 <ActivityPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/members"
+            element={
+              <ProtectedRoute>
+                <MembersPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/teams"
+            element={
+              <ProtectedRoute>
+                <TeamsPage />
               </ProtectedRoute>
             }
           />

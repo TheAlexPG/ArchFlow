@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ReactFlowProvider } from '@xyflow/react'
 import { ArchFlowCanvas } from '../components/canvas/ArchFlowCanvas'
+import { DiagramAccessModal } from '../components/diagram/DiagramAccessModal'
 import { CreateDraftModal } from '../components/drafts/CreateDraftModal'
 import { AddObjectToolbar } from '../components/toolbar/AddObjectToolbar'
 import { FilterToolbar } from '../components/toolbar/FilterToolbar'
@@ -33,6 +34,7 @@ export function DiagramPage() {
   const [searchOpen, setSearchOpen] = useState(false)
   const [draftModalOpen, setDraftModalOpen] = useState(false)
   const [draftsDropdownOpen, setDraftsDropdownOpen] = useState(false)
+  const [accessModalOpen, setAccessModalOpen] = useState(false)
 
   const isForkedDiagram = !!diagram?.draft_id
   const isLiveDiagram = !!diagram && !diagram.draft_id
@@ -182,6 +184,18 @@ export function DiagramPage() {
                 ⌘K
               </span>
             </button>
+            {isLiveDiagram && (
+              <button
+                onClick={() => setAccessModalOpen(true)}
+                style={{
+                  background: '#1a1a1a', border: '1px solid #333', borderRadius: 6,
+                  color: '#a3a3a3', cursor: 'pointer', fontSize: 12, padding: '4px 10px',
+                }}
+                title="Control which teams can see or edit this diagram"
+              >
+                🔒 Access
+              </button>
+            )}
             {isLiveDiagram && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 4, position: 'relative' }}>
                 {openDraftsForThisDiagram.length > 0 && (
@@ -403,6 +417,12 @@ export function DiagramPage() {
         sourceName={diagram?.name}
         errorMessage={draftError}
       />
+      {accessModalOpen && diagramId && (
+        <DiagramAccessModal
+          diagramId={diagramId}
+          onClose={() => setAccessModalOpen(false)}
+        />
+      )}
     </ReactFlowProvider>
   )
 }

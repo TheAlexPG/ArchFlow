@@ -32,6 +32,30 @@ export function AuthPage() {
     }
   }
 
+  const handleGoogleLogin = async () => {
+    // Stub: the backend's /auth/oauth/google/login returns a URL that points
+    // right back at its own callback with a sample code. In production this
+    // would be a Google 302 we'd window.location.assign() to. For the stub
+    // we just ask the user for an email and post to the callback directly.
+    const email = prompt('Google OAuth stub — enter email to sign in as:')
+    if (!email) return
+    setError('')
+    setLoading(true)
+    try {
+      const { data } = await axios.get('/api/v1/auth/oauth/google/callback', {
+        params: { code: email },
+      })
+      setTokens(data.access_token, data.refresh_token)
+    } catch (err: unknown) {
+      const msg =
+        (axios.isAxiosError(err) && err.response?.data?.detail) ||
+        'OAuth stub failed'
+      setError(String(msg))
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <div className="flex h-full items-center justify-center bg-neutral-950">
       <div className="w-full max-w-sm">
@@ -79,6 +103,22 @@ export function AuthPage() {
             {loading ? '...' : isLogin ? 'Sign in' : 'Create account'}
           </button>
         </form>
+
+        <div className="flex items-center gap-3 my-4">
+          <div className="flex-1 h-px bg-neutral-800" />
+          <span className="text-xs text-neutral-600">or</span>
+          <div className="flex-1 h-px bg-neutral-800" />
+        </div>
+
+        <button
+          type="button"
+          onClick={handleGoogleLogin}
+          disabled={loading}
+          className="w-full py-2 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 disabled:opacity-50 text-neutral-100 rounded-lg text-sm font-medium"
+          title="Stub — real Google integration wired up later"
+        >
+          Continue with Google (stub)
+        </button>
 
         <p className="text-sm text-neutral-500 text-center mt-4">
           {isLogin ? "Don't have an account?" : 'Already have an account?'}{' '}
