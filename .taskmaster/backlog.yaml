@@ -3,42 +3,18 @@ meta:
   updated: '2026-04-20'
 context:
   active_epic: visual-groups
-  in_progress:
-  - id: canvas-polish-001
-    title: Connection handles visible only on node hover / selection
-    epic: canvas-polish
-    branch: ''
-  - id: visual-groups-001
-    title: 'Z-order: groups render below regular nodes on canvas'
-    epic: visual-groups
-    branch: ''
-  - id: visual-groups-002
-    title: Spatial containment — nodes inside a group become its children
-    epic: visual-groups
-    branch: ''
-  - id: visual-groups-003
-    title: Dragging a group moves all its contained nodes together
-    epic: visual-groups
-    branch: ''
-  - id: visual-groups-004
-    title: Inline editable group title
-    epic: visual-groups
-    branch: ''
-  - id: visual-groups-005
-    title: Sidebar "Contains N" lists actual members with click-to-select
-    epic: visual-groups
-    branch: ''
+  in_progress: []
   blocked: []
   recent_completed: []
   next_up: []
   stats:
     total: 92
     done: 0
-    in_progress: 6
+    in_progress: 0
     in_review: 0
     todo: 22
     blocked: 0
-    archived: 64
+    archived: 70
   active_phase:
     id: versions-conflicts
     name: Versions + Conflicts
@@ -62,7 +38,7 @@ epics:
   tasks:
   - id: canvas-polish-001
     title: Connection handles visible only on node hover / selection
-    status: in-progress
+    status: archived
     priority: medium
     created: 2026-04-20T14:00
     started: 2026-04-20T14:00
@@ -71,6 +47,10 @@ epics:
       edges still route.
     estimate: S
     phase: canvas-polish
+    completed: 2026-04-20T14:30
+    archived: 2026-04-20T14:30
+    archive_reason: done
+    verification: 8341646 — .archflow-handle CSS hides handles until .react-flow__node:hover or .selected
 - id: visual-groups
   name: Visual Groups (IcePanel-style spatial grouping)
   status: active
@@ -82,7 +62,7 @@ epics:
   tasks:
   - id: visual-groups-001
     title: 'Z-order: groups render below regular nodes on canvas'
-    status: in-progress
+    status: archived
     priority: high
     created: 2026-04-20T14:00
     started: 2026-04-20T14:00
@@ -90,9 +70,13 @@ epics:
       placed on top. Apply in ArchFlowCanvas + CompareCanvas.
     estimate: S
     phase: visual-groups
+    completed: 2026-04-20T14:30
+    archived: 2026-04-20T14:30
+    archive_reason: done
+    verification: cf8ac6a — zIndex 0 on group nodes in both canvases
   - id: visual-groups-002
     title: Spatial containment — nodes inside a group become its children
-    status: in-progress
+    status: archived
     priority: high
     created: 2026-04-20T14:00
     started: 2026-04-20T14:00
@@ -101,9 +85,14 @@ epics:
       obj id when contained, clear when moved out. Update "Contains: N" count via children query.'
     estimate: L
     phase: visual-groups
+    completed: 2026-04-20T14:30
+    archived: 2026-04-20T14:30
+    archive_reason: done
+    verification: b810cf2 — detectParentGroup helper + parent_id set on drop/drag-end in ArchFlowCanvas
+      + AddObjectToolbar
   - id: visual-groups-003
     title: Dragging a group moves all its contained nodes together
-    status: in-progress
+    status: archived
     priority: high
     created: 2026-04-20T14:00
     started: 2026-04-20T14:00
@@ -111,9 +100,13 @@ epics:
       child node placement (update DiagramObject positions). Commit in a single batch on drag end.'
     estimate: M
     phase: visual-groups
+    completed: 2026-04-20T14:30
+    archived: 2026-04-20T14:30
+    archive_reason: done
+    verification: 8b3093c — onNodeDrag snaps children live + onNodeDragStop persists all member positions
   - id: visual-groups-004
     title: Inline editable group title
-    status: in-progress
+    status: archived
     priority: medium
     created: 2026-04-20T14:00
     started: 2026-04-20T14:00
@@ -121,9 +114,14 @@ epics:
       Placeholder "Group" when empty.
     estimate: S
     phase: visual-groups
+    completed: 2026-04-20T14:30
+    archived: 2026-04-20T14:30
+    archive_reason: done
+    verification: 6d664b7 — GroupNode title becomes input on double-click, Enter/blur saves; footer "GROUP"
+      label
   - id: visual-groups-005
     title: Sidebar "Contains N" lists actual members with click-to-select
-    status: in-progress
+    status: archived
     priority: medium
     created: 2026-04-20T14:00
     started: 2026-04-20T14:00
@@ -131,6 +129,11 @@ epics:
       list of children (name + type icon). Click a row → selects that node on canvas.
     estimate: S
     phase: visual-groups
+    completed: 2026-04-20T14:30
+    archived: 2026-04-20T14:30
+    archive_reason: done
+    verification: 1b72aa4 — GroupMembersSection in ObjectSidebar with click-to-select; fixed TYPE_ICONS
+      import
 - id: multi-diagram-drafts
   name: Multi-diagram drafts (features span many diagrams)
   status: active
@@ -1527,15 +1530,17 @@ phases:
   created: 2026-04-20T11:00
 - id: visual-groups
   name: Visual Groups
-  status: active
+  status: done
   order: 9.7
   description: IcePanel-style spatial groups
   created: 2026-04-20T14:00
   start_date: '2026-04-20'
+  completed: 2026-04-20T14:30
 - id: canvas-polish
   name: Canvas polish
-  status: active
+  status: done
   order: 9.8
   description: Small canvas UX refinements
   created: 2026-04-20T14:00
   start_date: '2026-04-20'
+  completed: 2026-04-20T14:30
