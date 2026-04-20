@@ -6,16 +6,25 @@ context:
   in_progress: []
   blocked: []
   recent_completed:
+  - id: teams-roles-002
+    title: Roles & permissions (Owner/Admin/Editor/Reviewer/Viewer)
+    completed: 2026-04-20T21:10
+  - id: teams-roles-003
+    title: Teams as first-class entity with membership
+    completed: 2026-04-20T21:10
+  - id: teams-roles-004
+    title: OAuth 2.0 login (Google/GitHub/GitLab)
+    completed: 2026-04-20T21:10
   - id: teams-roles-001
     title: Organizations + Workspaces schema and scoping
     completed: 2026-04-20T20:08
   next_up: []
   stats:
     total: 19
-    done: 1
+    done: 4
     in_progress: 0
     in_review: 0
-    todo: 18
+    todo: 15
     blocked: 0
     archived: 73
   active_phase:
@@ -23,10 +32,10 @@ context:
     name: Teams, Roles, Workspaces
     stats:
       total: 4
-      todo: 3
+      todo: 0
       in-progress: 0
       in-review: 0
-      done: 1
+      done: 4
       blocked: 0
       archived: 0
     target_date: null
@@ -1317,30 +1326,45 @@ epics:
     completed: 2026-04-20T20:08
   - id: teams-roles-002
     title: Roles & permissions (Owner/Admin/Editor/Reviewer/Viewer)
-    status: todo
+    status: done
     priority: high
     created: 2026-04-20T11:00
     notes: Spec §6.2. memberships table (user_id, workspace_id, role). Decorator on
       endpoints for permission checks. UI surfaces disabled actions for lower roles.
     estimate: L
     phase: teams-roles
+    last_referenced: 2026-04-20T21:10
+    started: 2026-04-20T20:57
+    branch: feature/teams-permissions
+    worktree: .worktrees/teams-permissions
+    completed: 2026-04-20T21:10
   - id: teams-roles-003
     title: Teams as first-class entity with membership
-    status: todo
+    status: done
     priority: medium
     created: 2026-04-20T11:00
     notes: 'Spec §6.3. teams table, team_memberships junction. Replace/extend model_objects.owner_team
       text with team_id FK. UI: Teams page, team filter overlay.'
     estimate: M
     phase: teams-roles
+    last_referenced: 2026-04-20T21:10
+    started: 2026-04-20T20:57
+    branch: feature/teams-permissions
+    worktree: .worktrees/teams-permissions
+    completed: 2026-04-20T21:10
   - id: teams-roles-004
     title: OAuth 2.0 login (Google/GitHub/GitLab)
-    status: todo
+    status: done
     priority: medium
     created: 2026-04-20T11:00
     notes: Spec §6.5. Authlib or similar. Extend users table with auth_provider field.
     estimate: M
     phase: teams-roles
+    last_referenced: 2026-04-20T21:10
+    started: 2026-04-20T20:57
+    branch: feature/teams-permissions
+    worktree: .worktrees/teams-permissions
+    completed: 2026-04-20T21:10
 - id: realtime
   name: Real-time Collaboration
   status: planned

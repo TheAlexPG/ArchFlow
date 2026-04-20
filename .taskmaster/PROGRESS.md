@@ -26,13 +26,13 @@
 | Node Customization & Styling | Planned | 0/0 | — |
 | Phase 8 Polish + Enterprise | Archived | 0/0 | — |
 | Model Versions & Conflict Resolution | Planned | 0/4 | — |
-| Teams, Roles & Workspaces | Planned | 1/4 | — |
+| Teams, Roles & Workspaces | Planned | 4/4 | — |
 | Real-time Collaboration | Planned | 0/4 | — |
 | API Keys, Webhooks, Rate Limiting | Archived | 0/0 | — |
 | AI Features (beyond insights) | Planned | 0/4 | — |
 | Enterprise SSO & Compliance | Planned | 0/3 | — |
 
-**Active Phase:** Teams, Roles, Workspaces (1/4 done)
+**Active Phase:** Teams, Roles, Workspaces (4/4 done)
 **Phases:** ... Versions + Conflicts | >> Teams, Roles, Workspaces | ... Real-time Collaboration | ... AI Features (extended) | ... Enterprise SSO
 
 **In Progress:** —
@@ -42,6 +42,51 @@
 ---
 
 ## Changelog
+
+### 2026-04-20 — Google OAuth stub
+**Done:**
+- GET /auth/oauth/google/login returns stub authorize URL\nGET /auth/oauth/google/callback upserts user by email (stub: "code" = email), provisions personal workspace, issues tokens\nusers.auth_provider column tracks local vs google\nAuthPage "Continue with Google (stub)" button prompts for email and signs in\nRound-trip test proves token issue + is_new_user flag
+
+**Decisions:**
+- Kept endpoint shape identical to what a real OAuth flow would look like — login returns an authorize URL the frontend window.location.assign'es to, callback takes a code. When we swap the stub for real Google, the frontend doesn't change.
+
+**Issues:**
+- Stub, not production. Replace _mock_userinfo with real google-auth client (client_id/secret config) when going live. Other providers (GitHub, GitLab) not wired yet.
+
+**Tasks touched:** N/A
+
+---
+
+
+### 2026-04-20 — Teams + per-diagram ACL
+**Done:**
+- Team + team_members tables; user can be in multiple teams\ndiagram_access(diagram_id, team_id, access_level) grant table\ncan_read_diagram/can_write_diagram/filter_visible_diagram_ids helpers with "no grants = open, any grant = restricted" semantics\nGET /diagrams and /diagrams/{id} enforce ACL for authenticated members\nTeamsPage split view + DiagramAccessModal from DiagramPage\nE2E test proves frontend dev sees only their team's restricted diagrams
+
+**Decisions:**
+- Chose "grants imply restriction" over a per-diagram boolean flag. Reason: it makes the admin's intent obvious — if they grant any team, that diagram is private; if they leave it alone, it stays workspace-wide. One place to look per diagram.
+
+**Issues:**
+- owner_team string column on model_objects not yet swapped for a team_id FK — that replacement is a data migration; keeping the string column while team ACL lands reduces blast radius.
+
+**Tasks touched:** N/A
+
+---
+
+
+### 2026-04-20 — Roles + permissions + member management
+**Done:**
+- Role hierarchy helper + require_role(min) dependency factory\nInvite flow: direct-add if user exists, token-based invite otherwise\nMember CRUD endpoints protected by require_role(ADMIN) with last-owner protection\nMembersPage UI with invite form + role picker + remove\n5 new tests (invite direct-add, non-admin 403, last-owner demote guard, etc.)
+
+**Decisions:**
+- Last-owner guard lives in member_service rather than the endpoint so both update_member_role and remove_member share it.\nInvite returns its token in the response body for the stub flow. Real email delivery can be added later; this keeps the UI testable without SMTP.
+
+**Issues:**
+- Write endpoints (POST/PUT/DELETE on objects/connections/diagrams) still don't enforce role — only diagram read is scoped by ACL. Retrofitting auth onto the write side is queued for a follow-up task so that editors are downgraded to viewers for diagrams their team only has read on.
+
+**Tasks touched:** N/A
+
+---
+
 
 ### 2026-04-20 — Orgs + Workspaces schema + auto-provisioning
 **Done:**
