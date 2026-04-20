@@ -283,3 +283,23 @@ export interface ApiKeyCreate {
   permissions: ApiKeyPermission[]
   expires_in_days?: number | null
 }
+
+export interface Webhook {
+  id: string
+  url: string
+  events: string[]
+  enabled: boolean
+  failure_count: number
+  last_delivery_at: string | null
+  last_status: number | null
+  created_at: string
+}
+
+export interface WebhookWithSecret extends Webhook {
+  secret: string
+}
+
+export interface WebhookCreate {
+  url: string
+  events: string[]
+}

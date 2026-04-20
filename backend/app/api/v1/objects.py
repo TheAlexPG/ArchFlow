@@ -9,6 +9,7 @@ from app.schemas.activity import ActivityLogResponse
 from app.schemas.diagram import DiagramResponse
 from app.schemas.object import ObjectCreate, ObjectResponse, ObjectUpdate
 from app.services import activity_service, ai_service, diagram_service, object_service
+from app.services.webhook_service import fire_and_forget_emit
 
 router = APIRouter(prefix="/objects", tags=["objects"])
 
@@ -52,7 +53,10 @@ async def create_object(
         if not parent:
             raise HTTPException(status_code=400, detail="Parent object not found")
     obj = await object_service.create_object(db, data, draft_id=draft_id)
-    return ObjectResponse.from_model(obj)
+    response = ObjectResponse.from_model(obj)
+    if draft_id is None:
+        fire_and_forget_emit("object.created", response.model_dump(mode="json"))
+    return response
 
 
 @router.put("/{object_id}", response_model=ObjectResponse)
@@ -65,7 +69,10 @@ async def update_object(
     if not obj:
         raise HTTPException(status_code=404, detail="Object not found")
     obj = await object_service.update_object(db, obj, data)
-    return ObjectResponse.from_model(obj)
+    response = ObjectResponse.from_model(obj)
+    if obj.draft_id is None:
+        fire_and_forget_emit("object.updated", response.model_dump(mode="json"))
+    return response
 
 
 @router.delete("/{object_id}", status_code=204)
@@ -73,7 +80,11 @@ async def delete_object(object_id: uuid.UUID, db: AsyncSession = Depends(get_db)
     obj = await object_service.get_object(db, object_id)
     if not obj:
         raise HTTPException(status_code=404, detail="Object not found")
+    was_draft = obj.draft_id is not None
+    obj_id_str = str(obj.id)
     await object_service.delete_object(db, obj)
+    if not was_draft:
+        fire_and_forget_emit("object.deleted", {"id": obj_id_str})
 
 
 @router.get("/{object_id}/children", response_model=list[ObjectResponse])

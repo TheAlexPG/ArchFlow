@@ -133,13 +133,19 @@ async def delete_draft(draft_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
 
 @router.post("/{draft_id}/apply")
 async def apply_draft(draft_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    from app.services.webhook_service import fire_and_forget_emit
+
     draft = await draft_service.get_draft(db, draft_id)
     if not draft:
         raise HTTPException(status_code=404, detail="Draft not found")
     try:
-        return await draft_service.apply_draft(db, draft)
+        result = await draft_service.apply_draft(db, draft)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+    fire_and_forget_emit(
+        "draft.applied", {"id": str(draft.id), "name": getattr(draft, "name", None)}
+    )
+    return result
 
 
 @router.get("/{draft_id}/diff", response_model=DraftDiffResponse)
