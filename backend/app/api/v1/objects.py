@@ -9,6 +9,7 @@ from app.schemas.activity import ActivityLogResponse
 from app.schemas.diagram import DiagramResponse
 from app.schemas.object import ObjectCreate, ObjectResponse, ObjectUpdate
 from app.services import activity_service, ai_service, diagram_service, object_service
+from app.realtime.manager import fire_and_forget_publish
 from app.services.webhook_service import fire_and_forget_emit
 
 router = APIRouter(prefix="/objects", tags=["objects"])
@@ -55,7 +56,11 @@ async def create_object(
     obj = await object_service.create_object(db, data, draft_id=draft_id)
     response = ObjectResponse.from_model(obj)
     if draft_id is None:
-        fire_and_forget_emit("object.created", response.model_dump(mode="json"))
+        body = response.model_dump(mode="json")
+        fire_and_forget_emit("object.created", body)
+        fire_and_forget_publish(
+            getattr(obj, "workspace_id", None), "object.created", {"object": body}
+        )
     return response
 
 
@@ -71,7 +76,11 @@ async def update_object(
     obj = await object_service.update_object(db, obj, data)
     response = ObjectResponse.from_model(obj)
     if obj.draft_id is None:
-        fire_and_forget_emit("object.updated", response.model_dump(mode="json"))
+        body = response.model_dump(mode="json")
+        fire_and_forget_emit("object.updated", body)
+        fire_and_forget_publish(
+            getattr(obj, "workspace_id", None), "object.updated", {"object": body}
+        )
     return response
 
 
@@ -82,9 +91,11 @@ async def delete_object(object_id: uuid.UUID, db: AsyncSession = Depends(get_db)
         raise HTTPException(status_code=404, detail="Object not found")
     was_draft = obj.draft_id is not None
     obj_id_str = str(obj.id)
+    obj_ws_id = getattr(obj, "workspace_id", None)
     await object_service.delete_object(db, obj)
     if not was_draft:
         fire_and_forget_emit("object.deleted", {"id": obj_id_str})
+        fire_and_forget_publish(obj_ws_id, "object.deleted", {"id": obj_id_str})
 
 
 @router.get("/{object_id}/children", response_model=list[ObjectResponse])

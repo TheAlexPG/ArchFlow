@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.schemas.connection import ConnectionCreate, ConnectionResponse, ConnectionUpdate
+from app.realtime.manager import fire_and_forget_publish
 from app.services import connection_service, object_service
 from app.services.webhook_service import fire_and_forget_emit
 
@@ -50,9 +51,12 @@ async def create_connection(
         raise HTTPException(status_code=400, detail="Target object not found")
     conn = await connection_service.create_connection(db, data, draft_id=draft_id)
     if draft_id is None:
-        fire_and_forget_emit(
+        body = ConnectionResponse.model_validate(conn).model_dump(mode="json")
+        fire_and_forget_emit("connection.created", body)
+        fire_and_forget_publish(
+            getattr(source, "workspace_id", None),
             "connection.created",
-            ConnectionResponse.model_validate(conn).model_dump(mode="json"),
+            {"connection": body},
         )
     return conn
 
@@ -68,9 +72,13 @@ async def update_connection(
         raise HTTPException(status_code=404, detail="Connection not found")
     conn = await connection_service.update_connection(db, conn, data)
     if conn.draft_id is None:
-        fire_and_forget_emit(
+        body = ConnectionResponse.model_validate(conn).model_dump(mode="json")
+        fire_and_forget_emit("connection.updated", body)
+        src = await object_service.get_object(db, conn.source_id)
+        fire_and_forget_publish(
+            getattr(src, "workspace_id", None),
             "connection.updated",
-            ConnectionResponse.model_validate(conn).model_dump(mode="json"),
+            {"connection": body},
         )
     return conn
 
@@ -82,6 +90,9 @@ async def delete_connection(connection_id: uuid.UUID, db: AsyncSession = Depends
         raise HTTPException(status_code=404, detail="Connection not found")
     was_draft = conn.draft_id is not None
     conn_id_str = str(conn.id)
+    src = await object_service.get_object(db, conn.source_id)
+    src_ws_id = getattr(src, "workspace_id", None)
     await connection_service.delete_connection(db, conn)
     if not was_draft:
         fire_and_forget_emit("connection.deleted", {"id": conn_id_str})
+        fire_and_forget_publish(src_ws_id, "connection.deleted", {"id": conn_id_str})

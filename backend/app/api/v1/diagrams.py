@@ -13,6 +13,7 @@ from app.schemas.diagram import (
     DiagramUpdate,
 )
 from app.api.deps import get_optional_user
+from app.realtime.manager import fire_and_forget_publish
 from app.services import access_service, diagram_service, draft_service, workspace_service
 from app.services.webhook_service import fire_and_forget_emit
 
@@ -79,9 +80,10 @@ async def create_diagram(
     data: DiagramCreate, db: AsyncSession = Depends(get_db)
 ):
     diagram = await diagram_service.create_diagram(db, data)
-    fire_and_forget_emit(
-        "diagram.created",
-        DiagramResponse.model_validate(diagram).model_dump(mode="json"),
+    body = DiagramResponse.model_validate(diagram).model_dump(mode="json")
+    fire_and_forget_emit("diagram.created", body)
+    fire_and_forget_publish(
+        getattr(diagram, "workspace_id", None), "diagram.created", {"diagram": body}
     )
     return diagram
 
@@ -96,9 +98,10 @@ async def update_diagram(
     if not diagram:
         raise HTTPException(status_code=404, detail="Diagram not found")
     diagram = await diagram_service.update_diagram(db, diagram, data)
-    fire_and_forget_emit(
-        "diagram.updated",
-        DiagramResponse.model_validate(diagram).model_dump(mode="json"),
+    body = DiagramResponse.model_validate(diagram).model_dump(mode="json")
+    fire_and_forget_emit("diagram.updated", body)
+    fire_and_forget_publish(
+        getattr(diagram, "workspace_id", None), "diagram.updated", {"diagram": body}
     )
     return diagram
 
@@ -111,8 +114,10 @@ async def delete_diagram(
     if not diagram:
         raise HTTPException(status_code=404, detail="Diagram not found")
     diagram_id_str = str(diagram.id)
+    diagram_ws_id = getattr(diagram, "workspace_id", None)
     await diagram_service.delete_diagram(db, diagram)
     fire_and_forget_emit("diagram.deleted", {"id": diagram_id_str})
+    fire_and_forget_publish(diagram_ws_id, "diagram.deleted", {"id": diagram_id_str})
 
 
 # ─── Diagram Objects (positions per diagram) ─────────────

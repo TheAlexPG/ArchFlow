@@ -14,6 +14,8 @@ import { SettingsPage } from './pages/SettingsPage'
 import { TeamsPage } from './pages/TeamsPage'
 import { VersionsPage } from './pages/VersionsPage'
 import { useAuthStore } from './stores/auth-store'
+import { useWorkspaceStore } from './stores/workspace-store'
+import { useWorkspaceSocket } from './hooks/use-realtime'
 import './index.css'
 
 const queryClient = new QueryClient({
@@ -25,6 +27,13 @@ const queryClient = new QueryClient({
   },
 })
 
+// Mounts the workspace firehose socket for all authenticated pages.
+// Returns null — only side-effects (query invalidation on WS events).
+function WorkspaceSocketGate() {
+  useWorkspaceSocket()
+  return null
+}
+
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
   if (!isAuthenticated) return <Navigate to="/login" replace />
@@ -33,9 +42,11 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function App() {
   const { isAuthenticated } = useAuthStore()
+  const workspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
 
   return (
     <QueryClientProvider client={queryClient}>
+      {isAuthenticated && workspaceId && <WorkspaceSocketGate />}
       <BrowserRouter>
         <Routes>
           <Route
