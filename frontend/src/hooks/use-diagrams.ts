@@ -107,10 +107,8 @@ function parentDiagramTypes(type: string): string[] {
  *   2. If it has scope_object_id, fetch that object, then fetch all diagrams
  *      that *contain* that object (`GET /objects/{id}/diagrams`) and pick the
  *      one whose type is one level up.
- *   3. Repeat up to MAX_DEPTH times to guard against cycles.
+ *   3. Repeat up to 6 levels deep to guard against cycles.
  */
-const MAX_BREADCRUMB_DEPTH = 6
-
 export function useDiagramBreadcrumbs(diagramId: string | undefined): Diagram[] {
   // Fetch the starting diagram
   const { data: currentDiagram } = useDiagram(diagramId)
@@ -126,7 +124,8 @@ export function useDiagramBreadcrumbs(diagramId: string | undefined): Diagram[] 
 
   const l0ScopeId = currentDiagram?.scope_object_id ?? null
 
-  const { data: l0Object } = useQuery({
+  // Prefetch the scope object (unused directly; cache warmup for ObjectSidebar)
+  useQuery({
     queryKey: ['objects', l0ScopeId],
     queryFn: async () => {
       const { data } = await api.get<ModelObject>(`/objects/${l0ScopeId}`)
