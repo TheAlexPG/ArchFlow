@@ -2,40 +2,28 @@ meta:
   project: ArchFlow
   updated: '2026-04-20'
 context:
-  active_epic: c4-nesting
-  in_progress:
-  - id: c4-nesting-001
-    title: Quick-create palette filtered by current diagram level (L1/L2/L3)
-    epic: c4-nesting
-    branch: ''
-  - id: c4-nesting-002
-    title: Inline "Create child diagram" from node drill icon
-    epic: c4-nesting
-    branch: ''
-  - id: c4-nesting-003
-    title: Breadcrumbs reflect C4 parent chain up the scope_object_id trail
-    epic: c4-nesting
-    branch: ''
+  active_epic: versions
+  in_progress: []
   blocked: []
   recent_completed: []
   next_up: []
   stats:
     total: 82
     done: 0
-    in_progress: 3
+    in_progress: 0
     in_review: 0
     todo: 22
     blocked: 0
-    archived: 57
+    archived: 60
   active_phase:
-    id: c4-nesting
-    name: C4 Nesting UX
+    id: versions-conflicts
+    name: Versions + Conflicts
     target_date: null
-    start_date: '2026-04-20'
+    start_date: null
     stats:
-      total: 3
-      todo: 0
-      in-progress: 3
+      total: 4
+      todo: 4
+      in-progress: 0
       in-review: 0
       done: 0
       blocked: 0
@@ -51,7 +39,7 @@ epics:
   tasks:
   - id: c4-nesting-001
     title: Quick-create palette filtered by current diagram level (L1/L2/L3)
-    status: in-progress
+    status: archived
     priority: critical
     created: 2026-04-20T11:00
     started: 2026-04-20T11:00
@@ -61,9 +49,13 @@ epics:
       label in popup header.'
     estimate: M
     phase: c4-nesting
+    completed: 2026-04-20T11:30
+    archived: 2026-04-20T11:30
+    archive_reason: done
+    verification: merged via 00e858e; HTTP smoke-tested L1→L2→L3 chain
   - id: c4-nesting-002
     title: Inline "Create child diagram" from node drill icon
-    status: in-progress
+    status: archived
     priority: critical
     created: 2026-04-20T11:00
     started: 2026-04-20T11:00
@@ -73,9 +65,13 @@ epics:
       type=container|component), navigate to it.
     estimate: L
     phase: c4-nesting
+    completed: 2026-04-20T11:30
+    archived: 2026-04-20T11:30
+    archive_reason: done
+    verification: merged via 00e858e; HTTP smoke-tested L1→L2→L3 chain
   - id: c4-nesting-003
     title: Breadcrumbs reflect C4 parent chain up the scope_object_id trail
-    status: in-progress
+    status: archived
     priority: high
     created: 2026-04-20T11:00
     started: 2026-04-20T11:00
@@ -84,6 +80,10 @@ epics:
       trail (Home › Landscape › <System> › <App/Store>). Each crumb navigates to that parent diagram.'
     estimate: M
     phase: c4-nesting
+    completed: 2026-04-20T11:30
+    archived: 2026-04-20T11:30
+    archive_reason: done
+    verification: merged via 00e858e; HTTP smoke-tested L1→L2→L3 chain
 - id: project-setup
   name: Project Setup & Infrastructure
   status: active
@@ -1302,11 +1302,12 @@ phases:
   completed: 2026-04-20T11:00
 - id: c4-nesting
   name: C4 Nesting UX
-  status: active
+  status: done
   order: 9
   description: Level-aware quick-create, inline child diagram creation, breadcrumb parent chain.
   created: 2026-04-20T11:00
   start_date: '2026-04-20'
+  completed: 2026-04-20T11:30
 - id: versions-conflicts
   name: Versions + Conflicts
   status: planned
