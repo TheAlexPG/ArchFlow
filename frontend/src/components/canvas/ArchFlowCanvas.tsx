@@ -26,6 +26,7 @@ import {
   useFlows,
   useObjects,
   useSaveDiagramPosition,
+  useUpdateObject,
 } from '../../hooks/use-api'
 import { useDiagram } from '../../hooks/use-diagrams'
 import { useCanvasStore } from '../../stores/canvas-store'
@@ -37,6 +38,7 @@ import { CanvasComments } from './CanvasComments'
 import { ExternalSystemNode } from './ExternalSystemNode'
 import { GroupNode } from './GroupNode'
 import { collectLegend, extractFilterValue, overlayStyleFor, type FilterDim } from './overlay-utils'
+import { detectParentGroup, nodeToRect } from './group-utils'
 
 const nodeTypes: NodeTypes = {
   c4: C4Node as unknown as NodeTypes['c4'],
@@ -114,6 +116,7 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     [activeFilterValue, filterDim],
   )
   const { data: flows = [] } = useFlows(diagramId)
+  const updateObject = useUpdateObject()
   const createComment = useCreateComment()
 
   // Map edgeId → step number (1-based) for the currently active flow branch,
@@ -352,16 +355,35 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
 
   const onNodeDragStop = useCallback(
     (_event: NodeDragEvent, node: Node) => {
-      if (diagramId) {
-        saveDiagramPosition.mutate({
-          diagramId,
-          objectId: node.id,
-          x: node.position.x,
-          y: node.position.y,
-        })
+      if (!diagramId) return
+
+      const obj = allObjects.find((o) => o.id === node.id)
+
+      // Persist position for the dragged node.
+      saveDiagramPosition.mutate({
+        diagramId,
+        objectId: node.id,
+        x: node.position.x,
+        y: node.position.y,
+      })
+
+      // Spatial containment: detect new parent group for the dragged node.
+      // Groups moving don't re-parent their children — only the moved node changes.
+      if (obj && obj.type !== 'group') {
+        const nodeRect = nodeToRect(
+          node.id,
+          node.position,
+          node.width,
+          node.height,
+          allObjects,
+        )
+        const newParentId = detectParentGroup(node.id, nodeRect, diagramObjects, allObjects)
+        if (newParentId !== (obj.parent_id ?? null)) {
+          updateObject.mutate({ id: node.id, parent_id: newParentId })
+        }
       }
     },
-    [diagramId, saveDiagramPosition],
+    [diagramId, saveDiagramPosition, allObjects, diagramObjects, updateObject],
   )
 
 

@@ -4,10 +4,12 @@ import {
   useCreateObject,
   useDiagramObjects,
   useObjects,
+  useUpdateObject,
 } from '../../hooks/use-api'
 import { useDiagram } from '../../hooks/use-diagrams'
 import { useCanvasStore } from '../../stores/canvas-store'
 import type { CommentType, DiagramType, ObjectType } from '../../types/model'
+import { detectParentGroup, nodeToRect } from '../canvas/group-utils'
 import { TYPE_ICONS, TYPE_LABELS } from '../canvas/node-utils'
 import { ObjectContextMenu } from '../common/ObjectContextMenu'
 
@@ -63,6 +65,7 @@ export function AddObjectToolbar({ diagramId }: AddObjectToolbarProps) {
   const { data: diagramObjects = [] } = useDiagramObjects(diagramId)
   const createObject = useCreateObject(draftId)
   const addToDiagram = useAddObjectToDiagram()
+  const updateObject = useUpdateObject()
   const { setCommentComposeType } = useCanvasStore()
 
   const handleStartCommentCompose = (type: CommentType) => {
@@ -103,18 +106,28 @@ export function AddObjectToolbar({ diagramId }: AddObjectToolbarProps) {
   const handleCreateNew = (type: ObjectType) => {
     const name = prompt(`New ${TYPE_LABELS[type]} name:`)
     if (!name?.trim()) return
+    const placementX = 200 + Math.random() * 300
+    const placementY = 150 + Math.random() * 250
     createObject.mutate(
       { name: name.trim(), type },
       {
         onSuccess: (obj) => {
-          if (diagramId) {
-            addToDiagram.mutate({
-              diagramId,
-              objectId: obj.id,
-              x: 200 + Math.random() * 300,
-              y: 150 + Math.random() * 250,
-            })
-          }
+          if (!diagramId) return
+          addToDiagram.mutate(
+            { diagramId, objectId: obj.id, x: placementX, y: placementY },
+            {
+              onSuccess: () => {
+                // After placement, check spatial containment against current
+                // diagram objects (the new object is now in the diagram).
+                if (type === 'group') return
+                const nodeRect = nodeToRect(obj.id, { x: placementX, y: placementY }, undefined, undefined, [obj])
+                const newParentId = detectParentGroup(obj.id, nodeRect, diagramObjects, [...objects, obj])
+                if (newParentId) {
+                  updateObject.mutate({ id: obj.id, parent_id: newParentId })
+                }
+              },
+            },
+          )
         },
       },
     )
