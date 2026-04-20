@@ -3,7 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.rate_limit_dep import enforce_rate_limit
 from app.core.database import get_db
 from app.models.user import User
 from app.schemas.webhook import (
@@ -25,7 +25,7 @@ async def list_event_types():
 @router.post("", response_model=WebhookWithSecret, status_code=201)
 async def create_webhook(
     payload: WebhookCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(enforce_rate_limit),
     db: AsyncSession = Depends(get_db),
 ):
     try:
@@ -47,7 +47,7 @@ async def create_webhook(
 
 @router.get("", response_model=list[WebhookResponse])
 async def list_webhooks(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(enforce_rate_limit),
     db: AsyncSession = Depends(get_db),
 ):
     rows = await webhook_service.list_user_webhooks(db, current_user.id)
@@ -57,7 +57,7 @@ async def list_webhooks(
 @router.delete("/{webhook_id}", status_code=204)
 async def delete_webhook(
     webhook_id: UUID,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(enforce_rate_limit),
     db: AsyncSession = Depends(get_db),
 ):
     ok = await webhook_service.delete_webhook(db, current_user.id, webhook_id)
@@ -68,7 +68,7 @@ async def delete_webhook(
 @router.post("/{webhook_id}/test", status_code=202)
 async def test_webhook(
     webhook_id: UUID,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(enforce_rate_limit),
     db: AsyncSession = Depends(get_db),
 ):
     """Trigger a synthetic ping so the user can validate their endpoint."""

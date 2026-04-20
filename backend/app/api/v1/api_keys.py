@@ -3,7 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.rate_limit_dep import enforce_rate_limit
 from app.core.database import get_db
 from app.models.user import User
 from app.schemas.api_key import ApiKeyCreate, ApiKeyResponse, ApiKeyWithSecret
@@ -19,7 +19,7 @@ router = APIRouter(prefix="/api-keys", tags=["api-keys"])
 @router.post("", response_model=ApiKeyWithSecret, status_code=201)
 async def create_key(
     payload: ApiKeyCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(enforce_rate_limit),
     db: AsyncSession = Depends(get_db),
 ):
     row, secret = await create_api_key(db, current_user.id, payload)
@@ -38,7 +38,7 @@ async def create_key(
 
 @router.get("", response_model=list[ApiKeyResponse])
 async def list_keys(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(enforce_rate_limit),
     db: AsyncSession = Depends(get_db),
 ):
     rows = await list_user_api_keys(db, current_user.id)
@@ -48,7 +48,7 @@ async def list_keys(
 @router.delete("/{key_id}", status_code=204)
 async def revoke_key(
     key_id: UUID,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(enforce_rate_limit),
     db: AsyncSession = Depends(get_db),
 ):
     row = await revoke_api_key(db, current_user.id, key_id)
