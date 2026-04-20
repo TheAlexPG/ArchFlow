@@ -232,9 +232,6 @@ export function CompareCanvas({
     setEdges(computedEdges)
   }, [computedEdges, setEdges])
 
-  // Useful for diagrams that have 0 rows — otherwise the canvas looks empty
-  // and confusing. We still render ReactFlow so pan/zoom keep working.
-  const isEmpty = computedNodes.length === 0
   if (!diagram) {
     return (
       <div className="flex items-center justify-center h-full text-sm text-neutral-600">
@@ -243,53 +240,57 @@ export function CompareCanvas({
     )
   }
 
-  return (
-    <>
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
-        nodesDraggable={false}
-        nodesConnectable={false}
-        elementsSelectable={false}
-        connectionMode={ConnectionMode.Loose}
-        panOnDrag
-        zoomOnScroll
-        zoomOnPinch
-        panOnScroll={false}
-        fitView
-        fitViewOptions={{ padding: 0.25 }}
-        proOptions={{ hideAttribution: true }}
-        style={{ background: '#0a0a0a' }}
+  // When there are no nodes, skip ReactFlow entirely — fitView with 0 nodes
+  // produces an invalid transform that leaves a solid black canvas.
+  const isEmpty = computedNodes.length === 0
+  if (isEmpty) {
+    return (
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background: '#0a0a0a',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#525252',
+          fontSize: 12,
+        }}
       >
-        <Background color="#262626" gap={20} size={1} />
-        <MiniMap
-          nodeColor="#3b82f6"
-          maskColor="rgba(0,0,0,0.75)"
-          style={{ background: '#171717', border: '1px solid #262626' }}
-          pannable
-          zoomable
-        />
-      </ReactFlow>
-      {isEmpty && (
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            pointerEvents: 'none',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#525252',
-            fontSize: 12,
-          }}
-        >
-          No objects on this diagram
-        </div>
-      )}
-    </>
+        No objects on this diagram
+      </div>
+    )
+  }
+
+  return (
+    <ReactFlow
+      nodes={nodes}
+      edges={edges}
+      onNodesChange={onNodesChange}
+      onEdgesChange={onEdgesChange}
+      nodeTypes={nodeTypes}
+      edgeTypes={edgeTypes}
+      nodesDraggable={false}
+      nodesConnectable={false}
+      elementsSelectable={false}
+      connectionMode={ConnectionMode.Loose}
+      panOnDrag
+      zoomOnScroll
+      zoomOnPinch
+      panOnScroll={false}
+      fitView
+      fitViewOptions={{ padding: 0.25 }}
+      proOptions={{ hideAttribution: true }}
+      style={{ background: '#0a0a0a' }}
+    >
+      <Background color="#262626" gap={20} size={1} />
+      <MiniMap
+        nodeColor="#3b82f6"
+        maskColor="rgba(0,0,0,0.75)"
+        style={{ background: '#171717', border: '1px solid #262626' }}
+        pannable
+        zoomable
+      />
+    </ReactFlow>
   )
 }
