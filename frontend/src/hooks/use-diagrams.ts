@@ -37,7 +37,7 @@ export function useDiagrams(scopeObjectId?: string | null) {
 export function useCreateDiagram() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (data: { name: string; type: string; description?: string }) => {
+    mutationFn: async (data: { name: string; type: string; description?: string; scope_object_id?: string | null }) => {
       const { data: result } = await api.post<Diagram>('/diagrams', data)
       return result
     },
