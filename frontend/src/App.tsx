@@ -8,6 +8,7 @@ import { DiagramsPage } from './pages/DiagramsPage'
 import { DraftDetailPage } from './pages/DraftDetailPage'
 import { DraftsPage } from './pages/DraftsPage'
 import { MembersPage } from './pages/MembersPage'
+import { MyInvitesPage } from './pages/MyInvitesPage'
 import { ObjectsPage } from './pages/ObjectsPage'
 import { OverviewPage } from './pages/OverviewPage'
 import { SettingsPage } from './pages/SettingsPage'
@@ -122,6 +123,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <VersionsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/invites"
+            element={
+              <ProtectedRoute>
+                <MyInvitesPage />
               </ProtectedRoute>
             }
           />

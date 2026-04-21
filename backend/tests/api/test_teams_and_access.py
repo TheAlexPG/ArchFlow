@@ -71,13 +71,22 @@ async def test_team_acl_restricts_diagram_visibility(client):
     frontend_team_id = r.json()["id"]
 
     # Invite Alice (frontend dev) as editor
-    _, alice_email = await _register(client, "alice")
+    alice_token, alice_email = await _register(client, "alice")
     r = await client.post(
         f"/api/v1/workspaces/{ws_id}/invites",
         json={"email": alice_email, "role": "editor"},
         headers=owner_auth,
     )
     assert r.status_code == 201
+    invite_id = r.json()["invite"]["id"]
+
+    # Alice must accept before she's a member.
+    r = await client.post(
+        f"/api/v1/me/invites/{invite_id}/accept",
+        headers={"Authorization": f"Bearer {alice_token}"},
+    )
+    assert r.status_code == 200
+
     # Alice's user_id
     members = (
         await client.get(f"/api/v1/workspaces/{ws_id}/members", headers=owner_auth)
@@ -163,12 +172,20 @@ async def test_direct_user_grant(client):
     assert r.status_code == 201
 
     # Invite Alice as editor (no team pre-assignment)
-    _, alice_email = await _register(client, "aliceU")
-    await client.post(
+    alice_token, alice_email = await _register(client, "aliceU")
+    r = await client.post(
         f"/api/v1/workspaces/{ws_id}/invites",
         json={"email": alice_email, "role": "editor"},
         headers=owner_auth,
     )
+    invite_id = r.json()["invite"]["id"]
+
+    # Alice accepts.
+    await client.post(
+        f"/api/v1/me/invites/{invite_id}/accept",
+        headers={"Authorization": f"Bearer {alice_token}"},
+    )
+
     members = (
         await client.get(f"/api/v1/workspaces/{ws_id}/members", headers=owner_auth)
     ).json()
@@ -214,8 +231,8 @@ async def test_direct_user_grant(client):
 
 
 async def test_invite_pre_assigns_teams(client):
-    """Admin picks teams in the invite form; the invited user shows up in
-    those teams the moment membership is created."""
+    """Admin picks teams in the invite form; after Bob accepts via the
+    in-app flow he lands in those teams automatically."""
     owner_token, _ = await _register(client, "ownerT")
     ws_id = await _workspace_id(client, owner_token)
     owner_auth = {"Authorization": f"Bearer {owner_token}", "X-Workspace-ID": ws_id}
@@ -234,9 +251,8 @@ async def test_invite_pre_assigns_teams(client):
     )
     qa_id = r.json()["id"]
 
-    # Register Bob so the "direct-add" branch runs (team pre-assignment
-    # happens synchronously in that branch too).
-    _, bob_email = await _register(client, "bobT")
+    # Bob already has an account before the invite goes out.
+    bob_token, bob_email = await _register(client, "bobT")
 
     r = await client.post(
         f"/api/v1/workspaces/{ws_id}/invites",
@@ -248,7 +264,22 @@ async def test_invite_pre_assigns_teams(client):
         headers=owner_auth,
     )
     assert r.status_code == 201
-    assert r.json()["type"] == "member_added"
+    assert r.json()["type"] == "invite_created"
+    invite_id = r.json()["invite"]["id"]
+
+    # Bob sees the pending invite and accepts it in-app.
+    r = await client.get(
+        "/api/v1/me/invites",
+        headers={"Authorization": f"Bearer {bob_token}"},
+    )
+    assert r.status_code == 200
+    assert any(i["id"] == invite_id for i in r.json())
+
+    r = await client.post(
+        f"/api/v1/me/invites/{invite_id}/accept",
+        headers={"Authorization": f"Bearer {bob_token}"},
+    )
+    assert r.status_code == 200
 
     # Both teams now list Bob.
     for tid in (frontend_id, qa_id):

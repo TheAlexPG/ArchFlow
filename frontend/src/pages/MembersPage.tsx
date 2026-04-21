@@ -3,8 +3,10 @@ import { AppSidebar } from '../components/nav/AppSidebar'
 import {
   useInviteMember,
   useRemoveMember,
+  useRevokeInvite,
   useTeams,
   useUpdateMemberRole,
+  useWorkspaceInvites,
   useWorkspaceMembers,
 } from '../hooks/use-api'
 import { useWorkspaceStore } from '../stores/workspace-store'
@@ -18,6 +20,8 @@ export function MembersPage() {
   const invite = useInviteMember(wsId)
   const updateRole = useUpdateMemberRole(wsId)
   const remove = useRemoveMember(wsId)
+  const { data: pendingInvites = [] } = useWorkspaceInvites(wsId)
+  const revokeInvite = useRevokeInvite(wsId)
 
   const { data: teams = [] } = useTeams(wsId)
 
@@ -38,11 +42,9 @@ export function MembersPage() {
       })
       setEmail('')
       setSelectedTeams([])
-      if (result.type === 'invite_created') {
-        setInviteLink(
-          `${window.location.origin}/accept-invite?token=${result.invite.token}`,
-        )
-      }
+      setInviteLink(
+        `${window.location.origin}/accept-invite?token=${result.invite.token}`,
+      )
     } catch (e) {
       const msg =
         (e as { response?: { data?: { detail?: string } } }).response?.data
@@ -124,12 +126,46 @@ export function MembersPage() {
           {err && <div className="text-xs text-red-400 mt-2">{err}</div>}
           {inviteLink && (
             <div className="text-xs text-amber-300 mt-2 break-all">
-              Invite link (no account yet — share with them):
+              Invite sent. Share this link with anyone without an account yet:
               <br />
               <code>{inviteLink}</code>
             </div>
           )}
         </section>
+
+        {pendingInvites.length > 0 && (
+          <section className="max-w-3xl mb-8 bg-neutral-900 border border-neutral-800 rounded-lg overflow-hidden">
+            <div className="px-4 py-2 text-xs font-semibold border-b border-neutral-800 text-neutral-400">
+              Pending invites ({pendingInvites.length})
+            </div>
+            <table className="w-full text-sm">
+              <tbody>
+                {pendingInvites.map((inv) => (
+                  <tr
+                    key={inv.id}
+                    className="border-b border-neutral-800 last:border-0"
+                  >
+                    <td className="px-4 py-2 text-neutral-300">{inv.email}</td>
+                    <td className="px-4 py-2 text-xs text-neutral-500">
+                      {inv.role}
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      <button
+                        onClick={() => {
+                          if (confirm(`Revoke invite for ${inv.email}?`))
+                            revokeInvite.mutate(inv.id)
+                        }}
+                        className="text-xs text-red-400 hover:text-red-300"
+                      >
+                        Revoke
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        )}
 
         <div className="bg-neutral-900 border border-neutral-800 rounded-lg overflow-hidden max-w-3xl">
           <table className="w-full text-sm">

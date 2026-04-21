@@ -9,6 +9,7 @@ import type {
   DiagramAccessLevel,
   DiagramGrant,
   DiagramPack,
+  MyInvite,
   Notification,
   Team,
   TeamMember,
@@ -692,6 +693,38 @@ export function useWorkspaces() {
   })
 }
 
+export function useCreateWorkspace() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (name: string) => {
+      const { data } = await api.post<Workspace>('/workspaces', { name })
+      return data
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['workspaces'] }),
+  })
+}
+
+export function useRenameWorkspace() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, name }: { id: string; name: string }) => {
+      const { data } = await api.patch<Workspace>(`/workspaces/${id}`, { name })
+      return data
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['workspaces'] }),
+  })
+}
+
+export function useDeleteWorkspace() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await api.delete(`/workspaces/${id}`)
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['workspaces'] }),
+  })
+}
+
 // ─── Members + invites ────────────────────────────────────
 
 export function useWorkspaceMembers(workspaceId: string | null) {
@@ -716,14 +749,76 @@ export function useInviteMember(workspaceId: string | null) {
       team_ids?: string[]
     }) => {
       const { data } = await api.post(`/workspaces/${workspaceId}/invites`, payload)
-      return data as
-        | { type: 'member_added'; user_id: string }
-        | { type: 'invite_created'; invite: WorkspaceInvite }
+      return data as { type: 'invite_created'; invite: WorkspaceInvite }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['workspaces', workspaceId, 'members'] })
       qc.invalidateQueries({ queryKey: ['workspaces', workspaceId, 'invites'] })
       qc.invalidateQueries({ queryKey: ['teams'] })
+    },
+  })
+}
+
+export function useWorkspaceInvites(workspaceId: string | null) {
+  return useQuery({
+    queryKey: ['workspaces', workspaceId, 'invites'],
+    queryFn: async () => {
+      const { data } = await api.get<WorkspaceInvite[]>(
+        `/workspaces/${workspaceId}/invites`,
+      )
+      return data
+    },
+    enabled: !!workspaceId,
+  })
+}
+
+export function useRevokeInvite(workspaceId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (inviteId: string) => {
+      await api.delete(`/workspaces/${workspaceId}/invites/${inviteId}`)
+    },
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ['workspaces', workspaceId, 'invites'] }),
+  })
+}
+
+export function useMyInvites() {
+  return useQuery({
+    queryKey: ['my-invites'],
+    queryFn: async () => {
+      const { data } = await api.get<MyInvite[]>('/me/invites')
+      return data
+    },
+  })
+}
+
+export function useAcceptMyInvite() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (inviteId: string) => {
+      const { data } = await api.post<{ workspace_id: string; role: string }>(
+        `/me/invites/${inviteId}/accept`,
+      )
+      return data
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['my-invites'] })
+      qc.invalidateQueries({ queryKey: ['workspaces'] })
+      qc.invalidateQueries({ queryKey: ['notifications'] })
+    },
+  })
+}
+
+export function useDeclineMyInvite() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (inviteId: string) => {
+      await api.post(`/me/invites/${inviteId}/decline`)
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['my-invites'] })
+      qc.invalidateQueries({ queryKey: ['notifications'] })
     },
   })
 }

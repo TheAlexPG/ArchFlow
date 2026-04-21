@@ -378,6 +378,37 @@ export function useWorkspaceSocket(): void {
           } else {
             void queryClient.invalidateQueries({ queryKey: ['connections'] })
           }
+        } else if (
+          type === 'diagram_object.added' ||
+          type === 'diagram_object.updated'
+        ) {
+          const diagramId = msg.diagram_id as string | undefined
+          const row = msg.diagram_object as { id: string } | undefined
+          if (diagramId && row) {
+            queryClient.setQueriesData<Array<{ id: string }> | undefined>(
+              { queryKey: ['diagram-objects', diagramId] },
+              (prev) => mergeEntity(prev, row),
+            )
+          } else if (diagramId) {
+            void queryClient.invalidateQueries({
+              queryKey: ['diagram-objects', diagramId],
+            })
+          }
+        } else if (type === 'diagram_object.removed') {
+          const diagramId = msg.diagram_id as string | undefined
+          const objectId = msg.object_id as string | undefined
+          if (diagramId && objectId) {
+            queryClient.setQueriesData<
+              Array<{ id: string; object_id: string }> | undefined
+            >(
+              { queryKey: ['diagram-objects', diagramId] },
+              (prev) => prev?.filter((r) => r.object_id !== objectId),
+            )
+          } else if (diagramId) {
+            void queryClient.invalidateQueries({
+              queryKey: ['diagram-objects', diagramId],
+            })
+          }
         } else if (type === 'diagram.created' || type === 'diagram.updated') {
           const diagram = msg.diagram as { id: string } | undefined
           if (diagram) {

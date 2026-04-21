@@ -69,7 +69,7 @@ async def invite_member(
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        invite, member = await member_service.invite_user(
+        invite = await member_service.invite_user(
             db,
             workspace_id,
             payload.email,
@@ -79,9 +79,6 @@ async def invite_member(
         )
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
-    if member:
-        return {"type": "member_added", "user_id": str(member.user_id)}
-    assert invite is not None
     return {
         "type": "invite_created",
         "invite": InviteResponse(
@@ -92,6 +89,18 @@ async def invite_member(
             team_ids=list(invite.team_ids),
         ).model_dump(mode="json"),
     }
+
+
+@router.delete("/invites/{invite_id}", status_code=204)
+async def revoke_invite(
+    workspace_id: UUID,
+    invite_id: UUID,
+    _: Role = Depends(require_role(Role.ADMIN)),
+    db: AsyncSession = Depends(get_db),
+):
+    ok = await member_service.revoke_invite(db, workspace_id, invite_id)
+    if not ok:
+        raise HTTPException(404, "Invite not found or already accepted")
 
 
 @router.get("/invites", response_model=list[InviteResponse])

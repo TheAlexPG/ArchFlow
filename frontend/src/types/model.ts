@@ -345,6 +345,15 @@ export interface WorkspaceInvite {
   email: string
   role: WorkspaceRole
   token: string
+  team_ids?: string[]
+}
+
+export interface MyInvite {
+  id: string
+  workspace_id: string
+  workspace_name: string
+  role: WorkspaceRole
+  invited_at: string
 }
 
 export interface Team {

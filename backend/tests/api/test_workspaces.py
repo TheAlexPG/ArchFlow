@@ -39,6 +39,71 @@ async def test_cannot_access_someone_elses_workspace(client):
     assert r.status_code == 404
 
 
+async def test_create_additional_workspace(client):
+    token, _ = await _register(client, "Multi")
+    auth = {"Authorization": f"Bearer {token}"}
+
+    r = await client.post(
+        "/api/v1/workspaces", json={"name": "Client X"}, headers=auth
+    )
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["name"] == "Client X"
+    assert body["role"] == "owner"
+    new_id = body["id"]
+
+    r = await client.get("/api/v1/workspaces", headers=auth)
+    names = [w["name"] for w in r.json()]
+    assert "Personal" in names and "Client X" in names
+    assert any(w["id"] == new_id for w in r.json())
+
+
+async def test_rename_workspace(client):
+    token, _ = await _register(client, "Renamer")
+    auth = {"Authorization": f"Bearer {token}"}
+    ws_id = (await client.get("/api/v1/workspaces", headers=auth)).json()[0]["id"]
+
+    r = await client.patch(
+        f"/api/v1/workspaces/{ws_id}",
+        json={"name": "My main space"},
+        headers={**auth, "X-Workspace-ID": ws_id},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["name"] == "My main space"
+
+
+async def test_delete_empty_workspace(client):
+    token, _ = await _register(client, "Deleter")
+    auth = {"Authorization": f"Bearer {token}"}
+
+    # Need a second workspace so the guard doesn't block (can't delete last).
+    r = await client.post(
+        "/api/v1/workspaces", json={"name": "Scratch"}, headers=auth
+    )
+    scratch_id = r.json()["id"]
+
+    r = await client.delete(
+        f"/api/v1/workspaces/{scratch_id}",
+        headers={**auth, "X-Workspace-ID": scratch_id},
+    )
+    assert r.status_code == 204
+
+    r = await client.get("/api/v1/workspaces", headers=auth)
+    assert not any(w["id"] == scratch_id for w in r.json())
+
+
+async def test_cant_delete_last_workspace(client):
+    token, _ = await _register(client, "Lone")
+    auth = {"Authorization": f"Bearer {token}"}
+    ws_id = (await client.get("/api/v1/workspaces", headers=auth)).json()[0]["id"]
+
+    r = await client.delete(
+        f"/api/v1/workspaces/{ws_id}",
+        headers={**auth, "X-Workspace-ID": ws_id},
+    )
+    assert r.status_code == 400
+
+
 async def test_workspace_dep_rejects_non_member_via_header(client):
     """Caller passes X-Workspace-ID pointing at someone else's workspace —
     should get 403 from the dependency, proving membership is verified."""

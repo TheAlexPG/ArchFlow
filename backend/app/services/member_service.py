@@ -1,12 +1,13 @@
 import secrets
 import uuid
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.invite import WorkspaceInvite
 from app.models.user import User
-from app.models.workspace import Role, WorkspaceMember
+from app.models.workspace import Role, Workspace, WorkspaceMember
 
 
 class LastOwnerError(ValueError):
@@ -121,17 +122,20 @@ async def invite_user(
     role: Role,
     invited_by_user_id: uuid.UUID | None,
     team_ids: list[uuid.UUID] | None = None,
-) -> tuple[WorkspaceInvite | None, WorkspaceMember | None]:
-    """If the email is already a registered user, add them as a member + to
-    `team_ids` immediately. Otherwise persist a pending invite carrying the
-    team_ids, and apply them on acceptance.
+) -> WorkspaceInvite:
+    """Persist a pending invite. The invitee — whether they have an
+    account already or not — must explicitly accept before membership is
+    created. If they already have an account we fire a `notification` so
+    their bell lights up in-app.
 
-    Returns either (invite, None) or (None, member).
+    Raises `ValueError` if the email already belongs to a workspace
+    member, or if a pending invite for that email already exists.
     """
     team_ids = team_ids or []
 
     user_q = await db.execute(select(User).where(User.email == email))
     existing_user = user_q.scalar_one_or_none()
+
     if existing_user is not None:
         member_q = await db.execute(
             select(WorkspaceMember).where(
@@ -141,14 +145,18 @@ async def invite_user(
         )
         if member_q.scalar_one_or_none():
             raise ValueError("User is already a member of this workspace")
-        member = WorkspaceMember(
-            workspace_id=workspace_id, user_id=existing_user.id, role=role
+
+    pending_q = await db.execute(
+        select(WorkspaceInvite).where(
+            WorkspaceInvite.workspace_id == workspace_id,
+            WorkspaceInvite.email == email,
+            WorkspaceInvite.accepted_at.is_(None),
+            WorkspaceInvite.declined_at.is_(None),
+            WorkspaceInvite.revoked_at.is_(None),
         )
-        db.add(member)
-        await db.commit()
-        await db.refresh(member)
-        await _add_user_to_teams(db, workspace_id, existing_user.id, team_ids)
-        return None, member
+    )
+    if pending_q.scalar_one_or_none():
+        raise ValueError("A pending invite for that email already exists")
 
     invite = WorkspaceInvite(
         workspace_id=workspace_id,
@@ -161,22 +169,115 @@ async def invite_user(
     db.add(invite)
     await db.commit()
     await db.refresh(invite)
-    return invite, None
+
+    # Fire a notification for existing users so they see the request
+    # without having to know a token URL.
+    if existing_user is not None:
+        workspace = (
+            await db.execute(select(Workspace).where(Workspace.id == workspace_id))
+        ).scalar_one_or_none()
+        ws_name = workspace.name if workspace else "a workspace"
+        from app.services import notification_service
+
+        try:
+            await notification_service.create(
+                db,
+                user_id=existing_user.id,
+                kind="invite",
+                title=f"You've been invited to {ws_name}",
+                body=f"Role: {role.value}",
+                target_url="/invites",
+            )
+        except Exception:
+            pass
+
+    return invite
 
 
 async def accept_invite(
     db: AsyncSession, token: str, user: User
 ) -> WorkspaceMember | None:
+    """Token-based accept (kept for email link flow). See accept_invite_by_id
+    for the in-app flow."""
     result = await db.execute(
         select(WorkspaceInvite).where(WorkspaceInvite.token == token)
     )
     invite = result.scalar_one_or_none()
-    if invite is None or invite.accepted_at is not None or invite.revoked_at is not None:
+    if (
+        invite is None
+        or invite.accepted_at is not None
+        or invite.revoked_at is not None
+        or invite.declined_at is not None
+    ):
         return None
     if invite.email != user.email:
         return None
-    from datetime import UTC, datetime
+    return await _finalize_accept(db, invite, user)
 
+
+async def accept_invite_by_id(
+    db: AsyncSession, invite_id: uuid.UUID, user: User
+) -> WorkspaceMember | None:
+    """Accept a pending invite that was created for `user.email`."""
+    result = await db.execute(
+        select(WorkspaceInvite).where(WorkspaceInvite.id == invite_id)
+    )
+    invite = result.scalar_one_or_none()
+    if (
+        invite is None
+        or invite.accepted_at is not None
+        or invite.revoked_at is not None
+        or invite.declined_at is not None
+    ):
+        return None
+    if invite.email != user.email:
+        return None
+    return await _finalize_accept(db, invite, user)
+
+
+async def decline_invite_by_id(
+    db: AsyncSession, invite_id: uuid.UUID, user: User
+) -> bool:
+    result = await db.execute(
+        select(WorkspaceInvite).where(WorkspaceInvite.id == invite_id)
+    )
+    invite = result.scalar_one_or_none()
+    if (
+        invite is None
+        or invite.accepted_at is not None
+        or invite.revoked_at is not None
+        or invite.declined_at is not None
+    ):
+        return False
+    if invite.email != user.email:
+        return False
+    invite.declined_at = datetime.now(UTC)
+    await db.commit()
+    return True
+
+
+async def revoke_invite(
+    db: AsyncSession, workspace_id: uuid.UUID, invite_id: uuid.UUID
+) -> bool:
+    result = await db.execute(
+        select(WorkspaceInvite).where(
+            WorkspaceInvite.id == invite_id,
+            WorkspaceInvite.workspace_id == workspace_id,
+        )
+    )
+    invite = result.scalar_one_or_none()
+    if invite is None or invite.accepted_at is not None:
+        return False
+    if invite.revoked_at is not None:
+        return True
+    invite.revoked_at = datetime.now(UTC)
+    await db.commit()
+    return True
+
+
+async def _finalize_accept(
+    db: AsyncSession, invite: WorkspaceInvite, user: User
+) -> WorkspaceMember:
     invite.accepted_at = datetime.now(UTC)
     member = WorkspaceMember(
         workspace_id=invite.workspace_id, user_id=user.id, role=invite.role
@@ -188,6 +289,25 @@ async def accept_invite(
     return member
 
 
+async def list_pending_for_email(
+    db: AsyncSession, email: str
+) -> list[tuple[WorkspaceInvite, Workspace]]:
+    """Return pending invites targeted at `email`, joined with workspace
+    name so the UI can render the list without a follow-up round trip."""
+    result = await db.execute(
+        select(WorkspaceInvite, Workspace)
+        .join(Workspace, Workspace.id == WorkspaceInvite.workspace_id)
+        .where(
+            WorkspaceInvite.email == email,
+            WorkspaceInvite.accepted_at.is_(None),
+            WorkspaceInvite.declined_at.is_(None),
+            WorkspaceInvite.revoked_at.is_(None),
+        )
+        .order_by(WorkspaceInvite.created_at.desc())
+    )
+    return [(inv, ws) for inv, ws in result.all()]
+
+
 async def list_invites(
     db: AsyncSession, workspace_id: uuid.UUID
 ) -> list[WorkspaceInvite]:
@@ -197,6 +317,7 @@ async def list_invites(
             WorkspaceInvite.workspace_id == workspace_id,
             WorkspaceInvite.accepted_at.is_(None),
             WorkspaceInvite.revoked_at.is_(None),
+            WorkspaceInvite.declined_at.is_(None),
         )
         .order_by(WorkspaceInvite.created_at.desc())
     )

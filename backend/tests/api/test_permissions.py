@@ -18,9 +18,9 @@ async def _register(client, tag: str = "p") -> tuple[str, str, str]:
     return token, email, ws["id"]
 
 
-async def test_invite_existing_user_adds_membership(client):
+async def test_invite_existing_user_is_pending_until_accepted(client):
     owner_token, _, ws_id = await _register(client, "owner")
-    _, alice_email, _ = await _register(client, "alice")
+    alice_token, alice_email, _ = await _register(client, "alice")
 
     r = await client.post(
         f"/api/v1/workspaces/{ws_id}/invites",
@@ -28,7 +28,32 @@ async def test_invite_existing_user_adds_membership(client):
         headers={"Authorization": f"Bearer {owner_token}"},
     )
     assert r.status_code == 201, r.text
-    assert r.json()["type"] == "member_added"
+    assert r.json()["type"] == "invite_created"
+    invite_id = r.json()["invite"]["id"]
+
+    # Alice isn't a member yet.
+    members = (
+        await client.get(
+            f"/api/v1/workspaces/{ws_id}/members",
+            headers={"Authorization": f"Bearer {owner_token}"},
+        )
+    ).json()
+    assert alice_email not in {m["email"] for m in members}
+
+    # She sees the pending invite on her side.
+    r = await client.get(
+        "/api/v1/me/invites",
+        headers={"Authorization": f"Bearer {alice_token}"},
+    )
+    assert r.status_code == 200
+    assert any(i["id"] == invite_id for i in r.json())
+
+    # Accept → now she's a member.
+    r = await client.post(
+        f"/api/v1/me/invites/{invite_id}/accept",
+        headers={"Authorization": f"Bearer {alice_token}"},
+    )
+    assert r.status_code == 200
 
     members = (
         await client.get(
@@ -36,26 +61,25 @@ async def test_invite_existing_user_adds_membership(client):
             headers={"Authorization": f"Bearer {owner_token}"},
         )
     ).json()
-    emails = {m["email"] for m in members}
-    assert alice_email in emails
+    assert alice_email in {m["email"] for m in members}
 
 
 async def test_non_admin_cant_invite(client):
     owner_token, _, ws_id = await _register(client, "owner")
-    _, alice_email, _ = await _register(client, "alice")
+    alice_token, alice_email, _ = await _register(client, "alice")
 
-    # Add Alice as viewer, then Alice tries to invite someone → 403.
-    await client.post(
+    # Invite Alice as viewer, then have her accept, then Alice tries to
+    # invite someone → 403.
+    r = await client.post(
         f"/api/v1/workspaces/{ws_id}/invites",
         json={"email": alice_email, "role": "viewer"},
         headers={"Authorization": f"Bearer {owner_token}"},
     )
-    # Alice signs in implicitly via her own token — first get it:
-    r_login = await client.post(
-        "/api/v1/auth/login",
-        json={"email": alice_email, "password": "s3cret-pw!"},
+    invite_id = r.json()["invite"]["id"]
+    await client.post(
+        f"/api/v1/me/invites/{invite_id}/accept",
+        headers={"Authorization": f"Bearer {alice_token}"},
     )
-    alice_token = r_login.json()["access_token"]
 
     r = await client.post(
         f"/api/v1/workspaces/{ws_id}/invites",

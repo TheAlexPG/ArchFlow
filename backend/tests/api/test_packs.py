@@ -47,18 +47,25 @@ async def _create_diagram(client, token: str, ws_id: str, name: str = "Test diag
 
 
 async def _invite_as_editor(client, owner_auth: dict, ws_id: str, email: str) -> str:
-    """Invite an existing user as editor; return their login token."""
+    """Invite an existing user as editor; have them accept the invite;
+    return their login token."""
     r = await client.post(
         f"/api/v1/workspaces/{ws_id}/invites",
         json={"email": email, "role": "editor"},
         headers=owner_auth,
     )
     assert r.status_code == 201, r.text
+    invite_id = r.json()["invite"]["id"]
     r2 = await client.post(
         "/api/v1/auth/login",
         json={"email": email, "password": "s3cret-pw!"},
     )
-    return r2.json()["access_token"]
+    token = r2.json()["access_token"]
+    await client.post(
+        f"/api/v1/me/invites/{invite_id}/accept",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    return token
 
 
 # ─── Pack CRUD ────────────────────────────────────────────────

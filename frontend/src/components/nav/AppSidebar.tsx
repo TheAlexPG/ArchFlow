@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { useAuthStore } from '../../stores/auth-store'
+import { useMyInvites } from '../../hooks/use-api'
 import { NotificationsBell } from './NotificationsBell'
 import { WorkspaceSwitcher } from './WorkspaceSwitcher'
 
@@ -11,6 +12,7 @@ const NAV_ITEMS = [
   { label: 'Drafts', icon: '✎', path: '/drafts' },
   { label: 'Activity', icon: '⏱', path: '/activity' },
   { label: 'Versions', icon: '◷', path: '/versions' },
+  { label: 'Invites', icon: '✉', path: '/invites' },
   { label: 'Members', icon: '◌', path: '/members' },
   { label: 'Teams', icon: '◎', path: '/teams' },
   { label: 'Settings', icon: '⚙', path: '/settings' },
@@ -23,6 +25,8 @@ const NAV_ITEMS = [
  */
 export function AppSidebar() {
   const { logout } = useAuthStore()
+  const { data: invites = [] } = useMyInvites()
+  const pendingCount = invites.length
 
   return (
     <div
@@ -70,6 +74,23 @@ export function AppSidebar() {
           >
             <span style={{ opacity: 0.6 }}>{item.icon}</span>
             {item.label}
+            {item.path === '/invites' && pendingCount > 0 && (
+              <span
+                style={{
+                  marginLeft: 'auto',
+                  minWidth: 18,
+                  padding: '1px 6px',
+                  fontSize: 10,
+                  fontWeight: 700,
+                  background: '#ef4444',
+                  color: '#fff',
+                  borderRadius: 10,
+                  textAlign: 'center',
+                }}
+              >
+                {pendingCount}
+              </span>
+            )}
           </NavLink>
         ))}
       </nav>

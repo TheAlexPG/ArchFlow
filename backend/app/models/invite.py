@@ -35,6 +35,9 @@ class WorkspaceInvite(Base, UUIDMixin, TimestampMixin):
     accepted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
+    declined_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
     revoked_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )

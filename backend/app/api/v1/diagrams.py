@@ -146,7 +146,14 @@ async def add_object_to_diagram(
     diagram = await diagram_service.get_diagram(db, diagram_id)
     if not diagram:
         raise HTTPException(status_code=404, detail="Diagram not found")
-    return await diagram_service.add_object_to_diagram(db, diagram_id, data)
+    obj = await diagram_service.add_object_to_diagram(db, diagram_id, data)
+    body = DiagramObjectResponse.model_validate(obj).model_dump(mode="json")
+    fire_and_forget_publish(
+        getattr(diagram, "workspace_id", None),
+        "diagram_object.added",
+        {"diagram_id": str(diagram_id), "diagram_object": body},
+    )
+    return obj
 
 
 @router.put(
@@ -166,6 +173,13 @@ async def update_diagram_object(
         raise HTTPException(
             status_code=404, detail="Object not found in diagram"
         )
+    diagram = await diagram_service.get_diagram(db, diagram_id)
+    body = DiagramObjectResponse.model_validate(obj).model_dump(mode="json")
+    fire_and_forget_publish(
+        getattr(diagram, "workspace_id", None) if diagram else None,
+        "diagram_object.updated",
+        {"diagram_id": str(diagram_id), "diagram_object": body},
+    )
     return obj
 
 
@@ -175,6 +189,7 @@ async def remove_object_from_diagram(
     object_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
 ):
+    diagram = await diagram_service.get_diagram(db, diagram_id)
     removed = await diagram_service.remove_object_from_diagram(
         db, diagram_id, object_id
     )
@@ -182,6 +197,11 @@ async def remove_object_from_diagram(
         raise HTTPException(
             status_code=404, detail="Object not found in diagram"
         )
+    fire_and_forget_publish(
+        getattr(diagram, "workspace_id", None) if diagram else None,
+        "diagram_object.removed",
+        {"diagram_id": str(diagram_id), "object_id": str(object_id)},
+    )
 
 
 # ─── Pack assignment ──────────────────────────────────────────
