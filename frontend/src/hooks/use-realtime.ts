@@ -41,17 +41,33 @@ function wsUrl(path: string, token: string): string {
 
 /** Merge or insert an entity into a (possibly undefined) id-keyed list.
  *  Used by useWorkspaceSocket to patch TanStack cache on object/connection/
- *  diagram events without hitting the network. */
+ *  diagram events without hitting the network.
+ *
+ *  Guard: setQueriesData({queryKey: ['objects']}) matches ALL queries
+ *  beginning with that prefix, which includes single-entity caches like
+ *  ['objects', id]. If prev isn't an array (e.g. a single object), we
+ *  leave it untouched — the single-entity merge is handled separately. */
 function mergeEntity<T extends { id: string }>(
-  prev: T[] | undefined,
+  prev: T[] | T | undefined,
   next: T,
-): T[] {
-  if (!prev) return [next]
+): T[] | T | undefined {
+  if (prev === undefined) return [next]
+  if (!Array.isArray(prev)) return prev
   const idx = prev.findIndex((row) => row.id === next.id)
   if (idx === -1) return [...prev, next]
   const merged = [...prev]
   merged[idx] = { ...prev[idx], ...next }
   return merged
+}
+
+/** Safe filter for list caches matched by prefix: only operate on arrays,
+ *  pass everything else through untouched. */
+function filterList<T>(
+  prev: T[] | unknown,
+  keep: (row: T) => boolean,
+): T[] | unknown {
+  if (!Array.isArray(prev)) return prev
+  return prev.filter(keep)
 }
 
 // ── useDiagramSocket ──────────────────────────────────────────────────────────
@@ -172,11 +188,13 @@ export function useDiagramSocket(diagramId: string | null): DiagramSocketResult 
           const dId = msg.diagram_id as string | undefined
           const objectId = msg.object_id as string | undefined
           if (dId && objectId) {
-            queryClient.setQueriesData<
-              Array<{ id: string; object_id: string }> | undefined
-            >(
+            queryClient.setQueriesData(
               { queryKey: ['diagram-objects', dId] },
-              (prev) => prev?.filter((r) => r.object_id !== objectId),
+              (prev: unknown) =>
+                filterList<{ object_id: string }>(
+                  prev,
+                  (r) => r.object_id !== objectId,
+                ),
             )
           } else if (dId) {
             void queryClient.invalidateQueries({
@@ -186,9 +204,9 @@ export function useDiagramSocket(diagramId: string | null): DiagramSocketResult 
         } else if (type === 'object.updated') {
           const obj = msg.object as { id: string } | undefined
           if (obj) {
-            queryClient.setQueriesData<Array<{ id: string }> | undefined>(
+            queryClient.setQueriesData(
               { queryKey: ['objects'] },
-              (prev) => mergeEntity(prev, obj),
+              (prev: unknown) => mergeEntity(prev as never, obj),
             )
             queryClient.setQueryData(['objects', obj.id], obj as never)
           } else {
@@ -197,9 +215,10 @@ export function useDiagramSocket(diagramId: string | null): DiagramSocketResult 
         } else if (type === 'object.deleted') {
           const id = msg.id as string | undefined
           if (id) {
-            queryClient.setQueriesData<Array<{ id: string }> | undefined>(
+            queryClient.setQueriesData(
               { queryKey: ['objects'] },
-              (prev) => prev?.filter((o) => o.id !== id),
+              (prev: unknown) =>
+                filterList<{ id: string }>(prev, (o) => o.id !== id),
             )
             queryClient.removeQueries({ queryKey: ['objects', id] })
           } else {
@@ -211,9 +230,9 @@ export function useDiagramSocket(diagramId: string | null): DiagramSocketResult 
         ) {
           const conn = msg.connection as { id: string } | undefined
           if (conn) {
-            queryClient.setQueriesData<Array<{ id: string }> | undefined>(
+            queryClient.setQueriesData(
               { queryKey: ['connections'] },
-              (prev) => mergeEntity(prev, conn),
+              (prev: unknown) => mergeEntity(prev as never, conn),
             )
           } else {
             void queryClient.invalidateQueries({ queryKey: ['connections'] })
@@ -221,9 +240,10 @@ export function useDiagramSocket(diagramId: string | null): DiagramSocketResult 
         } else if (type === 'connection.deleted') {
           const id = msg.id as string | undefined
           if (id) {
-            queryClient.setQueriesData<Array<{ id: string }> | undefined>(
+            queryClient.setQueriesData(
               { queryKey: ['connections'] },
-              (prev) => prev?.filter((c) => c.id !== id),
+              (prev: unknown) =>
+                filterList<{ id: string }>(prev, (c) => c.id !== id),
             )
           } else {
             void queryClient.invalidateQueries({ queryKey: ['connections'] })
@@ -413,23 +433,21 @@ export function useWorkspaceSocket(): void {
         if (type === 'object.created' || type === 'object.updated') {
           const obj = msg.object as { id: string } | undefined
           if (obj) {
-            queryClient.setQueriesData<Array<{ id: string }> | undefined>(
+            queryClient.setQueriesData(
               { queryKey: ['objects'] },
-              (prev) => mergeEntity(prev, obj),
+              (prev: unknown) => mergeEntity(prev as never, obj),
             )
-            queryClient.setQueryData<{ id: string } | undefined>(
-              ['objects', obj.id],
-              obj as never,
-            )
+            queryClient.setQueryData(['objects', obj.id], obj as never)
           } else {
             void queryClient.invalidateQueries({ queryKey: ['objects'] })
           }
         } else if (type === 'object.deleted') {
           const id = msg.id as string | undefined
           if (id) {
-            queryClient.setQueriesData<Array<{ id: string }> | undefined>(
+            queryClient.setQueriesData(
               { queryKey: ['objects'] },
-              (prev) => prev?.filter((o) => o.id !== id),
+              (prev: unknown) =>
+                filterList<{ id: string }>(prev, (o) => o.id !== id),
             )
             queryClient.removeQueries({ queryKey: ['objects', id] })
           } else {
@@ -438,9 +456,9 @@ export function useWorkspaceSocket(): void {
         } else if (type === 'connection.created' || type === 'connection.updated') {
           const conn = msg.connection as { id: string } | undefined
           if (conn) {
-            queryClient.setQueriesData<Array<{ id: string }> | undefined>(
+            queryClient.setQueriesData(
               { queryKey: ['connections'] },
-              (prev) => mergeEntity(prev, conn),
+              (prev: unknown) => mergeEntity(prev as never, conn),
             )
           } else {
             void queryClient.invalidateQueries({ queryKey: ['connections'] })
@@ -448,9 +466,10 @@ export function useWorkspaceSocket(): void {
         } else if (type === 'connection.deleted') {
           const id = msg.id as string | undefined
           if (id) {
-            queryClient.setQueriesData<Array<{ id: string }> | undefined>(
+            queryClient.setQueriesData(
               { queryKey: ['connections'] },
-              (prev) => prev?.filter((c) => c.id !== id),
+              (prev: unknown) =>
+                filterList<{ id: string }>(prev, (c) => c.id !== id),
             )
           } else {
             void queryClient.invalidateQueries({ queryKey: ['connections'] })
@@ -462,9 +481,9 @@ export function useWorkspaceSocket(): void {
           const diagramId = msg.diagram_id as string | undefined
           const row = msg.diagram_object as { id: string } | undefined
           if (diagramId && row) {
-            queryClient.setQueriesData<Array<{ id: string }> | undefined>(
+            queryClient.setQueriesData(
               { queryKey: ['diagram-objects', diagramId] },
-              (prev) => mergeEntity(prev, row),
+              (prev: unknown) => mergeEntity(prev as never, row),
             )
           } else if (diagramId) {
             void queryClient.invalidateQueries({
@@ -475,11 +494,13 @@ export function useWorkspaceSocket(): void {
           const diagramId = msg.diagram_id as string | undefined
           const objectId = msg.object_id as string | undefined
           if (diagramId && objectId) {
-            queryClient.setQueriesData<
-              Array<{ id: string; object_id: string }> | undefined
-            >(
+            queryClient.setQueriesData(
               { queryKey: ['diagram-objects', diagramId] },
-              (prev) => prev?.filter((r) => r.object_id !== objectId),
+              (prev: unknown) =>
+                filterList<{ object_id: string }>(
+                  prev,
+                  (r) => r.object_id !== objectId,
+                ),
             )
           } else if (diagramId) {
             void queryClient.invalidateQueries({
@@ -489,9 +510,9 @@ export function useWorkspaceSocket(): void {
         } else if (type === 'diagram.created' || type === 'diagram.updated') {
           const diagram = msg.diagram as { id: string } | undefined
           if (diagram) {
-            queryClient.setQueriesData<Array<{ id: string }> | undefined>(
+            queryClient.setQueriesData(
               { queryKey: ['diagrams'] },
-              (prev) => mergeEntity(prev, diagram),
+              (prev: unknown) => mergeEntity(prev as never, diagram),
             )
             queryClient.setQueryData(['diagrams', diagram.id], diagram)
           } else {
@@ -500,9 +521,10 @@ export function useWorkspaceSocket(): void {
         } else if (type === 'diagram.deleted') {
           const id = msg.id as string | undefined
           if (id) {
-            queryClient.setQueriesData<Array<{ id: string }> | undefined>(
+            queryClient.setQueriesData(
               { queryKey: ['diagrams'] },
-              (prev) => prev?.filter((d) => d.id !== id),
+              (prev: unknown) =>
+                filterList<{ id: string }>(prev, (d) => d.id !== id),
             )
             queryClient.removeQueries({ queryKey: ['diagrams', id] })
           } else {
