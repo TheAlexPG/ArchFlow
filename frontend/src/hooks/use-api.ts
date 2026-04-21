@@ -245,12 +245,43 @@ export function useAddObjectToDiagram() {
   })
 }
 
+/** Patches the diagram-objects cache for one row without refetching.
+ *  Used by useSaveDiagramPosition / useSaveDiagramSize so the local cache
+ *  matches the backend the moment the drag ends — otherwise a racing
+ *  refetch can restore the pre-drag position and visibly snap the node
+ *  back. */
+function patchDiagramObject(
+  qc: ReturnType<typeof useQueryClient>,
+  diagramId: string,
+  objectId: string,
+  patch: Partial<DiagramObjectData>,
+) {
+  qc.setQueriesData<DiagramObjectData[] | undefined>(
+    { queryKey: ['diagram-objects', diagramId] },
+    (prev) => {
+      if (!prev) return prev
+      return prev.map((row) =>
+        row.object_id === objectId ? { ...row, ...patch } : row,
+      )
+    },
+  )
+}
+
 export function useSaveDiagramPosition() {
+  const qc = useQueryClient()
   return useMutation({
     mutationFn: async ({
       diagramId, objectId, x, y,
     }: { diagramId: string; objectId: string; x: number; y: number }) => {
       await api.put(`/diagrams/${diagramId}/objects/${objectId}`, {
+        position_x: x, position_y: y,
+      })
+    },
+    onMutate: async ({ diagramId, objectId, x, y }) => {
+      // Cancel any in-flight refetch — otherwise its stale response can
+      // overwrite our optimistic update and the node snaps back.
+      await qc.cancelQueries({ queryKey: ['diagram-objects', diagramId] })
+      patchDiagramObject(qc, diagramId, objectId, {
         position_x: x, position_y: y,
       })
     },
@@ -267,8 +298,9 @@ export function useSaveDiagramSize() {
         width, height,
       })
     },
-    onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ['diagram-objects', vars.diagramId] })
+    onMutate: async ({ diagramId, objectId, width, height }) => {
+      await qc.cancelQueries({ queryKey: ['diagram-objects', diagramId] })
+      patchDiagramObject(qc, diagramId, objectId, { width, height })
     },
   })
 }
