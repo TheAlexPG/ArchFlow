@@ -38,13 +38,18 @@ async def get_diagram(db: AsyncSession, diagram_id: uuid.UUID) -> Diagram | None
     return result.scalar_one_or_none()
 
 
-async def create_diagram(db: AsyncSession, data: DiagramCreate) -> Diagram:
+async def create_diagram(
+    db: AsyncSession,
+    data: DiagramCreate,
+    workspace_id: uuid.UUID | None = None,
+) -> Diagram:
     diagram = Diagram(
         name=data.name,
         type=data.type,
         description=data.description,
         scope_object_id=data.scope_object_id,
         settings=data.settings,
+        workspace_id=workspace_id,
     )
     db.add(diagram)
     await db.flush()

@@ -1,15 +1,25 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_optional_user
 from app.core.database import get_db
 from app.models.activity_log import ActivityTargetType
 from app.schemas.activity import ActivityLogResponse
 from app.schemas.diagram import DiagramResponse
 from app.schemas.object import ObjectCreate, ObjectResponse, ObjectUpdate
-from app.services import activity_service, ai_service, diagram_service, object_service
-from app.realtime.manager import fire_and_forget_publish
+from app.services import (
+    activity_service,
+    ai_service,
+    diagram_service,
+    object_service,
+    workspace_service,
+)
+from app.realtime.manager import (
+    fire_and_forget_publish,
+    fire_and_forget_publish_diagram,
+)
 from app.services.webhook_service import fire_and_forget_emit
 
 router = APIRouter(prefix="/objects", tags=["objects"])
@@ -48,12 +58,33 @@ async def create_object(
         None, description="If set, the new object is scoped to this draft."
     ),
     db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_optional_user),
+    x_workspace_id: str | None = Header(default=None, alias="X-Workspace-ID"),
 ):
     if data.parent_id:
         parent = await object_service.get_object(db, data.parent_id)
         if not parent:
             raise HTTPException(status_code=400, detail="Parent object not found")
-    obj = await object_service.create_object(db, data, draft_id=draft_id)
+    workspace_id: uuid.UUID | None = None
+    if current_user is not None:
+        if x_workspace_id:
+            try:
+                candidate = uuid.UUID(x_workspace_id)
+            except ValueError:
+                candidate = None
+            if candidate is not None and await workspace_service.get_user_membership(
+                db, current_user.id, candidate
+            ):
+                workspace_id = candidate
+        if workspace_id is None:
+            ws = await workspace_service.get_default_workspace_for_user(
+                db, current_user.id
+            )
+            if ws is not None:
+                workspace_id = ws.id
+    obj = await object_service.create_object(
+        db, data, draft_id=draft_id, workspace_id=workspace_id
+    )
     response = ObjectResponse.from_model(obj)
     if draft_id is None:
         body = response.model_dump(mode="json")
@@ -62,6 +93,14 @@ async def create_object(
             getattr(obj, "workspace_id", None), "object.created", {"object": body}
         )
     return response
+
+
+async def _fanout_object_to_diagrams(
+    db: AsyncSession, object_id: uuid.UUID, event_type: str, payload: dict
+) -> None:
+    diagrams = await diagram_service.get_diagrams_containing_object(db, object_id)
+    for d in diagrams:
+        fire_and_forget_publish_diagram(d.id, event_type, payload)
 
 
 @router.put("/{object_id}", response_model=ObjectResponse)
@@ -81,6 +120,9 @@ async def update_object(
         fire_and_forget_publish(
             getattr(obj, "workspace_id", None), "object.updated", {"object": body}
         )
+        await _fanout_object_to_diagrams(
+            db, obj.id, "object.updated", {"object": body}
+        )
     return response
 
 
@@ -92,10 +134,21 @@ async def delete_object(object_id: uuid.UUID, db: AsyncSession = Depends(get_db)
     was_draft = obj.draft_id is not None
     obj_id_str = str(obj.id)
     obj_ws_id = getattr(obj, "workspace_id", None)
+    # Capture the containing diagrams BEFORE the delete so we still know
+    # where to fan out the event; the junction rows go away with the object.
+    diagrams_before = (
+        await diagram_service.get_diagrams_containing_object(db, obj.id)
+        if not was_draft
+        else []
+    )
     await object_service.delete_object(db, obj)
     if not was_draft:
         fire_and_forget_emit("object.deleted", {"id": obj_id_str})
         fire_and_forget_publish(obj_ws_id, "object.deleted", {"id": obj_id_str})
+        for d in diagrams_before:
+            fire_and_forget_publish_diagram(
+                d.id, "object.deleted", {"id": obj_id_str}
+            )
 
 
 @router.get("/{object_id}/children", response_model=list[ObjectResponse])

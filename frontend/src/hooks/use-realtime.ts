@@ -58,6 +58,7 @@ function mergeEntity<T extends { id: string }>(
 
 export function useDiagramSocket(diagramId: string | null): DiagramSocketResult {
   const token = useAuthStore((s) => s.accessToken)
+  const queryClient = useQueryClient()
 
   const [cursors, setCursors] = useState<Record<string, CursorState>>({})
   const [selections, setSelections] = useState<Record<string, SelectionState>>({})
@@ -151,6 +152,82 @@ export function useDiagramSocket(diagramId: string | null): DiagramSocketResult 
               [userId]: { ids, user_name: msg.user_name as string },
             }
           })
+        } else if (
+          type === 'diagram_object.added' ||
+          type === 'diagram_object.updated'
+        ) {
+          const row = msg.diagram_object as { id: string } | undefined
+          const dId = msg.diagram_id as string | undefined
+          if (dId && row) {
+            queryClient.setQueriesData<Array<{ id: string }> | undefined>(
+              { queryKey: ['diagram-objects', dId] },
+              (prev) => mergeEntity(prev, row),
+            )
+          } else if (dId) {
+            void queryClient.invalidateQueries({
+              queryKey: ['diagram-objects', dId],
+            })
+          }
+        } else if (type === 'diagram_object.removed') {
+          const dId = msg.diagram_id as string | undefined
+          const objectId = msg.object_id as string | undefined
+          if (dId && objectId) {
+            queryClient.setQueriesData<
+              Array<{ id: string; object_id: string }> | undefined
+            >(
+              { queryKey: ['diagram-objects', dId] },
+              (prev) => prev?.filter((r) => r.object_id !== objectId),
+            )
+          } else if (dId) {
+            void queryClient.invalidateQueries({
+              queryKey: ['diagram-objects', dId],
+            })
+          }
+        } else if (type === 'object.updated') {
+          const obj = msg.object as { id: string } | undefined
+          if (obj) {
+            queryClient.setQueriesData<Array<{ id: string }> | undefined>(
+              { queryKey: ['objects'] },
+              (prev) => mergeEntity(prev, obj),
+            )
+            queryClient.setQueryData(['objects', obj.id], obj as never)
+          } else {
+            void queryClient.invalidateQueries({ queryKey: ['objects'] })
+          }
+        } else if (type === 'object.deleted') {
+          const id = msg.id as string | undefined
+          if (id) {
+            queryClient.setQueriesData<Array<{ id: string }> | undefined>(
+              { queryKey: ['objects'] },
+              (prev) => prev?.filter((o) => o.id !== id),
+            )
+            queryClient.removeQueries({ queryKey: ['objects', id] })
+          } else {
+            void queryClient.invalidateQueries({ queryKey: ['objects'] })
+          }
+        } else if (
+          type === 'connection.created' ||
+          type === 'connection.updated'
+        ) {
+          const conn = msg.connection as { id: string } | undefined
+          if (conn) {
+            queryClient.setQueriesData<Array<{ id: string }> | undefined>(
+              { queryKey: ['connections'] },
+              (prev) => mergeEntity(prev, conn),
+            )
+          } else {
+            void queryClient.invalidateQueries({ queryKey: ['connections'] })
+          }
+        } else if (type === 'connection.deleted') {
+          const id = msg.id as string | undefined
+          if (id) {
+            queryClient.setQueriesData<Array<{ id: string }> | undefined>(
+              { queryKey: ['connections'] },
+              (prev) => prev?.filter((c) => c.id !== id),
+            )
+          } else {
+            void queryClient.invalidateQueries({ queryKey: ['connections'] })
+          }
         } else if (type === 'cursor') {
           const userId = msg.user_id as string
           setCursors((prev) => ({
@@ -206,7 +283,7 @@ export function useDiagramSocket(diagramId: string | null): DiagramSocketResult 
       setPresence([])
     }
     // reconnect on diagramId or token change
-  }, [diagramId, token, scheduleEvict, clearEvictTimer])
+  }, [diagramId, token, scheduleEvict, clearEvictTimer, queryClient])
 
   const sendCursor = useCallback((x: number, y: number) => {
     if (document.hidden) return

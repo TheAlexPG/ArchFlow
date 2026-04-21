@@ -5,11 +5,31 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.schemas.connection import ConnectionCreate, ConnectionResponse, ConnectionUpdate
-from app.realtime.manager import fire_and_forget_publish
-from app.services import connection_service, object_service
+from app.realtime.manager import (
+    fire_and_forget_publish,
+    fire_and_forget_publish_diagram,
+)
+from app.services import connection_service, diagram_service, object_service
 from app.services.webhook_service import fire_and_forget_emit
 
 router = APIRouter(prefix="/connections", tags=["connections"])
+
+
+async def _fanout_to_endpoint_diagrams(
+    db: AsyncSession,
+    source_id: uuid.UUID,
+    target_id: uuid.UUID,
+    event_type: str,
+    payload: dict,
+) -> None:
+    src_diagrams = await diagram_service.get_diagrams_containing_object(db, source_id)
+    tgt_diagrams = await diagram_service.get_diagrams_containing_object(db, target_id)
+    seen: set[uuid.UUID] = set()
+    for d in [*src_diagrams, *tgt_diagrams]:
+        if d.id in seen:
+            continue
+        seen.add(d.id)
+        fire_and_forget_publish_diagram(d.id, event_type, payload)
 
 
 @router.get("", response_model=list[ConnectionResponse])
@@ -58,6 +78,10 @@ async def create_connection(
             "connection.created",
             {"connection": body},
         )
+        await _fanout_to_endpoint_diagrams(
+            db, conn.source_id, conn.target_id,
+            "connection.created", {"connection": body},
+        )
     return conn
 
 
@@ -80,6 +104,10 @@ async def update_connection(
             "connection.updated",
             {"connection": body},
         )
+        await _fanout_to_endpoint_diagrams(
+            db, conn.source_id, conn.target_id,
+            "connection.updated", {"connection": body},
+        )
     return conn
 
 
@@ -92,7 +120,13 @@ async def delete_connection(connection_id: uuid.UUID, db: AsyncSession = Depends
     conn_id_str = str(conn.id)
     src = await object_service.get_object(db, conn.source_id)
     src_ws_id = getattr(src, "workspace_id", None)
+    source_id = conn.source_id
+    target_id = conn.target_id
     await connection_service.delete_connection(db, conn)
     if not was_draft:
         fire_and_forget_emit("connection.deleted", {"id": conn_id_str})
         fire_and_forget_publish(src_ws_id, "connection.deleted", {"id": conn_id_str})
+        await _fanout_to_endpoint_diagrams(
+            db, source_id, target_id,
+            "connection.deleted", {"id": conn_id_str},
+        )

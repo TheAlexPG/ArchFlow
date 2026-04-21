@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,7 +14,10 @@ from app.schemas.diagram import (
     DiagramUpdate,
 )
 from app.api.deps import get_optional_user
-from app.realtime.manager import fire_and_forget_publish
+from app.realtime.manager import (
+    fire_and_forget_publish,
+    fire_and_forget_publish_diagram,
+)
 from app.services import access_service, diagram_service, draft_service, workspace_service
 from app.services import pack_service
 from app.services.webhook_service import fire_and_forget_emit
@@ -79,9 +82,32 @@ async def get_diagram(
 
 @router.post("", response_model=DiagramResponse, status_code=201)
 async def create_diagram(
-    data: DiagramCreate, db: AsyncSession = Depends(get_db)
+    data: DiagramCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_optional_user),
+    x_workspace_id: str | None = Header(default=None, alias="X-Workspace-ID"),
 ):
-    diagram = await diagram_service.create_diagram(db, data)
+    workspace_id = None
+    if current_user is not None:
+        # Prefer the explicit X-Workspace-ID header so the diagram is
+        # stamped with the workspace the user is actually looking at;
+        # fall back to their oldest workspace if the header is missing.
+        if x_workspace_id:
+            try:
+                candidate = uuid.UUID(x_workspace_id)
+            except ValueError:
+                candidate = None
+            if candidate is not None and await workspace_service.get_user_membership(
+                db, current_user.id, candidate
+            ):
+                workspace_id = candidate
+        if workspace_id is None:
+            ws = await workspace_service.get_default_workspace_for_user(
+                db, current_user.id
+            )
+            if ws is not None:
+                workspace_id = ws.id
+    diagram = await diagram_service.create_diagram(db, data, workspace_id=workspace_id)
     body = DiagramResponse.model_validate(diagram).model_dump(mode="json")
     fire_and_forget_emit("diagram.created", body)
     fire_and_forget_publish(
@@ -148,11 +174,13 @@ async def add_object_to_diagram(
         raise HTTPException(status_code=404, detail="Diagram not found")
     obj = await diagram_service.add_object_to_diagram(db, diagram_id, data)
     body = DiagramObjectResponse.model_validate(obj).model_dump(mode="json")
+    payload = {"diagram_id": str(diagram_id), "diagram_object": body}
     fire_and_forget_publish(
         getattr(diagram, "workspace_id", None),
         "diagram_object.added",
-        {"diagram_id": str(diagram_id), "diagram_object": body},
+        payload,
     )
+    fire_and_forget_publish_diagram(diagram_id, "diagram_object.added", payload)
     return obj
 
 
@@ -175,11 +203,13 @@ async def update_diagram_object(
         )
     diagram = await diagram_service.get_diagram(db, diagram_id)
     body = DiagramObjectResponse.model_validate(obj).model_dump(mode="json")
+    payload = {"diagram_id": str(diagram_id), "diagram_object": body}
     fire_and_forget_publish(
         getattr(diagram, "workspace_id", None) if diagram else None,
         "diagram_object.updated",
-        {"diagram_id": str(diagram_id), "diagram_object": body},
+        payload,
     )
+    fire_and_forget_publish_diagram(diagram_id, "diagram_object.updated", payload)
     return obj
 
 
@@ -197,10 +227,14 @@ async def remove_object_from_diagram(
         raise HTTPException(
             status_code=404, detail="Object not found in diagram"
         )
+    payload = {"diagram_id": str(diagram_id), "object_id": str(object_id)}
     fire_and_forget_publish(
         getattr(diagram, "workspace_id", None) if diagram else None,
         "diagram_object.removed",
-        {"diagram_id": str(diagram_id), "object_id": str(object_id)},
+        payload,
+    )
+    fire_and_forget_publish_diagram(
+        diagram_id, "diagram_object.removed", payload
     )
 
 

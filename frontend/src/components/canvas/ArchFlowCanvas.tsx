@@ -231,9 +231,12 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     if (key === prevKeyRef.current) return
     prevKeyRef.current = key
 
-    // Preserve dragged positions, selection state, and size from NodeResizer.
-    // Also carry over the opacity hint from dependencies overlay, if active,
-    // and the color outline from the active filter dimension.
+    // The diagram-objects cache is authoritative for position + size.
+    // Carry over selection / overlay styling from the previous nodes, and
+    // ONLY preserve local state while a drag or resize is in progress (so
+    // an incoming remote echo doesn't yank the node out from under the
+    // user). Anything else — including another collaborator's drag — we
+    // let through so two-browser edits actually propagate.
     const currentNodes = getNodes()
     const merged = nodes.map((n) => {
       const existing = currentNodes.find((cn) => cn.id === n.id)
@@ -245,12 +248,13 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
       const overlay = overlayStyleFor(obj, filterDim)
       const baseStyle = { ...(overlay ?? {}), opacity }
       if (existing) {
+        const isDragging = (existing as Node & { dragging?: boolean }).dragging === true
         return {
           ...n,
-          position: existing.position,
+          position: isDragging ? existing.position : n.position,
           selected: existing.selected,
-          width: existing.width,
-          height: existing.height,
+          width: existing.width != null && isDragging ? existing.width : n.width,
+          height: existing.height != null && isDragging ? existing.height : n.height,
           style: { ...existing.style, ...baseStyle },
         }
       }

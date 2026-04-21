@@ -230,3 +230,22 @@ def fire_and_forget_publish(
             logger.exception("ws publish failed for %s", event_type)
 
     asyncio.create_task(_go())
+
+
+def fire_and_forget_publish_diagram(
+    diagram_id: uuid.UUID | str | None, event_type: str, payload: dict[str, Any]
+) -> None:
+    """Publish to `diagram:{id}` — every client subscribed via
+    useDiagramSocket picks it up, even if they're in a different
+    workspace. Used for events scoped to a single open diagram."""
+    if diagram_id is None:
+        return
+    room_id = f"diagram:{diagram_id}"
+
+    async def _go() -> None:
+        try:
+            await manager.publish(room_id, {"type": event_type, **payload})
+        except Exception:
+            logger.exception("ws publish failed for %s", event_type)
+
+    asyncio.create_task(_go())
