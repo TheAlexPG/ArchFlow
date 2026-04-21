@@ -7,12 +7,11 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
+      // /api/v1/ws/... is a WebSocket endpoint under the same /api prefix,
+      // so we must enable ws here or the upgrade handshake dies at the proxy.
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,
-      },
-      '/ws': {
-        target: 'ws://localhost:8000',
         ws: true,
       },
     },
