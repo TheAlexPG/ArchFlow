@@ -5,7 +5,6 @@ import {
   useDeleteComment,
   useUpdateComment,
 } from '../../hooks/use-api'
-import { useCanvasStore } from '../../stores/canvas-store'
 import type { Comment, CommentType } from '../../types/model'
 
 // Shared meta for pin styling. Kept inline (not imported from the sidebar)

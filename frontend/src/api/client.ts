@@ -1,4 +1,4 @@
-import Axios, { AxiosRequestConfig } from 'axios'
+import Axios, { type AxiosRequestConfig } from 'axios'
 
 const AXIOS_INSTANCE = Axios.create({ baseURL: '' })
 

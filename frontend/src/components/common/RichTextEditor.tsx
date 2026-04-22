@@ -30,7 +30,7 @@ export function RichTextEditor({ content, onChange, placeholder }: RichTextEdito
   // Sync external content changes
   useEffect(() => {
     if (editor && content !== editor.getHTML()) {
-      editor.commands.setContent(content, false)
+      editor.commands.setContent(content, { emitUpdate: false })
     }
   }, [content]) // eslint-disable-line react-hooks/exhaustive-deps
 

@@ -48,11 +48,13 @@ function wsUrl(path: string, token: string): string {
  *  ['objects', id]. If prev isn't an array (e.g. a single object), we
  *  leave it untouched — the single-entity merge is handled separately. */
 function mergeEntity<T extends { id: string }>(
-  prev: T[] | T | undefined,
+  prev: T[] | undefined,
   next: T,
-): T[] | T | undefined {
-  if (prev === undefined) return [next]
-  if (!Array.isArray(prev)) return prev
+): T[] {
+  // Defensive: a non-array cache entry would have triggered .findIndex to
+  // throw. Treat it like "empty" and return a fresh array so we never hand
+  // setQueriesData something shaped wrong.
+  if (!prev || !Array.isArray(prev)) return [next]
   const idx = prev.findIndex((row) => row.id === next.id)
   if (idx === -1) return [...prev, next]
   const merged = [...prev]

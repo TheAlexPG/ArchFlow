@@ -10,7 +10,6 @@ import {
   type Edge,
   type NodeTypes,
   type EdgeTypes,
-  type NodeDragEvent,
   MarkerType,
   type OnSelectionChangeParams,
 } from '@xyflow/react'
@@ -37,7 +36,7 @@ import { C4Node, type C4NodeData } from './C4Node'
 import { CanvasComments } from './CanvasComments'
 import { ExternalSystemNode } from './ExternalSystemNode'
 import { GroupNode } from './GroupNode'
-import { collectLegend, extractFilterValue, overlayStyleFor, type FilterDim } from './overlay-utils'
+import { extractFilterValue, overlayStyleFor, type FilterDim } from './overlay-utils'
 import { detectParentGroup, findSpatialGroupMembers, nodeToRect } from './group-utils'
 import { useDiagramSocket } from '../../hooks/use-realtime'
 import { CursorsOverlay, RemoteSelectionsOverlay } from './CursorsOverlay'
@@ -416,7 +415,7 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
   )
 
   const onNodeDrag = useCallback(
-    (_event: NodeDragEvent, node: Node) => {
+    (_event: React.MouseEvent, node: Node) => {
       const obj = allObjects.find((o) => o.id === node.id)
       if (!obj || obj.type !== 'group') return
 
@@ -459,7 +458,7 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
   )
 
   const onNodeDragStop = useCallback(
-    (_event: NodeDragEvent, node: Node) => {
+    (_event: React.MouseEvent, node: Node) => {
       if (!diagramId) return
 
       const obj = allObjects.find((o) => o.id === node.id)

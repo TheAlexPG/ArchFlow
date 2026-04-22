@@ -78,7 +78,6 @@ export function OverviewPage() {
   )
 
   // Health checks reuse data already fetched — cheap, no extra roundtrip.
-  const emptyDiagrams = useMemo(() => diagrams.filter(() => false).length, [diagrams])
   const orphanObjects = useMemo(
     () =>
       objects.filter(
