@@ -12,10 +12,14 @@ FROM python:3.12-slim
 
 WORKDIR /app
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
-COPY --from=builder /usr/local/bin/gunicorn /usr/local/bin/gunicorn
-COPY --from=builder /usr/local/bin/uvicorn /usr/local/bin/uvicorn
+# Copy the whole bin/ from the builder instead of cherry-picking gunicorn+uvicorn —
+# we also need alembic (and anything else Python deps install). The builder is a
+# clean python:3.12-slim + uv, so nothing unwanted lands here.
+COPY --from=builder /usr/local/bin /usr/local/bin
 COPY --from=builder /app .
 
-EXPOSE 8000
+EXPOSE 8001
 
-CMD ["gunicorn", "app.main:app", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "-b", "0.0.0.0:8000"]
+# Matches docker-compose.prod.yml command so `docker run` alone yields the
+# same behaviour as the deployed stack.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001"]
