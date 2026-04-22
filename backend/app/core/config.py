@@ -24,6 +24,12 @@ class Settings(BaseSettings):
     # Default to the latest Claude model the user selects in their .env.
     anthropic_model: str = "claude-sonnet-4-5-20250929"
 
+    # Google OAuth (opt-in — leave client_id/secret blank to disable the button)
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
+    google_redirect_uri: str = "http://localhost:8000/api/v1/auth/oauth/google/callback"
+    frontend_url: str = "http://localhost:5173"
+
     @property
     def cors_origins(self) -> list[str]:
         return [origin.strip() for origin in self.backend_cors_origins.split(",")]

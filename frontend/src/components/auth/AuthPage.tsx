@@ -32,28 +32,11 @@ export function AuthPage() {
     }
   }
 
-  const handleGoogleLogin = async () => {
-    // Stub: the backend's /auth/oauth/google/login returns a URL that points
-    // right back at its own callback with a sample code. In production this
-    // would be a Google 302 we'd window.location.assign() to. For the stub
-    // we just ask the user for an email and post to the callback directly.
-    const email = prompt('Google OAuth stub — enter email to sign in as:')
-    if (!email) return
-    setError('')
-    setLoading(true)
-    try {
-      const { data } = await axios.get('/api/v1/auth/oauth/google/callback', {
-        params: { code: email },
-      })
-      setTokens(data.access_token, data.refresh_token)
-    } catch (err: unknown) {
-      const msg =
-        (axios.isAxiosError(err) && err.response?.data?.detail) ||
-        'OAuth stub failed'
-      setError(String(msg))
-    } finally {
-      setLoading(false)
-    }
+  const handleGoogleLogin = () => {
+    // Kick off the real OAuth dance — backend 302s to Google, Google redirects
+    // back to /api/v1/auth/oauth/google/callback, which then 302s us to
+    // /auth/callback with tokens in the URL fragment.
+    window.location.href = '/api/v1/auth/oauth/google/login'
   }
 
   return (
@@ -115,9 +98,8 @@ export function AuthPage() {
           onClick={handleGoogleLogin}
           disabled={loading}
           className="w-full py-2 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 disabled:opacity-50 text-neutral-100 rounded-lg text-sm font-medium"
-          title="Stub — real Google integration wired up later"
         >
-          Continue with Google (stub)
+          Continue with Google
         </button>
 
         <p className="text-sm text-neutral-500 text-center mt-4">

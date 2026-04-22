@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/reac
 import { useEffect, useRef } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthPage } from './components/auth/AuthPage'
+import { AuthCallback } from './components/auth/AuthCallback'
 import { ActivityPage } from './pages/ActivityPage'
 import { ConnectionsPage } from './pages/ConnectionsPage'
 import { DiagramPage } from './pages/DiagramPage'
@@ -73,6 +74,7 @@ function App() {
             path="/login"
             element={isAuthenticated ? <Navigate to="/" replace /> : <AuthPage />}
           />
+          <Route path="/auth/callback" element={<AuthCallback />} />
           <Route
             path="/"
             element={

@@ -113,19 +113,37 @@ async def test_cannot_demote_last_owner(client):
     assert "last owner" in r.json()["detail"].lower()
 
 
-async def test_oauth_stub_flow(client):
+async def test_google_oauth_disabled_without_creds(client):
+    """With no GOOGLE_CLIENT_ID in settings, both endpoints should 503 so the
+    SPA falls back to email/password without exposing half-configured OAuth."""
     r = await client.get("/api/v1/auth/oauth/google/login")
-    assert r.status_code == 200
-    body = r.json()
-    assert body["stub"] is True
-    assert "callback" in body["authorize_url"]
+    assert r.status_code == 503
 
     r = await client.get(
         "/api/v1/auth/oauth/google/callback",
-        params={"code": f"oauth-{uuid.uuid4().hex[:6]}@example.com"},
+        params={"code": "any"},
     )
-    assert r.status_code == 200
-    body = r.json()
-    assert body["stub"] is True
-    assert body["is_new_user"] is True
-    assert body["access_token"]
+    assert r.status_code == 503
+
+
+async def test_google_oauth_login_redirects_when_configured(client, monkeypatch):
+    """When creds are present, /login must 302 to accounts.google.com with the
+    configured client_id + redirect_uri."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "google_client_id", "test-client-id")
+    monkeypatch.setattr(settings, "google_client_secret", "test-client-secret")
+    monkeypatch.setattr(
+        settings,
+        "google_redirect_uri",
+        "http://localhost:8000/api/v1/auth/oauth/google/callback",
+    )
+
+    r = await client.get(
+        "/api/v1/auth/oauth/google/login", follow_redirects=False
+    )
+    assert r.status_code in (302, 307)
+    loc = r.headers["location"]
+    assert "accounts.google.com" in loc
+    assert "client_id=test-client-id" in loc
+    assert "scope=openid" in loc
