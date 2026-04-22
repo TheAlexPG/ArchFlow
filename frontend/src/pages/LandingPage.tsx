@@ -341,42 +341,64 @@ function FinalCTA() {
 function Footer() {
   return (
     <footer className="relative z-10 border-t border-white/5 bg-black/40">
-      <div className="max-w-6xl mx-auto px-6 py-12 grid grid-cols-2 md:grid-cols-4 gap-6 text-sm">
+      <div className="max-w-6xl mx-auto px-6 py-12 grid grid-cols-2 md:grid-cols-4 gap-8 text-sm">
         <div className="col-span-2 md:col-span-1">
           <div className="flex items-center gap-2 mb-2">
             <img src="/logo.png" alt="" className="w-6 h-6 rounded" />
             <span className="font-semibold text-neutral-100">ArchFlow</span>
           </div>
-          <p className="text-xs text-neutral-500 leading-relaxed">
+          <p className="text-xs text-neutral-400 leading-relaxed">
             Self-hosted C4 architecture platform. AGPL-3.0.
           </p>
         </div>
         <FooterCol title="Product">
-          <Link to="/login" className="hover:text-neutral-100 transition">Sign in</Link>
-          <a href={GITHUB_URL} target="_blank" rel="noreferrer" className="hover:text-neutral-100 transition">GitHub</a>
-          <a href={`${GITHUB_URL}/issues`} target="_blank" rel="noreferrer" className="hover:text-neutral-100 transition">Report an issue</a>
+          <Link to="/login" className="hover:text-orange-400 transition">Sign in</Link>
+          <a href={GITHUB_URL} target="_blank" rel="noreferrer" className="hover:text-orange-400 transition">GitHub</a>
+          <a href={`${GITHUB_URL}/issues`} target="_blank" rel="noreferrer" className="hover:text-orange-400 transition">Report an issue</a>
         </FooterCol>
         <FooterCol title="Legal">
-          <Link to="/terms" className="hover:text-neutral-100 transition">Terms of service</Link>
-          <Link to="/privacy" className="hover:text-neutral-100 transition">Privacy policy</Link>
-          <a href={`${GITHUB_URL}/blob/main/LICENSE`} target="_blank" rel="noreferrer" className="hover:text-neutral-100 transition">License (AGPL-3.0)</a>
+          <Link to="/terms" className="hover:text-orange-400 transition">Terms of service</Link>
+          <Link to="/privacy" className="hover:text-orange-400 transition">Privacy policy</Link>
+          <a href={`${GITHUB_URL}/blob/main/LICENSE`} target="_blank" rel="noreferrer" className="hover:text-orange-400 transition">License (AGPL-3.0)</a>
         </FooterCol>
         <FooterCol title="Resources">
-          <a href={`${GITHUB_URL}#quick-start`} target="_blank" rel="noreferrer" className="hover:text-neutral-100 transition">Quick start</a>
-          <a href={`${GITHUB_URL}/tree/main/docs`} target="_blank" rel="noreferrer" className="hover:text-neutral-100 transition">Docs</a>
-          <a href="https://c4model.com" target="_blank" rel="noreferrer" className="hover:text-neutral-100 transition">C4 model</a>
+          <a href={`${GITHUB_URL}#quick-start`} target="_blank" rel="noreferrer" className="hover:text-orange-400 transition">Quick start</a>
+          <a href={`${GITHUB_URL}/tree/main/docs`} target="_blank" rel="noreferrer" className="hover:text-orange-400 transition">Docs</a>
+          <a href="https://c4model.com" target="_blank" rel="noreferrer" className="hover:text-orange-400 transition">C4 model</a>
         </FooterCol>
       </div>
-      <div className="border-t border-white/5 py-4 text-center text-xs text-neutral-600">
-        © ArchFlow · Built with care ·{' '}
-        <a
-          href={GITHUB_URL}
-          target="_blank"
-          rel="noreferrer"
-          className="hover:text-neutral-400 transition"
-        >
-          Open source
-        </a>
+      {/* Always-visible inline bar — so even at a glance on mobile, Terms /
+          Privacy are one tap away without hunting through the grid. */}
+      <div className="border-t border-white/10 py-5">
+        <div className="max-w-6xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+          <div className="text-neutral-500">
+            © ArchFlow · Built with care
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-neutral-300">
+            <Link to="/terms" className="hover:text-orange-400 transition">
+              Terms
+            </Link>
+            <Link to="/privacy" className="hover:text-orange-400 transition">
+              Privacy
+            </Link>
+            <a
+              href={`${GITHUB_URL}/blob/main/LICENSE`}
+              target="_blank"
+              rel="noreferrer"
+              className="hover:text-orange-400 transition"
+            >
+              License
+            </a>
+            <a
+              href={GITHUB_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="hover:text-orange-400 transition"
+            >
+              GitHub
+            </a>
+          </div>
+        </div>
       </div>
     </footer>
   )
@@ -385,10 +407,10 @@ function Footer() {
 function FooterCol({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="text-xs font-semibold text-neutral-300 uppercase tracking-wider mb-3">
+      <div className="text-xs font-semibold text-neutral-100 uppercase tracking-wider mb-3">
         {title}
       </div>
-      <div className="flex flex-col gap-1.5 text-neutral-500">{children}</div>
+      <div className="flex flex-col gap-2 text-neutral-300">{children}</div>
     </div>
   )
 }
