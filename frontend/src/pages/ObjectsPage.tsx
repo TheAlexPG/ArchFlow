@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AppSidebar } from '../components/nav/AppSidebar'
+import { ObjectSidebar } from '../components/sidebar/ObjectSidebar'
 import { useObjectDiagrams } from '../hooks/use-diagrams'
 import { useObjects } from '../hooks/use-api'
 import type { ModelObject } from '../types/model'
@@ -9,6 +10,7 @@ import { STATUS_COLORS, TYPE_ICONS, TYPE_LABELS } from '../components/canvas/nod
 export function ObjectsPage() {
   const { data: objects = [], isLoading } = useObjects()
   const [search, setSearch] = useState('')
+  const [editingObjectId, setEditingObjectId] = useState<string | null>(null)
 
   const filtered = useMemo(() => {
     if (!search) return objects
@@ -52,21 +54,28 @@ export function ObjectsPage() {
                 <th className="text-left px-4 py-2 font-medium">Technology</th>
                 <th className="text-left px-4 py-2 font-medium">Team</th>
                 <th className="text-left px-4 py-2 font-medium">Diagrams</th>
+                <th className="w-10 px-2 py-2"></th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((o) => (
-                <ObjectRow key={o.id} obj={o} />
+                <ObjectRow key={o.id} obj={o} onEdit={setEditingObjectId} />
               ))}
             </tbody>
           </table>
         </div>
       </div>
+      <ObjectSidebar
+        objectId={editingObjectId}
+        open={!!editingObjectId}
+        onClose={() => setEditingObjectId(null)}
+        context="standalone"
+      />
     </div>
   )
 }
 
-function ObjectRow({ obj }: { obj: ModelObject }) {
+function ObjectRow({ obj, onEdit }: { obj: ModelObject; onEdit: (id: string) => void }) {
   const { data: diagrams = [] } = useObjectDiagrams(obj.id)
   const navigate = useNavigate()
 
@@ -112,6 +121,18 @@ function ObjectRow({ obj }: { obj: ModelObject }) {
             )}
           </div>
         )}
+      </td>
+      <td className="px-2 py-2 text-right">
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            onEdit(obj.id)
+          }}
+          className="px-2 py-1 text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800 rounded text-base leading-none"
+          title="Edit object"
+        >
+          ⋯
+        </button>
       </td>
     </tr>
   )

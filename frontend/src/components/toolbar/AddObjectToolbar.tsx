@@ -30,9 +30,12 @@ function getQuickTypesForDiagram(diagramType: DiagramType | undefined): ObjectTy
     case 'system_context':
       return ['system', 'actor', 'external_system', 'group']
     case 'container':
-      return ['app', 'store', 'component', 'group']
+      // A container can reference an external system (e.g. a payment gateway
+      // it talks to). Allow placing systems on L2/L3 even though C4 purists
+      // would typically render those on L1 — IcePanel does the same.
+      return ['app', 'store', 'component', 'system', 'external_system', 'actor', 'group']
     case 'component':
-      return ['component', 'group']
+      return ['component', 'system', 'external_system', 'actor', 'group']
     case 'custom':
     default:
       return ALL_QUICK_TYPES

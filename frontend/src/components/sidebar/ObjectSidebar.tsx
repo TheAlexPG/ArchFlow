@@ -20,9 +20,28 @@ import {
   DRILLABLE_TYPES,
 } from '../drafts/CreateChildDiagramModal'
 
-export function ObjectSidebar() {
+interface ObjectSidebarProps {
+  objectId?: string | null
+  open?: boolean
+  onClose?: () => void
+  context?: 'canvas' | 'standalone'
+}
+
+export function ObjectSidebar({
+  objectId,
+  open,
+  onClose,
+  context = 'canvas',
+}: ObjectSidebarProps = {}) {
   const { selectedNodeId, sidebarOpen, sidebarTab, setSidebarTab, toggleSidebar } = useCanvasStore()
-  const { data: obj } = useObject(selectedNodeId)
+  const effectiveObjectId = objectId !== undefined ? objectId : selectedNodeId
+  const effectiveOpen = open !== undefined ? open : sidebarOpen
+  const handleClose = () => {
+    if (onClose) onClose()
+    else toggleSidebar(false)
+  }
+  const isStandalone = context === 'standalone'
+  const { data: obj } = useObject(effectiveObjectId)
   const updateObject = useUpdateObject()
   const deleteObject = useDeleteObject()
 
@@ -37,7 +56,7 @@ export function ObjectSidebar() {
     }
   }, [obj])
 
-  if (!sidebarOpen || !obj) return null
+  if (!effectiveOpen || !obj) return null
 
   const handleSave = () => {
     updateObject.mutate({
@@ -50,7 +69,7 @@ export function ObjectSidebar() {
   const handleDelete = () => {
     if (confirm(`Delete "${obj.name}"?`)) {
       deleteObject.mutate(obj.id)
-      toggleSidebar(false)
+      handleClose()
     }
   }
 
@@ -70,7 +89,7 @@ export function ObjectSidebar() {
           className="bg-transparent text-neutral-100 font-semibold text-sm outline-none flex-1 mr-2"
         />
         <button
-          onClick={() => toggleSidebar(false)}
+          onClick={handleClose}
           className="text-neutral-500 hover:text-neutral-300 text-lg"
         >
           ×
@@ -151,8 +170,8 @@ export function ObjectSidebar() {
               <span className="text-sm text-neutral-300">{obj.c4_level}</span>
             </Field>
 
-            {/* Cross-references */}
-            <CrossReferences objectId={obj.id} />
+            {/* Cross-references — canvas context only */}
+            {!isStandalone && <CrossReferences objectId={obj.id} />}
 
             {/* Description */}
             <Field label="Description">
@@ -197,13 +216,13 @@ export function ObjectSidebar() {
               />
             </Field>
 
-            {/* Drill into — only for drillable types */}
-            {DRILLABLE_TYPES.has(obj.type) && (
+            {/* Drill into — only for drillable types, canvas context only */}
+            {!isStandalone && DRILLABLE_TYPES.has(obj.type) && (
               <DrillIntoSection obj={obj} />
             )}
 
-            {/* Group members — only for group type */}
-            {obj.type === 'group' && (
+            {/* Group members — only for group type, canvas context only */}
+            {!isStandalone && obj.type === 'group' && (
               <GroupMembersSection groupId={obj.id} />
             )}
 

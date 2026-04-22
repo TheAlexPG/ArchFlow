@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { AppSidebar } from '../components/nav/AppSidebar'
 import {
   useDiagrams,
+  useCreateDiagram,
   useDeleteDiagram,
   useUpdateDiagram,
 } from '../hooks/use-diagrams'
@@ -33,6 +34,14 @@ const TYPE_LABELS: Record<string, string> = {
   custom: 'Custom',
 }
 
+const DIAGRAM_TYPE_LABELS_FOR_CREATE: Record<string, string> = {
+  system_landscape: 'L1 — System Landscape',
+  system_context: 'L1 — System Context',
+  container: 'L2 — Container',
+  component: 'L3 — Component',
+  custom: 'Custom',
+}
+
 type SortKey = 'name' | 'type' | 'c4' | 'updated_at'
 
 function timeAgo(iso: string): string {
@@ -49,6 +58,7 @@ function timeAgo(iso: string): string {
 
 export function DiagramsPage() {
   const { data: diagrams = [], isLoading } = useDiagrams()
+  const createDiagram = useCreateDiagram()
   const deleteDiagram = useDeleteDiagram()
   const updateDiagram = useUpdateDiagram()
   const navigate = useNavigate()
@@ -60,6 +70,9 @@ export function DiagramsPage() {
   const [showNewPackInput, setShowNewPackInput] = useState(false)
   const [renamingPack, setRenamingPack] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
+  const [showCreate, setShowCreate] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [newType, setNewType] = useState('system_landscape')
 
   const wsId = useWorkspaceStore((s) => s.currentWorkspaceId)
   const { data: workspaces = [] } = useWorkspaces()
@@ -120,6 +133,20 @@ export function DiagramsPage() {
     renamePack.mutate({ packId, name })
     setRenamingPack(null)
     setRenameValue('')
+  }
+
+  const handleCreate = () => {
+    if (!newName.trim()) return
+    createDiagram.mutate(
+      { name: newName.trim(), type: newType },
+      {
+        onSuccess: (diagram) => {
+          setShowCreate(false)
+          setNewName('')
+          navigate(`/diagram/${diagram.id}`)
+        },
+      },
+    )
   }
 
   const sortedPacks: DiagramPack[] = [...packs].sort(
@@ -282,14 +309,50 @@ export function DiagramsPage() {
               )
             )}
             <button
-              onClick={() => navigate('/')}
+              onClick={() => setShowCreate(true)}
               className="text-sm bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded"
-              title="Create diagram via Overview"
             >
               + Create diagram
             </button>
           </div>
         </div>
+
+        {showCreate && (
+          <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4 mb-6 max-w-lg">
+            <div className="text-sm font-medium mb-3">New diagram</div>
+            <input
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="Diagram name…"
+              autoFocus
+              onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
+              className="w-full bg-neutral-800 border border-neutral-700 rounded px-3 py-1.5 text-sm outline-none mb-2"
+            />
+            <select
+              value={newType}
+              onChange={(e) => setNewType(e.target.value)}
+              className="w-full bg-neutral-800 border border-neutral-700 rounded px-3 py-1.5 text-sm outline-none mb-3"
+            >
+              {Object.entries(DIAGRAM_TYPE_LABELS_FOR_CREATE).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+            <div className="flex gap-2">
+              <button
+                onClick={handleCreate}
+                className="text-sm bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 rounded"
+              >
+                Create
+              </button>
+              <button
+                onClick={() => { setShowCreate(false); setNewName('') }}
+                className="text-sm text-neutral-400 border border-neutral-700 px-3 py-1 rounded"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
 
         {isLoading && <div className="text-sm text-neutral-500">Loading…</div>}
 
