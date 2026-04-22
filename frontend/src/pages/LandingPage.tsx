@@ -82,7 +82,7 @@ function Nav() {
 function Hero() {
   return (
     <section className="relative z-10">
-      <div className="max-w-4xl mx-auto px-6 py-24 md:py-32 text-center">
+      <div className="max-w-4xl mx-auto px-6 pt-16 pb-14 md:py-32 text-center">
         <img
           src="/logo.png"
           alt="ArchFlow"
@@ -128,6 +128,17 @@ function Hero() {
           </code>{' '}
           command.
         </p>
+
+        {/* Scroll hint — mobile users were landing on the hero and not
+            realising 5 more sections live below the fold. */}
+        <a
+          href="#why"
+          className="mt-12 inline-flex flex-col items-center gap-1 text-neutral-500 hover:text-orange-400 transition group"
+          aria-label="Scroll down"
+        >
+          <span className="text-[11px] uppercase tracking-widest">See why</span>
+          <span className="text-xl animate-bounce group-hover:animate-none">↓</span>
+        </a>
       </div>
     </section>
   )
@@ -152,8 +163,8 @@ function WhyArchFlow() {
     },
   ]
   return (
-    <section className="relative z-10 border-t border-white/5">
-      <div className="max-w-6xl mx-auto px-6 py-24">
+    <section id="why" className="relative z-10 border-t border-white/5 scroll-mt-16">
+      <div className="max-w-6xl mx-auto px-6 py-20 md:py-24">
         <SectionHead
           eyebrow="Why ArchFlow"
           title="Built for architecture that evolves"
