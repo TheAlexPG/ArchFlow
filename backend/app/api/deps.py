@@ -1,3 +1,5 @@
+import uuid
+
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -44,3 +46,39 @@ async def get_optional_user(request: Request, db: AsyncSession = Depends(get_db)
         return await get_current_user(request, db)
     except HTTPException:
         return None
+
+
+async def get_current_workspace_id(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(get_optional_user),
+) -> uuid.UUID | None:
+    """
+    Resolve the workspace the caller is currently operating in.
+
+    Reads the X-Workspace-ID header and validates that the caller is a
+    member. Falls back to the user's default workspace if the header is
+    missing/invalid. Returns None for unauthenticated callers or when the
+    user has no workspaces yet.
+    """
+    if current_user is None:
+        return None
+    # Local import to avoid a circular import at module load time
+    # (workspace_service imports from app.models which imports app.api.deps
+    # transitively via other paths during test collection).
+    from app.services import workspace_service
+
+    header_value = request.headers.get("X-Workspace-ID")
+    if header_value:
+        try:
+            candidate = uuid.UUID(header_value)
+        except ValueError:
+            candidate = None
+        if candidate is not None:
+            membership = await workspace_service.get_user_membership(
+                db, current_user.id, candidate
+            )
+            if membership is not None:
+                return candidate
+    ws = await workspace_service.get_default_workspace_for_user(db, current_user.id)
+    return ws.id if ws else None

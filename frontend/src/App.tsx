@@ -1,4 +1,5 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useRef } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthPage } from './components/auth/AuthPage'
 import { ActivityPage } from './pages/ActivityPage'
@@ -35,6 +36,23 @@ function WorkspaceSocketGate() {
   return null
 }
 
+// Workspace-scoped endpoints authorize via the X-Workspace-ID header set in
+// the axios interceptor — the header is NOT part of the React Query cache key.
+// On workspace switch we therefore drop the cache so the UI doesn't show the
+// previous workspace's data until the background refetch lands.
+function WorkspaceCacheReset() {
+  const queryClient = useQueryClient()
+  const workspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
+  const prev = useRef(workspaceId)
+  useEffect(() => {
+    if (prev.current !== null && prev.current !== workspaceId) {
+      queryClient.removeQueries()
+    }
+    prev.current = workspaceId
+  }, [workspaceId, queryClient])
+  return null
+}
+
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
   if (!isAuthenticated) return <Navigate to="/login" replace />
@@ -47,6 +65,7 @@ function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
+      {isAuthenticated && <WorkspaceCacheReset />}
       {isAuthenticated && workspaceId && <WorkspaceSocketGate />}
       <BrowserRouter>
         <Routes>

@@ -16,6 +16,10 @@ frontend/dist/
 frontend/src/api/generated/
 *.tsbuildinfo
 
+# Keep our shared frontend lib/ despite a possible global "lib/" ignore rule
+!frontend/src/lib/
+!frontend/src/lib/**
+
 # Environment
 .env
 .env.local

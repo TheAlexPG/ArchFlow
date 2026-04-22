@@ -3,6 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_workspace_id, get_optional_user
 from app.core.database import get_db
 from app.schemas.connection import ConnectionCreate, ConnectionResponse, ConnectionUpdate
 from app.realtime.manager import (
@@ -36,8 +37,15 @@ async def _fanout_to_endpoint_diagrams(
 async def list_connections(
     draft_id: uuid.UUID | None = Query(None),
     db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_optional_user),
+    workspace_id: uuid.UUID | None = Depends(get_current_workspace_id),
 ):
-    return await connection_service.get_connections(db, draft_id=draft_id)
+    effective_workspace_id = workspace_id if current_user is not None else None
+    if current_user is not None and effective_workspace_id is None:
+        return []
+    return await connection_service.get_connections(
+        db, draft_id=draft_id, workspace_id=effective_workspace_id
+    )
 
 
 @router.get("/between", response_model=list[ConnectionResponse])

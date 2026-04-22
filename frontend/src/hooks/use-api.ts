@@ -1,5 +1,4 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import axios from 'axios'
 import type {
   ApiKey,
   ApiKeyCreate,
@@ -39,25 +38,7 @@ import type {
   ObjectCreate,
   ObjectUpdate,
 } from '../types/model'
-import { useAuthStore } from '../stores/auth-store'
-import { useWorkspaceStore } from '../stores/workspace-store'
-
-const api = axios.create({ baseURL: '/api/v1' })
-
-// Auth + workspace interceptor: attach the JWT and the caller's currently
-// selected workspace so the backend can scope writes to it without callers
-// having to thread it through every request.
-api.interceptors.request.use((config) => {
-  const token = useAuthStore.getState().accessToken
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
-  }
-  const wsId = useWorkspaceStore.getState().currentWorkspaceId
-  if (wsId) {
-    config.headers['X-Workspace-ID'] = wsId
-  }
-  return config
-})
+import { api } from '../lib/api-client'
 
 // ─── Objects ─────────────────────────────────────────────
 

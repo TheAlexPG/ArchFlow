@@ -4,11 +4,14 @@ from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.connection import Connection
+from app.models.object import ModelObject
 from app.schemas.connection import ConnectionCreate, ConnectionUpdate
 
 
 async def get_connections(
-    db: AsyncSession, draft_id: uuid.UUID | None = None
+    db: AsyncSession,
+    draft_id: uuid.UUID | None = None,
+    workspace_id: uuid.UUID | None = None,
 ) -> list[Connection]:
     query = select(Connection)
     if draft_id is not None:
@@ -17,6 +20,15 @@ async def get_connections(
         )
     else:
         query = query.where(Connection.draft_id.is_(None))
+    if workspace_id is not None:
+        # Connections don't carry their own workspace_id — scope them via the
+        # source object's workspace so switching workspaces never leaks edges
+        # from another workspace.
+        query = query.where(
+            Connection.source_id.in_(
+                select(ModelObject.id).where(ModelObject.workspace_id == workspace_id)
+            )
+        )
     result = await db.execute(query)
     return list(result.scalars().all())
 

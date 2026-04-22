@@ -3,7 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_optional_user
+from app.api.deps import get_current_workspace_id, get_optional_user
 from app.core.database import get_db
 from app.models.activity_log import ActivityTargetType
 from app.schemas.activity import ActivityLogResponse
@@ -36,9 +36,18 @@ async def list_objects(
         "(forked clones). Otherwise only live objects are returned.",
     ),
     db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_optional_user),
+    workspace_id: uuid.UUID | None = Depends(get_current_workspace_id),
 ):
+    # Authenticated callers are scoped to their current workspace so switching
+    # workspaces doesn't leak objects from another one. Unauthenticated
+    # callers still see everything (matches legacy behaviour).
+    effective_workspace_id = workspace_id if current_user is not None else None
+    if current_user is not None and effective_workspace_id is None:
+        return []
     objects = await object_service.get_objects(
-        db, type, status, parent_id, draft_id=draft_id
+        db, type, status, parent_id, draft_id=draft_id,
+        workspace_id=effective_workspace_id,
     )
     return [ObjectResponse.from_model(obj) for obj in objects]
 

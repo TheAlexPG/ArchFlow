@@ -1,15 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import axios from 'axios'
-import { useAuthStore } from '../stores/auth-store'
+import { api } from '../lib/api-client'
 import type { ModelObject } from '../types/model'
-
-const api = axios.create({ baseURL: '/api/v1' })
-
-api.interceptors.request.use((config) => {
-  const token = useAuthStore.getState().accessToken
-  if (token) config.headers.Authorization = `Bearer ${token}`
-  return config
-})
 
 export interface Diagram {
   id: string

@@ -13,7 +13,7 @@ from app.schemas.diagram import (
     DiagramResponse,
     DiagramUpdate,
 )
-from app.api.deps import get_optional_user
+from app.api.deps import get_current_workspace_id, get_optional_user
 from app.realtime.manager import (
     fire_and_forget_publish,
     fire_and_forget_publish_diagram,
@@ -30,32 +30,35 @@ async def list_diagrams(
     scope_object_id: uuid.UUID | None = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_optional_user),
+    workspace_id: uuid.UUID | None = Depends(get_current_workspace_id),
 ):
     """
-    When the caller is authenticated and has a workspace, restrict the list
-    to diagrams they have team-granted access to. Workspace admins+ see
-    everything. Unauthenticated callers still see everything for now — full
-    auth rollout is a follow-up.
+    Authenticated callers see only the diagrams in the workspace they're
+    currently operating in (X-Workspace-ID header, falling back to their
+    default workspace). Team-ACL is then applied on top for non-admins.
+    Unauthenticated callers still see everything for now — full auth
+    rollout is a follow-up.
     """
-    diagrams = await diagram_service.get_diagrams(db, scope_object_id)
     if current_user is None:
-        return diagrams
-    workspace = await workspace_service.get_default_workspace_for_user(
-        db, current_user.id
+        return await diagram_service.get_diagrams(db, scope_object_id)
+    if workspace_id is None:
+        # Authenticated user with no workspace yet — show nothing rather
+        # than leaking other callers' diagrams.
+        return []
+    diagrams = await diagram_service.get_diagrams(
+        db, scope_object_id, workspace_id=workspace_id
     )
-    if workspace is None:
-        return diagrams
     membership = await workspace_service.get_user_membership(
-        db, current_user.id, workspace.id
+        db, current_user.id, workspace_id
     )
     if membership is None:
-        return diagrams
+        return []
     allowed = await access_service.filter_visible_diagram_ids(
-        db, current_user.id, workspace.id, membership.role
+        db, current_user.id, workspace_id, membership.role
     )
     if allowed is None:
         return diagrams
-    return [d for d in diagrams if d.id in allowed or d.workspace_id != workspace.id]
+    return [d for d in diagrams if d.id in allowed]
 
 
 @router.get("/{diagram_id}", response_model=DiagramResponse)

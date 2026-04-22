@@ -17,6 +17,7 @@ async def get_objects(
     status_filter: str | None = None,
     parent_id: uuid.UUID | None = None,
     draft_id: uuid.UUID | None = None,
+    workspace_id: uuid.UUID | None = None,
 ) -> list[ModelObject]:
     query = select(ModelObject)
     # Live queries hide draft-scoped objects. When a draft_id is passed we
@@ -28,6 +29,8 @@ async def get_objects(
         )
     else:
         query = query.where(ModelObject.draft_id.is_(None))
+    if workspace_id is not None:
+        query = query.where(ModelObject.workspace_id == workspace_id)
     if type_filter:
         query = query.where(ModelObject.type == type_filter)
     if status_filter:
