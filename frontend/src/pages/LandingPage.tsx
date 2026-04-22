@@ -4,7 +4,8 @@ const GITHUB_URL = 'https://github.com/TheAlexPG/ArchFlow'
 
 export function LandingPage() {
   return (
-    <div className="min-h-screen bg-white text-slate-900 antialiased">
+    <div className="min-h-screen bg-[#0a0a0f] text-neutral-200 antialiased relative overflow-hidden">
+      <AmbientBackdrop />
       <Nav />
       <Hero />
       <Features />
@@ -16,14 +17,39 @@ export function LandingPage() {
   )
 }
 
+function AmbientBackdrop() {
+  // Two soft blurred blobs + a subtle grid — gives the page a premium depth
+  // without going heavy on images or animation.
+  return (
+    <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
+      <div
+        className="absolute -top-40 -left-40 w-[500px] h-[500px] rounded-full blur-[120px] opacity-30"
+        style={{ background: 'radial-gradient(circle, #f97316 0%, transparent 70%)' }}
+      />
+      <div
+        className="absolute top-[40%] -right-40 w-[520px] h-[520px] rounded-full blur-[140px] opacity-25"
+        style={{ background: 'radial-gradient(circle, #a855f7 0%, transparent 70%)' }}
+      />
+      <div
+        className="absolute inset-0 opacity-[0.035]"
+        style={{
+          backgroundImage:
+            'linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)',
+          backgroundSize: '48px 48px',
+        }}
+      />
+    </div>
+  )
+}
+
 function Nav() {
   return (
-    <header className="sticky top-0 z-20 bg-white/80 backdrop-blur border-b border-slate-200">
+    <header className="sticky top-0 z-30 border-b border-white/5 bg-[#0a0a0f]/80 backdrop-blur">
       <div className="max-w-6xl mx-auto flex items-center justify-between px-6 py-3">
         <Link to="/" className="flex items-center gap-2">
           <img src="/logo.png" alt="" className="w-8 h-8 rounded-lg" />
-          <span className="font-semibold text-slate-900">ArchFlow</span>
-          <span className="text-[10px] font-medium text-orange-600 bg-orange-50 border border-orange-100 rounded px-1.5 py-0.5">
+          <span className="font-semibold text-neutral-100">ArchFlow</span>
+          <span className="text-[10px] font-medium text-orange-400 bg-orange-500/10 border border-orange-500/20 rounded px-1.5 py-0.5">
             beta
           </span>
         </Link>
@@ -32,16 +58,16 @@ function Nav() {
             href={GITHUB_URL}
             target="_blank"
             rel="noreferrer"
-            className="text-slate-600 hover:text-slate-900"
+            className="text-neutral-400 hover:text-neutral-100 transition"
           >
             GitHub
           </a>
-          <Link to="/login" className="text-slate-600 hover:text-slate-900">
+          <Link to="/login" className="text-neutral-400 hover:text-neutral-100 transition">
             Sign in
           </Link>
           <Link
             to="/login"
-            className="bg-slate-900 hover:bg-slate-800 text-white rounded-lg px-3 py-1.5 font-medium"
+            className="bg-white text-neutral-900 hover:bg-neutral-200 rounded-lg px-3 py-1.5 font-medium transition"
           >
             Get started
           </Link>
@@ -53,31 +79,33 @@ function Nav() {
 
 function Hero() {
   return (
-    <section className="relative overflow-hidden">
+    <section className="relative z-10">
       <div className="max-w-4xl mx-auto px-6 py-24 md:py-32 text-center">
         <img
           src="/logo.png"
           alt="ArchFlow"
-          className="w-20 h-20 mx-auto mb-8 rounded-2xl shadow-sm"
+          className="w-20 h-20 mx-auto mb-8 rounded-2xl shadow-[0_20px_60px_-10px_rgba(249,115,22,0.4)]"
         />
-        <div className="inline-flex items-center gap-2 bg-orange-50 text-orange-700 text-xs font-medium px-3 py-1 rounded-full border border-orange-100 mb-5">
-          <span className="w-1.5 h-1.5 rounded-full bg-orange-500" />
-          Self-hosted · AGPL-3.0
+        <div className="inline-flex items-center gap-2 bg-white/5 border border-white/10 text-neutral-300 text-xs font-medium px-3 py-1.5 rounded-full mb-6">
+          <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
+          Self-hosted · AGPL-3.0 open source
         </div>
-        <h1 className="text-4xl md:text-6xl font-bold tracking-tight text-slate-900 leading-[1.1]">
-          Draw your architecture
+        <h1 className="text-4xl md:text-6xl font-bold tracking-tight leading-[1.1]">
+          <span className="text-neutral-100">Draw your architecture</span>
           <br />
-          <span className="text-orange-600">the way you think about it.</span>
+          <span className="bg-gradient-to-r from-orange-400 via-orange-300 to-fuchsia-400 bg-clip-text text-transparent">
+            the way you think about it.
+          </span>
         </h1>
-        <p className="mt-6 text-lg text-slate-600 max-w-2xl mx-auto leading-relaxed">
+        <p className="mt-6 text-lg text-neutral-400 max-w-2xl mx-auto leading-relaxed">
           ArchFlow is a visual-first C4 architecture platform. Model your
           systems, containers, and components — then collaborate, review, and
           ship with a typed model under the hood.
         </p>
-        <div className="mt-8 flex flex-wrap gap-3 justify-center">
+        <div className="mt-9 flex flex-wrap gap-3 justify-center">
           <Link
             to="/login"
-            className="bg-orange-600 hover:bg-orange-500 text-white rounded-lg px-6 py-3 text-sm font-semibold shadow-sm"
+            className="group relative bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-400 hover:to-orange-500 text-white rounded-lg px-6 py-3 text-sm font-semibold shadow-[0_10px_30px_-10px_rgba(249,115,22,0.6)] transition"
           >
             Sign in to get started
           </Link>
@@ -85,25 +113,19 @@ function Hero() {
             href={GITHUB_URL}
             target="_blank"
             rel="noreferrer"
-            className="bg-white border border-slate-300 hover:border-slate-400 text-slate-900 rounded-lg px-6 py-3 text-sm font-semibold"
+            className="bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 text-neutral-100 rounded-lg px-6 py-3 text-sm font-semibold transition backdrop-blur"
           >
             Star on GitHub ★
           </a>
         </div>
-        <p className="mt-5 text-xs text-slate-500">
-          Free forever · Self-host with one <code className="text-orange-600">docker compose</code> command.
+        <p className="mt-5 text-xs text-neutral-500">
+          Free forever · Self-host with one{' '}
+          <code className="text-orange-400 bg-orange-500/10 px-1.5 py-0.5 rounded">
+            docker compose
+          </code>{' '}
+          command.
         </p>
       </div>
-      {/* Subtle grid backdrop */}
-      <div
-        className="absolute inset-0 pointer-events-none opacity-[0.03]"
-        style={{
-          backgroundImage:
-            'linear-gradient(#000 1px, transparent 1px), linear-gradient(90deg, #000 1px, transparent 1px)',
-          backgroundSize: '40px 40px',
-          zIndex: -1,
-        }}
-      />
     </section>
   )
 }
@@ -132,7 +154,7 @@ function Features() {
       title: 'Team-level ACL',
       body:
         'Workspaces, teams, roles. Grant read / edit / manage on individual diagrams. Pending-approval invites.',
-      icon: '👥',
+      icon: '✦',
     },
     {
       title: 'REST + WebSocket API',
@@ -148,24 +170,24 @@ function Features() {
     },
   ]
   return (
-    <section className="bg-slate-50 border-y border-slate-200">
-      <div className="max-w-6xl mx-auto px-6 py-20">
+    <section className="relative z-10">
+      <div className="max-w-6xl mx-auto px-6 py-24">
         <SectionHead
           eyebrow="Features"
           title="Everything you need to model software"
           body="Built to replace PowerPoint-for-architecture with something that stays in sync with how the system actually works."
         />
-        <div className="mt-12 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="mt-14 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {items.map((f) => (
             <div
               key={f.title}
-              className="bg-white border border-slate-200 rounded-xl p-6 hover:border-orange-300 hover:shadow-sm transition"
+              className="group relative bg-white/[0.02] border border-white/10 rounded-xl p-6 hover:border-orange-500/30 hover:bg-white/[0.04] transition"
             >
-              <div className="w-10 h-10 rounded-lg bg-orange-50 border border-orange-100 text-orange-600 flex items-center justify-center text-lg mb-4">
+              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-orange-500/20 to-fuchsia-500/10 border border-orange-500/20 text-orange-300 flex items-center justify-center text-lg mb-4">
                 {f.icon}
               </div>
-              <div className="font-semibold text-slate-900 mb-1">{f.title}</div>
-              <div className="text-sm text-slate-600 leading-relaxed">{f.body}</div>
+              <div className="font-semibold text-neutral-100 mb-1.5">{f.title}</div>
+              <div className="text-sm text-neutral-400 leading-relaxed">{f.body}</div>
             </div>
           ))}
         </div>
@@ -186,7 +208,7 @@ function HowItWorks() {
       n: '02',
       title: 'Drill into Containers',
       body:
-        'Open a system, fork its Container diagram. Model apps, stores, and queues that live inside. The model tracks hierarchy automatically.',
+        'Open a system, fork its Container diagram. Model apps, stores, and queues that live inside. Hierarchy tracked automatically.',
     },
     {
       n: '03',
@@ -196,19 +218,23 @@ function HowItWorks() {
     },
   ]
   return (
-    <section>
+    <section className="relative z-10 border-t border-white/5">
       <div className="max-w-6xl mx-auto px-6 py-24">
         <SectionHead
           eyebrow="How it works"
           title="The C4 model, but collaborative"
           body="Three zoom levels, one typed model, zero duplication."
         />
-        <div className="mt-14 grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-8">
           {steps.map((s) => (
-            <div key={s.n} className="relative">
-              <div className="text-5xl font-bold text-orange-600/20 mb-2">{s.n}</div>
-              <div className="font-semibold text-slate-900 mb-2 text-lg">{s.title}</div>
-              <div className="text-sm text-slate-600 leading-relaxed">{s.body}</div>
+            <div key={s.n}>
+              <div className="text-6xl font-bold bg-gradient-to-br from-orange-400/60 to-fuchsia-400/20 bg-clip-text text-transparent mb-3">
+                {s.n}
+              </div>
+              <div className="font-semibold text-neutral-100 mb-2 text-lg">
+                {s.title}
+              </div>
+              <div className="text-sm text-neutral-400 leading-relaxed">{s.body}</div>
             </div>
           ))}
         </div>
@@ -219,27 +245,30 @@ function HowItWorks() {
 
 function OpenSource() {
   return (
-    <section className="bg-slate-900 text-white">
-      <div className="max-w-6xl mx-auto px-6 py-20 grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
+    <section className="relative z-10 border-t border-white/5">
+      <div className="max-w-6xl mx-auto px-6 py-24 grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
         <div>
-          <div className="text-xs uppercase tracking-widest text-orange-400 mb-3">
+          <div className="text-xs uppercase tracking-widest text-orange-400 font-semibold mb-3">
             Open source
           </div>
-          <h2 className="text-3xl md:text-4xl font-bold mb-4">
+          <h2 className="text-3xl md:text-4xl font-bold mb-5 text-neutral-100 tracking-tight">
             Your architecture. Your hardware. Your rules.
           </h2>
-          <p className="text-slate-300 leading-relaxed">
+          <p className="text-neutral-400 leading-relaxed">
             ArchFlow is released under AGPL-3.0. Clone the repo, run{' '}
-            <code className="text-orange-400">make setup</code>, and you have
-            the full platform on your laptop in under a minute. Ship to your
-            own Hetzner / AWS / bare-metal box with one Docker Compose file.
+            <code className="text-orange-400 bg-orange-500/10 px-1.5 py-0.5 rounded text-sm">
+              make setup
+            </code>
+            , and you have the full platform on your laptop in under a minute.
+            Ship to your own Hetzner / AWS / bare-metal box with one Docker
+            Compose file.
           </p>
-          <div className="mt-6 flex gap-3 flex-wrap">
+          <div className="mt-7 flex gap-3 flex-wrap">
             <a
               href={GITHUB_URL}
               target="_blank"
               rel="noreferrer"
-              className="bg-white text-slate-900 hover:bg-slate-100 rounded-lg px-5 py-2.5 text-sm font-semibold"
+              className="bg-white text-neutral-900 hover:bg-neutral-200 rounded-lg px-5 py-2.5 text-sm font-semibold transition"
             >
               View on GitHub
             </a>
@@ -247,25 +276,41 @@ function OpenSource() {
               href={`${GITHUB_URL}#quick-start`}
               target="_blank"
               rel="noreferrer"
-              className="border border-slate-700 hover:border-slate-500 text-white rounded-lg px-5 py-2.5 text-sm font-semibold"
+              className="bg-white/5 border border-white/10 hover:bg-white/10 text-neutral-100 rounded-lg px-5 py-2.5 text-sm font-semibold transition"
             >
               Read the docs
             </a>
           </div>
         </div>
-        <div className="bg-slate-950 border border-slate-800 rounded-xl p-5 font-mono text-[13px] leading-relaxed">
-          <div className="text-slate-500"># clone &amp; run</div>
-          <div className="text-slate-300">
-            <span className="text-orange-400">$</span> git clone{' '}
-            <span className="text-emerald-300">github.com/TheAlexPG/ArchFlow</span>
+        <div className="relative">
+          <div
+            className="absolute -inset-4 rounded-2xl blur-2xl opacity-40"
+            style={{
+              background:
+                'linear-gradient(135deg, rgba(249,115,22,0.3) 0%, rgba(168,85,247,0.2) 100%)',
+            }}
+          />
+          <div className="relative bg-[#0d0d13] border border-white/10 rounded-xl p-5 font-mono text-[13px] leading-relaxed shadow-2xl">
+            <div className="flex gap-1.5 mb-3">
+              <span className="w-2.5 h-2.5 rounded-full bg-red-500/60" />
+              <span className="w-2.5 h-2.5 rounded-full bg-yellow-500/60" />
+              <span className="w-2.5 h-2.5 rounded-full bg-green-500/60" />
+            </div>
+            <div className="text-neutral-500"># clone &amp; run</div>
+            <div className="text-neutral-300">
+              <span className="text-orange-400">$</span> git clone{' '}
+              <span className="text-emerald-300">
+                github.com/TheAlexPG/ArchFlow
+              </span>
+            </div>
+            <div className="text-neutral-300">
+              <span className="text-orange-400">$</span> cd ArchFlow
+            </div>
+            <div className="text-neutral-300">
+              <span className="text-orange-400">$</span> make setup &amp;&amp; make dev
+            </div>
+            <div className="mt-3 text-neutral-500"># running on :5173</div>
           </div>
-          <div className="text-slate-300">
-            <span className="text-orange-400">$</span> cd ArchFlow
-          </div>
-          <div className="text-slate-300">
-            <span className="text-orange-400">$</span> make setup &amp;&amp; make dev
-          </div>
-          <div className="mt-3 text-slate-500"># you're running ArchFlow on :5173</div>
         </div>
       </div>
     </section>
@@ -274,17 +319,17 @@ function OpenSource() {
 
 function FinalCTA() {
   return (
-    <section>
+    <section className="relative z-10 border-t border-white/5">
       <div className="max-w-3xl mx-auto px-6 py-24 text-center">
-        <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-4">
+        <h2 className="text-3xl md:text-4xl font-bold text-neutral-100 mb-4 tracking-tight">
           Ready to model something real?
         </h2>
-        <p className="text-slate-600 mb-8">
+        <p className="text-neutral-400 mb-8">
           Sign in with Google or email — your first workspace is waiting.
         </p>
         <Link
           to="/login"
-          className="inline-block bg-orange-600 hover:bg-orange-500 text-white rounded-lg px-8 py-3 text-sm font-semibold shadow-sm"
+          className="inline-block bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-400 hover:to-orange-500 text-white rounded-lg px-8 py-3.5 text-sm font-semibold shadow-[0_10px_30px_-10px_rgba(249,115,22,0.6)] transition"
         >
           Get started — free
         </Link>
@@ -295,40 +340,40 @@ function FinalCTA() {
 
 function Footer() {
   return (
-    <footer className="border-t border-slate-200 bg-slate-50">
-      <div className="max-w-6xl mx-auto px-6 py-10 grid grid-cols-2 md:grid-cols-4 gap-6 text-sm">
+    <footer className="relative z-10 border-t border-white/5 bg-black/40">
+      <div className="max-w-6xl mx-auto px-6 py-12 grid grid-cols-2 md:grid-cols-4 gap-6 text-sm">
         <div className="col-span-2 md:col-span-1">
           <div className="flex items-center gap-2 mb-2">
             <img src="/logo.png" alt="" className="w-6 h-6 rounded" />
-            <span className="font-semibold text-slate-900">ArchFlow</span>
+            <span className="font-semibold text-neutral-100">ArchFlow</span>
           </div>
-          <p className="text-xs text-slate-500 leading-relaxed">
+          <p className="text-xs text-neutral-500 leading-relaxed">
             Self-hosted C4 architecture platform. AGPL-3.0.
           </p>
         </div>
         <FooterCol title="Product">
-          <Link to="/login" className="hover:text-slate-900">Sign in</Link>
-          <a href={GITHUB_URL} target="_blank" rel="noreferrer" className="hover:text-slate-900">GitHub</a>
-          <a href={`${GITHUB_URL}/issues`} target="_blank" rel="noreferrer" className="hover:text-slate-900">Report an issue</a>
+          <Link to="/login" className="hover:text-neutral-100 transition">Sign in</Link>
+          <a href={GITHUB_URL} target="_blank" rel="noreferrer" className="hover:text-neutral-100 transition">GitHub</a>
+          <a href={`${GITHUB_URL}/issues`} target="_blank" rel="noreferrer" className="hover:text-neutral-100 transition">Report an issue</a>
         </FooterCol>
         <FooterCol title="Legal">
-          <Link to="/terms" className="hover:text-slate-900">Terms of service</Link>
-          <Link to="/privacy" className="hover:text-slate-900">Privacy policy</Link>
-          <a href={`${GITHUB_URL}/blob/main/LICENSE`} target="_blank" rel="noreferrer" className="hover:text-slate-900">License (AGPL-3.0)</a>
+          <Link to="/terms" className="hover:text-neutral-100 transition">Terms of service</Link>
+          <Link to="/privacy" className="hover:text-neutral-100 transition">Privacy policy</Link>
+          <a href={`${GITHUB_URL}/blob/main/LICENSE`} target="_blank" rel="noreferrer" className="hover:text-neutral-100 transition">License (AGPL-3.0)</a>
         </FooterCol>
         <FooterCol title="Resources">
-          <a href={`${GITHUB_URL}#quick-start`} target="_blank" rel="noreferrer" className="hover:text-slate-900">Quick start</a>
-          <a href={`${GITHUB_URL}/tree/main/docs`} target="_blank" rel="noreferrer" className="hover:text-slate-900">Docs</a>
-          <a href="https://c4model.com" target="_blank" rel="noreferrer" className="hover:text-slate-900">C4 model</a>
+          <a href={`${GITHUB_URL}#quick-start`} target="_blank" rel="noreferrer" className="hover:text-neutral-100 transition">Quick start</a>
+          <a href={`${GITHUB_URL}/tree/main/docs`} target="_blank" rel="noreferrer" className="hover:text-neutral-100 transition">Docs</a>
+          <a href="https://c4model.com" target="_blank" rel="noreferrer" className="hover:text-neutral-100 transition">C4 model</a>
         </FooterCol>
       </div>
-      <div className="border-t border-slate-200 py-4 text-center text-xs text-slate-500">
+      <div className="border-t border-white/5 py-4 text-center text-xs text-neutral-600">
         © ArchFlow · Built with care ·{' '}
         <a
           href={GITHUB_URL}
           target="_blank"
           rel="noreferrer"
-          className="hover:text-slate-700"
+          className="hover:text-neutral-400 transition"
         >
           Open source
         </a>
@@ -340,10 +385,10 @@ function Footer() {
 function FooterCol({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="text-xs font-semibold text-slate-900 uppercase tracking-wider mb-3">
+      <div className="text-xs font-semibold text-neutral-300 uppercase tracking-wider mb-3">
         {title}
       </div>
-      <div className="flex flex-col gap-1.5 text-slate-600">{children}</div>
+      <div className="flex flex-col gap-1.5 text-neutral-500">{children}</div>
     </div>
   )
 }
@@ -359,13 +404,13 @@ function SectionHead({
 }) {
   return (
     <div className="text-center max-w-2xl mx-auto">
-      <div className="text-xs uppercase tracking-widest text-orange-600 font-semibold mb-3">
+      <div className="text-xs uppercase tracking-widest text-orange-400 font-semibold mb-3">
         {eyebrow}
       </div>
-      <h2 className="text-3xl md:text-4xl font-bold text-slate-900 tracking-tight">
+      <h2 className="text-3xl md:text-4xl font-bold text-neutral-100 tracking-tight">
         {title}
       </h2>
-      <p className="mt-4 text-slate-600 leading-relaxed">{body}</p>
+      <p className="mt-4 text-neutral-400 leading-relaxed">{body}</p>
     </div>
   )
 }
