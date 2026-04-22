@@ -8,7 +8,9 @@ export function LandingPage() {
       <AmbientBackdrop />
       <Nav />
       <Hero />
+      <WhyArchFlow />
       <Features />
+      <Comparison />
       <HowItWorks />
       <OpenSource />
       <FinalCTA />
@@ -91,16 +93,17 @@ function Hero() {
           Self-hosted · AGPL-3.0 open source
         </div>
         <h1 className="text-4xl md:text-6xl font-bold tracking-tight leading-[1.1]">
-          <span className="text-neutral-100">Draw your architecture</span>
+          <span className="text-neutral-100">Architecture diagrams</span>
           <br />
           <span className="bg-gradient-to-r from-orange-400 via-orange-300 to-fuchsia-400 bg-clip-text text-transparent">
-            the way you think about it.
+            that stay in sync with reality.
           </span>
         </h1>
         <p className="mt-6 text-lg text-neutral-400 max-w-2xl mx-auto leading-relaxed">
-          ArchFlow is a visual-first C4 architecture platform. Model your
-          systems, containers, and components — then collaborate, review, and
-          ship with a typed model under the hood.
+          Most architecture tools give you pretty pictures that rot the moment
+          someone renames a service. ArchFlow treats your architecture as a
+          <span className="text-neutral-200"> typed, versioned, collaborative model</span> —
+          drill from landscape to component, branch like git, review like code.
         </p>
         <div className="mt-9 flex flex-wrap gap-3 justify-center">
           <Link
@@ -130,42 +133,159 @@ function Hero() {
   )
 }
 
+function WhyArchFlow() {
+  const pillars = [
+    {
+      headline: 'Not just boxes. A typed model.',
+      body:
+        'Every object has a type, status, technology stack, owning team, and lifecycle. Rename a service once — every diagram updates. Your architecture becomes searchable, filterable, queryable.',
+    },
+    {
+      headline: 'Not just drawings. A review workflow.',
+      body:
+        'Fork any diagram into a draft. Experiment without blowing up production docs. Diff your changes against live, resolve conflicts, merge when ready. Git-style, but for architecture.',
+    },
+    {
+      headline: 'Not another SaaS. Your server, your data.',
+      body:
+        'AGPL-3.0, self-hostable in one Docker Compose command. No seat limits. No data-exfil. No "your team plan expired" — your architecture stays yours forever.',
+    },
+  ]
+  return (
+    <section className="relative z-10 border-t border-white/5">
+      <div className="max-w-6xl mx-auto px-6 py-24">
+        <SectionHead
+          eyebrow="Why ArchFlow"
+          title="Built for architecture that evolves"
+          body="PowerPoint and Miro were never designed to stay accurate. ArchFlow was."
+        />
+        <div className="mt-14 grid grid-cols-1 md:grid-cols-3 gap-6">
+          {pillars.map((p) => (
+            <div
+              key={p.headline}
+              className="relative bg-white/[0.02] border border-white/10 rounded-xl p-6 hover:border-orange-500/30 transition"
+            >
+              <div className="text-lg font-semibold text-neutral-100 mb-3 leading-snug">
+                {p.headline}
+              </div>
+              <p className="text-sm text-neutral-400 leading-relaxed">{p.body}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function Comparison() {
+  const rows = [
+    {
+      tool: 'Miro · FigJam',
+      gap: 'Pretty sticky notes. No data model, no drill-through, no review flow.',
+    },
+    {
+      tool: 'Lucidchart · draw.io',
+      gap: 'Nicer shapes — still free-floating boxes. Rename a service in one diagram, forget it in six others.',
+    },
+    {
+      tool: 'Structurizr',
+      gap: 'C4-native, but code-only DSL. Non-engineers locked out of the model.',
+    },
+    {
+      tool: 'IcePanel',
+      gap: 'Closest peer. Paid SaaS, your data on their servers. ArchFlow is AGPL and runs on your hardware.',
+    },
+  ]
+  return (
+    <section className="relative z-10 border-t border-white/5">
+      <div className="max-w-5xl mx-auto px-6 py-20">
+        <SectionHead
+          eyebrow="Vs the alternatives"
+          title="You've tried the others."
+          body="Here's where they stop and ArchFlow starts."
+        />
+        <div className="mt-12 divide-y divide-white/5 bg-white/[0.02] border border-white/10 rounded-xl overflow-hidden">
+          {rows.map((r) => (
+            <div
+              key={r.tool}
+              className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-6 px-5 py-4"
+            >
+              <div className="sm:w-48 shrink-0 font-semibold text-neutral-100 text-sm">
+                {r.tool}
+              </div>
+              <div className="text-sm text-neutral-400 leading-relaxed">{r.gap}</div>
+            </div>
+          ))}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-6 px-5 py-5 bg-gradient-to-r from-orange-500/10 to-fuchsia-500/10">
+            <div className="sm:w-48 shrink-0 font-semibold text-orange-300 text-sm flex items-center gap-2">
+              <img src="/logo.png" alt="" className="w-5 h-5 rounded" />
+              ArchFlow
+            </div>
+            <div className="text-sm text-neutral-200 leading-relaxed">
+              Typed model · C4 drill-through · drafts &amp; review · realtime
+              collab · self-hostable · AGPL open source.
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
 function Features() {
   const items = [
     {
-      title: 'C4-native data model',
+      title: 'C4 drill-through',
       body:
-        'Objects carry types, status, technology, tags, and owner teams. Drill L1 → L2 → L3 and the model stays consistent at every zoom.',
+        'The same "Payments" system on L1 is the same entity as its Container diagram on L2 and its Components on L3. Rename it once — it updates everywhere, on every zoom.',
       icon: '▦',
     },
     {
       title: 'Real-time collaboration',
       body:
-        'Live cursors, presence, selection sync, and optimistic drag & resize. Teammates see each other edit in one tick.',
+        'Live cursors, presence roster, selection sync, optimistic drag & resize. Your teammate drags a node; you see it move in ~one tick. No refresh, no "who moved what".',
       icon: '⚡',
     },
     {
-      title: 'Drafts & reviews',
+      title: 'Drafts &amp; reviews',
       body:
-        'Fork any diagram. Edit in isolation. Diff against live. Resolve conflicts. Merge — zero surprises in production.',
+        'Architecture deserves the same review workflow as code. Fork a diagram, change it, diff it, resolve conflicts, merge. Reviewers see exactly what moved.',
       icon: '⤴',
     },
     {
-      title: 'Team-level ACL',
+      title: 'Packs, pins &amp; search',
       body:
-        'Workspaces, teams, roles. Grant read / edit / manage on individual diagrams. Pending-approval invites.',
+        'Group diagrams into Packs (folders, but reorderable). Pin the important ones to Overview. Cmd+K search across every object, diagram, and description in your workspace.',
       icon: '✦',
     },
     {
-      title: 'REST + WebSocket API',
+      title: 'Teams + per-diagram ACL',
       body:
-        'OpenAPI with a generated TypeScript client. API keys and webhooks are first-class citizens next to JWT.',
+        'Workspaces with roles (owner / admin / editor / viewer). Grant a specific team read or edit on a specific diagram. Pending-approval invites so admins stay in control.',
+      icon: '⧉',
+    },
+    {
+      title: 'API, webhooks, AI insights',
+      body:
+        'OpenAPI spec + generated TypeScript client. API keys next to JWT. Webhooks for every object/diagram event. Optional Claude-powered insights on any object.',
       icon: '⟷',
+    },
+    {
+      title: 'Versions &amp; history',
+      body:
+        'Every change logged. Snapshot a diagram as a named version. Revert any diagram, object, or connection to any prior state with one click.',
+      icon: '◷',
+    },
+    {
+      title: 'Comments on canvas',
+      body:
+        'Drop a question pin, an inaccuracy flag, an idea note, or a plain comment directly on the diagram. Threaded replies. Resolved comments stay as history.',
+      icon: '❝',
     },
     {
       title: 'AGPL, self-hostable',
       body:
-        'No vendor lock-in. Your data stays on your hardware. One Docker Compose file; Helm chart included.',
+        'One Docker Compose command and the full stack runs on your Hetzner / AWS / laptop. Helm chart included. Your data never leaves your hardware. No vendor lock-in, ever.',
       icon: '⌂',
     },
   ]
