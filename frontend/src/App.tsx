@@ -11,9 +11,12 @@ import { DraftDetailPage } from './pages/DraftDetailPage'
 import { DraftsPage } from './pages/DraftsPage'
 import { MembersPage } from './pages/MembersPage'
 import { MyInvitesPage } from './pages/MyInvitesPage'
+import { LandingPage } from './pages/LandingPage'
 import { ObjectsPage } from './pages/ObjectsPage'
 import { OverviewPage } from './pages/OverviewPage'
+import { PrivacyPage } from './pages/PrivacyPage'
 import { SettingsPage } from './pages/SettingsPage'
+import { TermsPage } from './pages/TermsPage'
 import { TeamsPage } from './pages/TeamsPage'
 import { VersionsPage } from './pages/VersionsPage'
 import { useAuthStore } from './stores/auth-store'
@@ -75,13 +78,13 @@ function App() {
             element={isAuthenticated ? <Navigate to="/" replace /> : <AuthPage />}
           />
           <Route path="/auth/callback" element={<AuthCallback />} />
+          {/* Public legal pages — must be reachable from the Google OAuth
+              consent screen without requiring an account. */}
+          <Route path="/terms" element={<TermsPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
           <Route
             path="/"
-            element={
-              <ProtectedRoute>
-                <OverviewPage />
-              </ProtectedRoute>
-            }
+            element={isAuthenticated ? <OverviewPage /> : <LandingPage />}
           />
           <Route
             path="/diagram/:diagramId"
