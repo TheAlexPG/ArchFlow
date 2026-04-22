@@ -4,7 +4,13 @@ const GITHUB_URL = 'https://github.com/TheAlexPG/ArchFlow'
 
 export function LandingPage() {
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-neutral-200 antialiased relative overflow-hidden">
+    // overflow-x-hidden (not overflow-hidden!) so the backdrop's blur halo
+    // can't create a horizontal scrollbar on mobile, but the body can still
+    // scroll vertically through all the sections. The global index.css sets
+    // height: 100% on html/body/#root; combined with `overflow-hidden` here
+    // the page used to be completely unscrollable — everything past the hero
+    // simply got clipped.
+    <div className="min-h-screen bg-[#0a0a0f] text-neutral-200 antialiased relative overflow-x-hidden">
       <AmbientBackdrop />
       <Nav />
       <Hero />
