@@ -1,0 +1,86 @@
+# Production stack for ArchFlow. Sits behind a host-level Caddy reverse proxy
+# (managed separately — not in this repo). Caddy is attached to the external
+# `proxy` network and routes archflow.tools → frontend:80 (/) and
+# backend:8001 (/api/*). Postgres + Redis stay on an internal network.
+
+services:
+  backend:
+    image: ghcr.io/thealexpg/archflow-backend:latest
+    container_name: archflow-backend
+    restart: unless-stopped
+    env_file: [.env]
+    # alembic upgrade is idempotent; running it on every container start
+    # keeps schema in sync without a separate migrate job.
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8001"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:    { condition: service_started }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0) if urllib.request.urlopen('http://localhost:8001/health', timeout=3).status == 200 else sys.exit(1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      # Alembic can take a while on first run / schema-heavy upgrades; don't
+      # flap-restart during migrations.
+      start_period: 60s
+    deploy:
+      resources:
+        limits: { memory: 1g }
+    networks: [proxy, archflow-internal]
+
+  frontend:
+    image: ghcr.io/thealexpg/archflow-frontend:latest
+    container_name: archflow-frontend
+    restart: unless-stopped
+    # Frontend never talks to Postgres/Redis — it's static assets served
+    # behind Caddy. Keep it in `proxy` only.
+    deploy:
+      resources:
+        limits: { memory: 128m }
+    networks: [proxy]
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: archflow-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB:       ${POSTGRES_DB}
+    volumes:
+      - archflow-postgres-data:/var/lib/postgresql/data
+    # 5432 on the host is taken by game-localizer-postgres; bind 5433 on
+    # localhost only so devs can SSH-tunnel from their laptops.
+    ports: ["127.0.0.1:5433:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    deploy:
+      resources:
+        limits: { memory: 1g }
+    networks: [archflow-internal]
+
+  redis:
+    image: redis:7-alpine
+    container_name: archflow-redis
+    restart: unless-stopped
+    volumes:
+      - archflow-redis-data:/data
+    deploy:
+      resources:
+        limits: { memory: 256m }
+    networks: [archflow-internal]
+
+volumes:
+  archflow-postgres-data:
+  archflow-redis-data:
+
+networks:
+  proxy:
+    external: true
+  archflow-internal:
+    driver: bridge
