@@ -6,6 +6,7 @@ import {
   useObjects,
   useUpdateConnection,
 } from '../../hooks/use-api'
+import { useDiagram } from '../../hooks/use-diagrams'
 import { useCanvasStore } from '../../stores/canvas-store'
 import type { ConnectionDirection, EdgeShape } from '../../types/model'
 
@@ -22,10 +23,16 @@ const DIRECTIONS: { value: ConnectionDirection; label: string; icon: string }[] 
   { value: 'undirected', label: 'Undirected', icon: '—' },
 ]
 
-export function EdgeSidebar() {
+interface EdgeSidebarProps {
+  diagramId?: string
+}
+
+export function EdgeSidebar({ diagramId }: EdgeSidebarProps) {
   const { selectedEdgeId, selectEdge } = useCanvasStore()
   const { data: conn } = useConnection(selectedEdgeId)
-  const { data: objects = [] } = useObjects()
+  const { data: diagram } = useDiagram(diagramId)
+  const draftId = diagram?.draft_id ?? null
+  const { data: objects = [] } = useObjects(draftId)
   const updateConn = useUpdateConnection()
   const flipConn = useFlipConnection()
   const deleteConn = useDeleteConnection()
@@ -91,16 +98,7 @@ export function EdgeSidebar() {
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {/* Sender */}
         <Field label="Sender">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-sm text-neutral-300">{source?.name || '—'}</span>
-            <button
-              onClick={handleFlip}
-              title="Swap sender and receiver"
-              className="w-6 h-6 flex items-center justify-center rounded-full bg-neutral-800 border border-neutral-600 text-neutral-300 hover:text-neutral-100 hover:border-neutral-500 transition-colors text-xs flex-shrink-0"
-            >
-              ⇄
-            </button>
-          </div>
+          <span className="text-sm text-neutral-300">{source?.name || '—'}</span>
         </Field>
 
         {/* Receiver */}
@@ -127,6 +125,15 @@ export function EdgeSidebar() {
             ))}
           </div>
         </Field>
+
+        {/* Swap sender / receiver */}
+        <button
+          onClick={handleFlip}
+          className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded text-xs bg-neutral-800 border border-neutral-700 text-neutral-300 hover:text-neutral-100 hover:border-neutral-500 transition-colors"
+        >
+          <span className="text-base">⇄</span>
+          <span>Swap sender / receiver</span>
+        </button>
 
         {/* Shape */}
         <Field label="Shape">
