@@ -205,7 +205,9 @@ async def import_mermaid(db: AsyncSession, src: str) -> dict:
             source_id=src_id,
             target_id=tgt_id,
             label=rel["label"],
-            protocol=rel.get("technology"),
+            # TODO(tech-catalog): resolve rel.get("technology") text against the
+            # catalog once importers know their target workspace.
+            protocol_id=None,
         )
         db.add(conn)
         created_rels += 1

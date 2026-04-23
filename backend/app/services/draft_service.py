@@ -43,7 +43,7 @@ _OBJECT_EDITABLE_FIELDS = (
 
 _CONNECTION_EDITABLE_FIELDS = (
     "label",
-    "protocol",
+    "protocol_id",
     "direction",
     "tags",
     "source_handle",
@@ -202,7 +202,7 @@ async def _clone_diagram(
             source_id=object_map[conn.source_id],
             target_id=object_map[conn.target_id],
             label=conn.label,
-            protocol=conn.protocol,
+            protocol_id=conn.protocol_id,
             direction=conn.direction,
             tags=conn.tags,
             source_handle=conn.source_handle,

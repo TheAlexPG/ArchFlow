@@ -92,7 +92,7 @@ async def import_model(file: UploadFile, db: AsyncSession = Depends(get_db)):
                 source_id=id_map[old_source],
                 target_id=id_map[old_target],
                 label=conn_data.get("label"),
-                protocol=conn_data.get("protocol"),
+                protocol_id=conn_data.get("protocol_id"),
                 direction=conn_data.get("direction", "unidirectional"),
                 tags=conn_data.get("tags"),
             )

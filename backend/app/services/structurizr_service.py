@@ -158,7 +158,9 @@ async def import_dsl(db: AsyncSession, dsl: str) -> dict:
             source_id=src,
             target_id=tgt,
             label=rel["label"],
-            protocol=rel["technology"],
+            # TODO(tech-catalog): resolve rel["technology"] text against the
+            # catalog once importers know their target workspace.
+            protocol_id=None,
         )
         db.add(conn)
 

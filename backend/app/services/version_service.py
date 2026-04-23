@@ -39,9 +39,8 @@ CONNECTION_FIELDS = (
     "source_id",
     "target_id",
     "label",
-    "description",
     "direction",
-    "technology",
+    "protocol_id",
     "tags",
 )
 
