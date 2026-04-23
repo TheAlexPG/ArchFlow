@@ -602,9 +602,6 @@ export function DiagramsPage() {
   // View mode
   const [view, setView] = useState<'list' | 'grid'>('list')
 
-  // Show/hide by-type grouping toggle
-  const [showByType, setShowByType] = useState(true)
-
   // New diagram modal state
   const [createOpen, setCreateOpen] = useState(false)
 
@@ -657,15 +654,6 @@ export function DiagramsPage() {
       (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
     )
   }, [diagrams, search, selectedTypeFilter, selectedFolderFilter])
-
-  // ── Counts per type (full, unfiltered — for sidebar) ──────────────────────
-  const countByType = useMemo(() => {
-    const map: Record<string, number> = {}
-    for (const d of diagrams) {
-      map[d.type] = (map[d.type] ?? 0) + 1
-    }
-    return map
-  }, [diagrams])
 
   const countByLevel = useMemo(() => {
     return LEVEL_ROWS.map((lr) => ({
@@ -890,49 +878,6 @@ export function DiagramsPage() {
                     </div>
                   )}
                 </div>
-              </div>
-
-              {/* ── By type section ─────────────────────────────────────── */}
-              <div>
-                <button
-                  onClick={() => setShowByType((v) => !v)}
-                  className="flex items-center gap-1.5 px-2 mb-2 w-full group"
-                >
-                  <span className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-text-3">
-                    By type
-                  </span>
-                  <svg
-                    width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                    className={cn('text-text-4 transition-transform duration-150', showByType ? '' : '-rotate-90')}
-                  >
-                    <path d="m6 9 6 6 6-6"/>
-                  </svg>
-                </button>
-
-                {showByType && (
-                  <div className="space-y-0.5">
-                    {ORDERED_TYPES.map((type) => {
-                      const count = countByType[type] ?? 0
-                      if (count === 0) return null
-                      const color = TYPE_COLOR[type]?.folder ?? '#71717a'
-                      const isActive = selectedTypeFilter === type && !selectedFolderFilter
-                      return (
-                        <div
-                          key={type}
-                          className={treeItemCls(isActive)}
-                          onClick={() => {
-                            setSelectedFolderFilter(null)
-                            setSelectedTypeFilter(isActive ? null : type)
-                          }}
-                        >
-                          <FolderIcon color={color} />
-                          <span className="flex-1 truncate">{TYPE_LABELS[type] ?? type}</span>
-                          <span className="font-mono text-[10.5px] text-text-3">{count}</span>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
               </div>
 
               {/* ── C4 Level filter ──────────────────────────────────────── */}
