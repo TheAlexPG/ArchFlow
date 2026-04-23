@@ -52,16 +52,17 @@ export function C4Edge({
   const flowStep = (data as Record<string, unknown>)?.flowStep as number | null | undefined
   const flowCurrent = (data as Record<string, unknown>)?.flowCurrent as boolean | undefined
 
-  // When a flow is playing, steps in the active branch get a thicker blue
+  // When a flow is playing, steps in the active branch get a thicker coral
   // stroke; the step being played gets a bright green stroke so the eye
-  // lands on "what's happening right now".
+  // lands on "what's happening right now". Selected edges use coral to
+  // match the rest of the canvas selection language.
   const stroke = flowCurrent
     ? '#22c55e'
     : flowStep
-      ? '#3b82f6'
+      ? 'var(--color-coral)'
       : selected
-        ? '#3b82f6'
-        : '#525252'
+        ? 'var(--color-coral)'
+        : 'var(--color-text-4)'
   const strokeWidth = flowCurrent ? 3 : flowStep ? 2.2 : selected ? 2 : 1.5
 
   return (
@@ -76,7 +77,13 @@ export function C4Edge({
       {(label || protocol) && (
         <EdgeLabelRenderer>
           <div
-            className="absolute bg-neutral-900/90 text-neutral-300 px-2 py-1 rounded border border-neutral-700 pointer-events-auto nodrag nopan"
+            className={[
+              'absolute pointer-events-auto nodrag nopan',
+              'bg-panel/90 backdrop-blur-sm',
+              'border rounded px-1.5 py-0.5',
+              'font-mono',
+              selected ? 'border-coral text-coral' : 'border-border-base text-text-2',
+            ].join(' ')}
             style={{
               transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
               fontSize: `${labelSize}px`,
@@ -88,7 +95,7 @@ export function C4Edge({
           >
             {label}
             {label && protocol && <br />}
-            {protocol && <span className="text-neutral-500">[{protocol}]</span>}
+            {protocol && <span className="text-text-3">[{protocol}]</span>}
           </div>
         </EdgeLabelRenderer>
       )}
@@ -101,15 +108,15 @@ export function C4Edge({
               width: 22,
               height: 22,
               borderRadius: '50%',
-              background: flowCurrent ? '#22c55e' : '#3b82f6',
-              color: 'white',
+              background: flowCurrent ? '#22c55e' : 'var(--color-coral)',
+              color: 'var(--color-bg)',
               fontSize: 11,
               fontWeight: 700,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               boxShadow: '0 2px 6px rgba(0,0,0,0.4)',
-              border: '2px solid #0a0a0a',
+              border: '2px solid var(--color-bg)',
             }}
           >
             {flowStep}

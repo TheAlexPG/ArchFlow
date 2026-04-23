@@ -40,7 +40,6 @@ import { extractFilterValue, overlayStyleFor, type FilterDim } from './overlay-u
 import { detectParentGroup, findSpatialGroupMembers, nodeToRect } from './group-utils'
 import { useDiagramSocket } from '../../hooks/use-realtime'
 import { CursorsOverlay, RemoteSelectionsOverlay } from './CursorsOverlay'
-import { PresenceRoster } from './PresenceRoster'
 
 const nodeTypes: NodeTypes = {
   c4: C4Node as unknown as NodeTypes['c4'],
@@ -115,6 +114,8 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     activeBranch,
     commentComposeType,
     setCommentComposeType,
+    setRemoteNodeEditors,
+    setPresenceUsers,
   } = useCanvasStore()
   const filterDim = activeFilter as FilterDim
 
@@ -156,6 +157,28 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
   const { cursors, selections, presence, sendCursor, sendSelection } = useDiagramSocket(
     diagramId ?? null,
   )
+
+  // Mirror presence + per-node selection out to the canvas store so
+  //   (a) the page-level top bar can render the overlapping avatar stack
+  //       without owning its own WS subscription, and
+  //   (b) individual node components can show an `● editing` indicator
+  //       without plumbing `selections` through React Flow node data.
+  useEffect(() => {
+    setPresenceUsers(presence)
+  }, [presence, setPresenceUsers])
+
+  useEffect(() => {
+    // Invert selections (user_id -> nodeIds) into nodeId -> userNames so
+    // each node can cheaply read its own slice via a zustand selector.
+    const map: Record<string, string[]> = {}
+    for (const { ids, user_name } of Object.values(selections)) {
+      for (const nodeId of ids) {
+        if (!map[nodeId]) map[nodeId] = []
+        map[nodeId].push(user_name)
+      }
+    }
+    setRemoteNodeEditors(map)
+  }, [selections, setRemoteNodeEditors])
 
   const onMouseMove = useCallback(
     (event: React.MouseEvent) => {
@@ -766,7 +789,6 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
       {diagramId && <CanvasComments diagramId={diagramId} />}
       <CursorsOverlay cursors={cursors} />
       <RemoteSelectionsOverlay selections={selections} />
-      <PresenceRoster users={presence} />
     </ReactFlow>
     </>
   )

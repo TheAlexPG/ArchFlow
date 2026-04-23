@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ReactFlowProvider } from '@xyflow/react'
 import { ArchFlowCanvas } from '../components/canvas/ArchFlowCanvas'
@@ -12,6 +12,7 @@ import { EdgeSidebar } from '../components/sidebar/EdgeSidebar'
 import { ObjectSidebar } from '../components/sidebar/ObjectSidebar'
 import { ObjectTree } from '../components/tree/ObjectTree'
 import { SearchModal } from '../components/nav/SearchModal'
+import { Avatar, AvatarStack, Button, Kbd, StatusPill, type AvatarGradient } from '../components/ui'
 import { useDiagram, useDiagramBreadcrumbs } from '../hooks/use-diagrams'
 import {
   useApplyDraft,
@@ -24,13 +25,100 @@ import {
 import { useAuthStore } from '../stores/auth-store'
 import { useCanvasStore } from '../stores/canvas-store'
 
+// Stable gradient + initials derivation so each user has a consistent
+// avatar identity across the canvas / inspector / top bar. The cursor
+// overlay already picks hues from user_id — gradients here are chosen
+// from a short palette so we don't have to compute an HSL → gradient map.
+const AVATAR_GRADIENTS: AvatarGradient[] = [
+  'coral-amber',
+  'coral-purple',
+  'blue-purple',
+  'green-blue',
+]
+
+function gradientForId(id: string): AvatarGradient {
+  let h = 5381
+  for (let i = 0; i < id.length; i++) h = ((h << 5) + h) ^ id.charCodeAt(i)
+  return AVATAR_GRADIENTS[Math.abs(h) % AVATAR_GRADIENTS.length]
+}
+
+function initialsFromName(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return '?'
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return (parts[0][0] + parts[1][0]).toUpperCase()
+}
+
+// ─── Top-bar icons (inline SVG, currentColor) ───────────────────────────
+
+function ArrowLeftIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m12 19-7-7 7-7" />
+      <path d="M19 12H5" />
+    </svg>
+  )
+}
+
+function ChevronRightIcon() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-text-4">
+      <path d="m9 18 6-6-6-6" />
+    </svg>
+  )
+}
+
+function SearchIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="11" cy="11" r="8" />
+      <path d="m21 21-4.35-4.35" />
+    </svg>
+  )
+}
+
+function LockIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="3" y="11" width="18" height="10" rx="2" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </svg>
+  )
+}
+
+function PublishIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 19V5" />
+      <path d="m5 12 7-7 7 7" />
+    </svg>
+  )
+}
+
+function TreeIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M3 6h18M3 12h12M3 18h18" />
+    </svg>
+  )
+}
+
+function CameraIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
+      <circle cx="12" cy="13" r="3.5" />
+    </svg>
+  )
+}
+
 export function DiagramPage() {
   const { diagramId } = useParams<{ diagramId: string }>()
   const { data: diagram } = useDiagram(diagramId)
   const breadcrumbs = useDiagramBreadcrumbs(diagramId)
   const navigate = useNavigate()
   const { logout } = useAuthStore()
-  const { selectedEdgeId, treeOpen, toggleTree } = useCanvasStore()
+  const { selectedEdgeId, treeOpen, toggleTree, presenceUsers } = useCanvasStore()
   const [searchOpen, setSearchOpen] = useState(false)
   const [draftModalOpen, setDraftModalOpen] = useState(false)
   const [draftsDropdownOpen, setDraftsDropdownOpen] = useState(false)
@@ -101,300 +189,280 @@ export function DiagramPage() {
 
   const toggleSearch = useCallback(() => setSearchOpen((v) => !v), [])
 
+  // Breadcrumb segments: prepend a synthetic "workspace" root if the C4
+  // parent chain didn't already expose one, so the mono breadcrumb always
+  // has at least two segments to separate with a chevron.
+  const breadcrumbSegments = useMemo(() => {
+    if (breadcrumbs.length === 0) {
+      return diagram
+        ? [{ id: diagram.id, name: diagram.name, clickable: false }]
+        : []
+    }
+    return breadcrumbs.map((crumb, idx) => ({
+      id: crumb.id,
+      name: crumb.name,
+      clickable: idx !== breadcrumbs.length - 1,
+    }))
+  }, [breadcrumbs, diagram])
+
+  // Avatar stack: only show when >=2 users are online (self + 1 peer).
+  const presenceAvatars = presenceUsers.length > 1 ? presenceUsers : []
+
   return (
     <ReactFlowProvider>
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#0a0a0a', color: '#f5f5f5' }}>
-        {/* Top bar with breadcrumbs */}
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '8px 16px', borderBottom: '1px solid #262626', background: '#111',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <button
+      <div className="flex flex-col h-screen bg-bg text-text-base">
+        {/* ── Canvas top bar ───────────────────────────────────────────── */}
+        <div className="flex items-center justify-between h-12 px-4 border-b border-border-base bg-panel shrink-0">
+          {/* Left: back button + mono breadcrumb */}
+          <div className="flex items-center gap-2 min-w-0">
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={() => navigate('/')}
-              style={{
-                background: 'none', border: 'none', color: '#a3a3a3', cursor: 'pointer',
-                fontSize: 16, padding: '2px 6px',
-              }}
-              title="Home"
+              title="Back to workspace"
+              aria-label="Back to workspace"
             >
-              &#8962;
-            </button>
-            {breadcrumbs.length <= 1 ? (
-              // No parent chain — simple "Home › <name>"
-              <>
-                <span style={{ color: '#333' }}>›</span>
-                <span style={{ fontSize: 13, fontWeight: 500 }}>
-                  {diagram?.name || 'Loading...'}
-                </span>
-              </>
-            ) : (
-              // Full C4 parent chain — all ancestors are clickable, current is plain text
-              breadcrumbs.map((crumb, idx) => {
-                const isLast = idx === breadcrumbs.length - 1
-                return (
-                  <span key={crumb.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ color: '#333' }}>›</span>
-                    {isLast ? (
-                      <span style={{ fontSize: 13, fontWeight: 500 }}>
-                        {crumb.name}
-                      </span>
-                    ) : (
-                      <button
-                        onClick={() => navigate(`/diagram/${crumb.id}`)}
-                        style={{
-                          background: 'none', border: 'none', color: '#a3a3a3', cursor: 'pointer',
-                          fontSize: 13, padding: '2px 6px',
-                        }}
-                      >
-                        {crumb.name}
-                      </button>
-                    )}
+              <ArrowLeftIcon />
+            </Button>
+            <span className="font-mono text-[10.5px] text-text-3 truncate">workspace</span>
+            {breadcrumbSegments.map((seg) => (
+              <span key={seg.id} className="flex items-center gap-2 min-w-0">
+                <ChevronRightIcon />
+                {seg.clickable ? (
+                  <button
+                    onClick={() => navigate(`/diagram/${seg.id}`)}
+                    className="font-mono text-[10.5px] text-text-3 hover:text-text-base transition-colors truncate"
+                  >
+                    {seg.name}
+                  </button>
+                ) : (
+                  <span className="text-[13px] font-medium text-text-base truncate">
+                    {seg.name}
                   </span>
-                )
-              })
+                )}
+              </span>
+            ))}
+            {/* DRAFT · UNSAVED pill while editing a fork — the forked diagram
+                IS the "draft · unsaved" state (edits stay on the fork until
+                the feature is applied). */}
+            {isForkedDiagram && currentDraft && (
+              <StatusPill status="draft" className="ml-1 shrink-0">
+                DRAFT · UNSAVED
+              </StatusPill>
             )}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button
+
+          {/* Right: presence stack + actions */}
+          <div className="flex items-center gap-2 shrink-0">
+            {presenceAvatars.length > 0 && (
+              <AvatarStack className="mr-1">
+                {presenceAvatars.map((u) => (
+                  <Avatar
+                    key={u.user_id}
+                    size="sm"
+                    gradient={gradientForId(u.user_id)}
+                    initials={initialsFromName(u.user_name)}
+                    className="!w-6 !h-6 text-[9.5px]"
+                  />
+                ))}
+              </AvatarStack>
+            )}
+
+            <Button
+              size="sm"
               onClick={toggleTree}
-              style={{
-                background: treeOpen ? '#333' : '#1a1a1a',
-                border: '1px solid #333', borderRadius: 6,
-                color: treeOpen ? '#f5f5f5' : '#737373',
-                cursor: 'pointer', fontSize: 12, padding: '4px 10px',
-              }}
               title="Toggle object tree"
+              className={treeOpen ? '!text-text-base !border-border-hi' : ''}
             >
-              ☰
-            </button>
-            <button
+              <TreeIcon />
+            </Button>
+
+            <Button
+              size="sm"
               onClick={toggleSearch}
-              style={{
-                background: '#1a1a1a', border: '1px solid #333', borderRadius: 6,
-                color: '#737373', cursor: 'pointer', fontSize: 12, padding: '4px 10px',
-                display: 'flex', alignItems: 'center', gap: 6,
-              }}
+              leftIcon={<SearchIcon />}
+              rightIcon={<Kbd className="ml-1">⌘K</Kbd>}
             >
-              🔍 Search
-              <span style={{
-                background: '#262626', borderRadius: 3, padding: '1px 4px',
-                fontSize: 10, color: '#525252',
-              }}>
-                ⌘K
-              </span>
-            </button>
+              Search
+            </Button>
+
             {isLiveDiagram && (
-              <button
+              <Button
+                size="sm"
                 onClick={() => setAccessModalOpen(true)}
-                style={{
-                  background: '#1a1a1a', border: '1px solid #333', borderRadius: 6,
-                  color: '#a3a3a3', cursor: 'pointer', fontSize: 12, padding: '4px 10px',
-                }}
+                leftIcon={<LockIcon />}
                 title="Control which teams can see or edit this diagram"
               >
-                🔒 Access
-              </button>
+                Access
+              </Button>
             )}
-            {isLiveDiagram && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4, position: 'relative' }}>
-                {openDraftsForThisDiagram.length > 0 && (
-                  <div style={{ position: 'relative' }}>
-                    <button
-                      onClick={() => setDraftsDropdownOpen((v) => !v)}
-                      style={{
-                        background: '#1e3a5f', border: '1px solid #3b82f6', borderRadius: 6,
-                        color: '#93c5fd', cursor: 'pointer', fontSize: 12, padding: '4px 10px',
-                      }}
-                      title="Open features that include this diagram"
-                    >
-                      Drafts ({openDraftsForThisDiagram.length}) ▾
-                    </button>
-                    {draftsDropdownOpen && (
-                      <>
-                        <div
-                          style={{ position: 'fixed', inset: 0, zIndex: 49 }}
-                          onClick={() => setDraftsDropdownOpen(false)}
-                        />
-                        <div style={{
-                          position: 'absolute', top: '100%', right: 0, marginTop: 4,
-                          background: '#171717', border: '1px solid #333', borderRadius: 8,
-                          boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
-                          zIndex: 50, minWidth: 260, overflow: 'hidden',
-                        }}>
-                          {openDraftsForThisDiagram.map((d: DiagramDraftEntry) => (
-                            <div key={d.draft_id} style={{
-                              padding: '10px 14px',
-                              borderBottom: '1px solid #262626',
-                            }}>
-                              <div style={{ fontSize: 12, fontWeight: 600, color: '#d4d4d4', marginBottom: 6 }}>
-                                {d.draft_name}
-                              </div>
-                              <div style={{ display: 'flex', gap: 8 }}>
-                                <button
-                                  onClick={() => {
-                                    setDraftsDropdownOpen(false)
-                                    navigate(`/diagram/${d.forked_diagram_id}`)
-                                  }}
-                                  style={{
-                                    fontSize: 11, padding: '3px 8px',
-                                    background: 'transparent', border: '1px solid #3b82f6',
-                                    borderRadius: 4, color: '#93c5fd', cursor: 'pointer',
-                                  }}
-                                >
-                                  Open fork
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    setDraftsDropdownOpen(false)
-                                    navigate(`/drafts/${d.draft_id}`)
-                                  }}
-                                  style={{
-                                    fontSize: 11, padding: '3px 8px',
-                                    background: 'transparent', border: '1px solid #404040',
-                                    borderRadius: 4, color: '#a3a3a3', cursor: 'pointer',
-                                  }}
-                                >
-                                  Feature dashboard
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )}
-                <button
-                  onClick={handleStartDraft}
-                  disabled={forkDraft.isPending}
-                  style={{
-                    background: '#1a1a1a', border: '1px solid #3b82f6', borderRadius: 6,
-                    color: '#93c5fd', cursor: 'pointer', fontSize: 12, padding: '4px 10px',
-                  }}
-                  title="Start a new feature draft forked from this diagram"
+
+            {isLiveDiagram && openDraftsForThisDiagram.length > 0 && (
+              <div className="relative">
+                <Button
+                  size="sm"
+                  onClick={() => setDraftsDropdownOpen((v) => !v)}
+                  title="Open features that include this diagram"
                 >
-                  ✎ Draft new feature
-                </button>
+                  Drafts ({openDraftsForThisDiagram.length})
+                </Button>
+                {draftsDropdownOpen && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-[49]"
+                      onClick={() => setDraftsDropdownOpen(false)}
+                    />
+                    <div className="absolute top-full right-0 mt-1 min-w-[260px] bg-panel border border-border-base rounded-lg shadow-popup z-50 overflow-hidden">
+                      {openDraftsForThisDiagram.map((d: DiagramDraftEntry) => (
+                        <div key={d.draft_id} className="p-3 border-b border-border-base last:border-b-0">
+                          <div className="text-[12px] font-semibold text-text-base mb-1.5">
+                            {d.draft_name}
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                setDraftsDropdownOpen(false)
+                                navigate(`/diagram/${d.forked_diagram_id}`)
+                              }}
+                              className="!text-coral !border-coral/40"
+                            >
+                              Open fork
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                setDraftsDropdownOpen(false)
+                                navigate(`/drafts/${d.draft_id}`)
+                              }}
+                            >
+                              Feature dashboard
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
             )}
-            <button
+
+            {isLiveDiagram && (
+              <Button
+                size="sm"
+                onClick={handleStartDraft}
+                disabled={forkDraft.isPending}
+                title="Start a new feature draft forked from this diagram"
+                className="!text-coral !border-coral/40"
+              >
+                Draft new feature
+              </Button>
+            )}
+
+            {isForkedDiagram && currentDraft && (
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={handleApply}
+                disabled={applyDraft.isPending}
+                leftIcon={<PublishIcon />}
+                title="Apply feature changes to source diagrams"
+              >
+                Publish
+              </Button>
+            )}
+
+            <Button
+              size="sm"
+              variant="ghost"
               onClick={async () => {
                 const { toPng } = await import('html-to-image')
                 const el = document.querySelector('.react-flow') as HTMLElement
                 if (!el) return
-                const dataUrl = await toPng(el, { backgroundColor: '#0a0a0a' })
+                const dataUrl = await toPng(el, { backgroundColor: '#0a0a0b' })
                 const a = document.createElement('a')
                 a.href = dataUrl
                 a.download = `archflow-${new Date().toISOString().slice(0, 10)}.png`
                 a.click()
               }}
-              style={{
-                background: '#1a1a1a', border: '1px solid #333', borderRadius: 6,
-                color: '#737373', cursor: 'pointer', fontSize: 12, padding: '4px 10px',
-              }}
               title="Export as PNG"
+              aria-label="Export as PNG"
             >
-              📷
-            </button>
-            <button
+              <CameraIcon />
+            </Button>
+
+            <Button
+              size="sm"
+              variant="ghost"
               onClick={logout}
-              style={{
-                background: 'none', border: 'none', color: '#525252', cursor: 'pointer',
-                fontSize: 12,
-              }}
+              className="!text-text-4 hover:!text-text-2"
             >
               Sign out
-            </button>
+            </Button>
           </div>
         </div>
 
         {/* Forked-diagram banner — live model is frozen; edits go to the draft */}
         {isForkedDiagram && currentDraft && (
-          <div style={{
-            background: 'linear-gradient(to right, #1e3a5f, #0a0a0a 80%)',
-            borderBottom: '1px solid #3b82f6',
-            padding: '6px 16px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 12,
-            fontSize: 12,
-            color: '#93c5fd',
-          }}>
-            <span>✎</span>
-            <span>
-              Editing feature: <b style={{ color: '#f5f5f5' }}>{currentDraft.name}</b> —
+          <div
+            className="flex items-center gap-3 px-4 py-1.5 border-b border-coral/30 text-[12px] text-coral shrink-0"
+            style={{
+              background:
+                'linear-gradient(to right, rgba(255,107,53,0.12), rgba(10,10,11,0) 80%)',
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+            </svg>
+            <span className="text-text-2">
+              Editing feature: <b className="text-text-base">{currentDraft.name}</b> —
               edits stay on the fork; Apply merges all feature changes into their source diagrams.
             </span>
-            <span style={{ flex: 1 }} />
-            <button
-              onClick={() => navigate(`/drafts/${currentDraft.id}`)}
-              style={{
-                background: 'transparent', border: '1px solid #3b82f6',
-                borderRadius: 4, color: '#93c5fd', cursor: 'pointer',
-                fontSize: 11, padding: '3px 8px',
-              }}
-            >
+            <span className="flex-1" />
+            <Button size="sm" onClick={() => navigate(`/drafts/${currentDraft.id}`)}>
               Compare
-            </button>
-            <button
-              onClick={handleDiscard}
-              style={{
-                background: 'transparent', border: '1px solid #525252',
-                borderRadius: 4, color: '#a3a3a3', cursor: 'pointer',
-                fontSize: 11, padding: '3px 8px',
-              }}
-            >
+            </Button>
+            <Button size="sm" variant="ghost" onClick={handleDiscard}>
               Discard
-            </button>
-            <button
+            </Button>
+            <Button
+              size="sm"
+              variant="primary"
               onClick={handleApply}
               disabled={applyDraft.isPending}
-              style={{
-                background: '#16a34a', border: '1px solid #16a34a',
-                borderRadius: 4, color: 'white', cursor: 'pointer',
-                fontSize: 11, padding: '3px 10px',
-                opacity: applyDraft.isPending ? 0.5 : 1,
-              }}
             >
-              Apply feature changes to source diagrams
-            </button>
+              Apply feature changes
+            </Button>
           </div>
         )}
 
         {/* Canvas area */}
-        <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+        <div className="flex flex-1 min-h-0 overflow-hidden">
           {treeOpen && <ObjectTree diagramId={diagramId} />}
           <div
+            className="flex-1 relative min-w-0"
             style={{
-              flex: 1,
-              position: 'relative',
-              minWidth: 0,
               // Visual "you're inside a fork" frame. The canvas fills the
               // inset so the user sees a tinted viewport boundary at all times.
               boxShadow: isForkedDiagram
-                ? 'inset 0 0 0 3px rgba(59, 130, 246, 0.55)'
+                ? 'inset 0 0 0 3px rgba(255,107,53,0.35)'
                 : undefined,
             }}
           >
             <AddObjectToolbar diagramId={diagramId} />
-            <div style={{ position: 'absolute', inset: 0 }}>
+            <div className="absolute inset-0">
               <ArchFlowCanvas diagramId={diagramId} />
             </div>
             {isForkedDiagram && (
               <div
+                className="absolute right-3.5 bottom-3.5 z-[5] pointer-events-none select-none uppercase font-mono"
                 style={{
-                  position: 'absolute',
-                  right: 14,
-                  bottom: 14,
-                  zIndex: 5,
-                  pointerEvents: 'none',
                   fontSize: 44,
                   fontWeight: 800,
                   letterSpacing: '0.18em',
-                  color: 'rgba(59, 130, 246, 0.08)',
-                  textTransform: 'uppercase',
-                  userSelect: 'none',
+                  color: 'rgba(255,107,53,0.07)',
                 }}
               >
                 Draft

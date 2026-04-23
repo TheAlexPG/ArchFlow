@@ -4,12 +4,14 @@ import { useNavigate, useParams } from 'react-router-dom'
 import type { ModelObject } from '../../types/model'
 import { useSaveDiagramSize } from '../../hooks/use-api'
 import { useDiagrams } from '../../hooks/use-diagrams'
+import { useCanvasStore } from '../../stores/canvas-store'
+import { Pill, PillDot } from '../ui'
 import {
   CreateChildDiagramModal,
   DRILLABLE_TYPES,
   defaultChildDiagramName,
 } from '../drafts/CreateChildDiagramModal'
-import { STATUS_COLORS, TYPE_BORDER_COLORS, TYPE_ICONS, stripHtml } from './node-utils'
+import { STATUS_COLORS, TYPE_ICONS, stripHtml } from './node-utils'
 
 export type C4NodeData = {
   object: ModelObject
@@ -41,9 +43,31 @@ function ZoomIcon() {
   )
 }
 
+// Per-C4-type color dot on the top pill. Keeps a compact visual taxonomy:
+// SYSTEM → purple, CONTAINER-like (app/store) → coral, COMPONENT → blue.
+// var(--color-*) is resolved against the Tailwind v4 theme tokens.
+const TYPE_DOT_COLOR: Record<string, string> = {
+  system: 'var(--color-accent-purple)',
+  app: 'var(--color-coral)',
+  store: 'var(--color-coral)',
+  component: 'var(--color-accent-blue)',
+  group: 'var(--color-text-3)',
+  actor: 'var(--color-accent-purple)',
+  external_system: 'var(--color-text-3)',
+}
+
+const TYPE_PILL_LABEL: Record<string, string> = {
+  system: 'SYSTEM',
+  app: 'CONTAINER',
+  store: 'CONTAINER',
+  component: 'COMPONENT',
+  group: 'GROUP',
+  actor: 'ACTOR',
+  external_system: 'EXTERNAL',
+}
+
 export function C4Node({ data, selected }: NodeProps) {
   const obj = (data as C4NodeData).object
-  const borderColor = TYPE_BORDER_COLORS[obj.type]
   const statusColor = STATUS_COLORS[obj.status]
   const navigate = useNavigate()
   const params = useParams<{ diagramId?: string }>()
@@ -52,6 +76,11 @@ export function C4Node({ data, selected }: NodeProps) {
   const { data: childDiagrams = [] } = useDiagrams(obj.id)
   const [drillPickerOpen, setDrillPickerOpen] = useState(false)
   const [createModalOpen, setCreateModalOpen] = useState(false)
+  // Per-node remote editors — shown as "● editing" in the footer when
+  // another user has this node in their selection broadcast.
+  const remoteEditors = useCanvasStore(
+    (s) => (nodeId ? s.remoteNodeEditors[nodeId] : undefined),
+  )
 
   const canHaveChildren = DRILLABLE_TYPES.has(obj.type)
 
@@ -78,17 +107,23 @@ export function C4Node({ data, selected }: NodeProps) {
       ? drillTooltip(obj.name, obj.type)
       : `Zoom into (${childDiagrams.length} diagram${childDiagrams.length > 1 ? 's' : ''})`
 
+  const typeDotColor = TYPE_DOT_COLOR[obj.type] ?? 'var(--color-text-3)'
+  const typeLabel = TYPE_PILL_LABEL[obj.type] ?? obj.type.toUpperCase()
+  const metaParts = obj.technology && obj.technology.length > 0 ? obj.technology : []
+
   return (
     <div
-      className="relative rounded-lg border-2 px-4 py-3 shadow-lg"
+      className={[
+        'relative rounded-lg border px-4 py-3 bg-surface',
+        'transition-all duration-150 ease-[ease]',
+        'w-full h-full box-border',
+        selected
+          ? 'border-coral shadow-node-selected'
+          : 'border-border-base hover:border-border-hi',
+      ].join(' ')}
       style={{
-        background: '#171717',
-        borderColor: selected ? '#3b82f6' : borderColor,
-        width: '100%',
-        height: '100%',
         minWidth: 160,
         minHeight: 60,
-        boxSizing: 'border-box',
       }}
       onDoubleClick={handleDoubleClick}
       title={
@@ -100,7 +135,7 @@ export function C4Node({ data, selected }: NodeProps) {
       {/* Always rendered so DOM is stable on select/deselect — controls are
           hidden via CSS when the node isn't selected (see index.css). */}
       <NodeResizer
-        color="#3b82f6"
+        color="var(--color-coral)"
         isVisible
         minWidth={160}
         minHeight={60}
@@ -123,7 +158,7 @@ export function C4Node({ data, selected }: NodeProps) {
 
       {/* Status indicator — top-right */}
       <div
-        className="absolute -top-1.5 -right-1.5 w-3 h-3 rounded-full border-2 border-neutral-900"
+        className="absolute -top-1.5 -right-1.5 w-3 h-3 rounded-full border-2 border-bg"
         style={{ backgroundColor: statusColor }}
         title={obj.status}
       />
@@ -134,21 +169,7 @@ export function C4Node({ data, selected }: NodeProps) {
           <button
             onClick={handleDrillDown}
             onMouseDown={(e) => e.stopPropagation()}
-            className="nodrag rounded-full w-6 h-6 flex items-center justify-center shadow-lg border transition-colors"
-            style={{
-              background: '#1e3a5f',
-              borderColor: '#3b82f6',
-              color: '#93c5fd',
-              boxShadow: '0 2px 6px rgba(0,0,0,0.4)',
-            }}
-            onMouseEnter={(e) => {
-              ;(e.currentTarget as HTMLButtonElement).style.background = '#2563eb'
-              ;(e.currentTarget as HTMLButtonElement).style.color = '#fff'
-            }}
-            onMouseLeave={(e) => {
-              ;(e.currentTarget as HTMLButtonElement).style.background = '#1e3a5f'
-              ;(e.currentTarget as HTMLButtonElement).style.color = '#93c5fd'
-            }}
+            className="nodrag rounded-full w-6 h-6 flex items-center justify-center shadow-lg border border-border-base bg-panel text-text-2 hover:bg-surface-hi hover:text-text-base hover:border-coral transition-colors"
             title={drillButtonTitle}
           >
             {childDiagrams.length === 0 ? <PlusIcon /> : <ZoomIcon />}
@@ -157,21 +178,10 @@ export function C4Node({ data, selected }: NodeProps) {
             <div
               onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => e.stopPropagation()}
-              className="nodrag"
-              style={{
-                position: 'absolute',
-                bottom: 28,
-                right: 0,
-                minWidth: 180,
-                background: '#1a1a1a',
-                border: '1px solid #333',
-                borderRadius: 6,
-                boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
-                padding: 4,
-                zIndex: 100,
-              }}
+              className="nodrag absolute right-0 min-w-[180px] bg-panel border border-border-base rounded-md shadow-popup p-1 z-[100]"
+              style={{ bottom: 28 }}
             >
-              <div style={{ fontSize: 10, color: '#737373', padding: '4px 8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              <div className="font-mono text-[10px] text-text-3 px-2 py-1 uppercase tracking-[0.05em]">
                 Open diagram
               </div>
               {/* Option to create a new child diagram */}
@@ -180,22 +190,7 @@ export function C4Node({ data, selected }: NodeProps) {
                   setDrillPickerOpen(false)
                   setCreateModalOpen(true)
                 }}
-                style={{
-                  display: 'block',
-                  width: '100%',
-                  textAlign: 'left',
-                  padding: '6px 10px',
-                  background: 'transparent',
-                  border: 'none',
-                  borderRadius: 4,
-                  color: '#60a5fa',
-                  fontSize: 12,
-                  cursor: 'pointer',
-                  borderBottom: '1px solid #262626',
-                  marginBottom: 2,
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = '#1e3a5f')}
-                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                className="block w-full text-left px-2.5 py-1.5 rounded text-[12px] text-coral hover:bg-surface-hi border-b border-border-base mb-0.5"
               >
                 + New child diagram
               </button>
@@ -206,20 +201,7 @@ export function C4Node({ data, selected }: NodeProps) {
                     setDrillPickerOpen(false)
                     navigate(`/diagram/${d.id}`)
                   }}
-                  style={{
-                    display: 'block',
-                    width: '100%',
-                    textAlign: 'left',
-                    padding: '6px 10px',
-                    background: 'transparent',
-                    border: 'none',
-                    borderRadius: 4,
-                    color: '#d4d4d4',
-                    fontSize: 12,
-                    cursor: 'pointer',
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = '#262626')}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                  className="block w-full text-left px-2.5 py-1.5 rounded text-[12px] text-text-2 hover:bg-surface-hi hover:text-text-base"
                 >
                   {d.name}
                 </button>
@@ -229,31 +211,41 @@ export function C4Node({ data, selected }: NodeProps) {
         </div>
       )}
 
-      {/* Type icon + Name */}
-      <div className="flex items-start gap-2">
-        <span className="text-lg shrink-0 mt-0.5 opacity-60">{TYPE_ICONS[obj.type]}</span>
-        <div className="min-w-0">
-          <div className="font-semibold text-sm text-neutral-100 truncate">{obj.name}</div>
-          {obj.description && stripHtml(obj.description) && (
-            <div
-              className="node-desc-html text-xs text-neutral-400 mt-0.5"
-              dangerouslySetInnerHTML={{ __html: obj.description }}
-            />
-          )}
-        </div>
+      {/* Top row: type pill + icon */}
+      <div className="flex items-center justify-between mb-1.5 gap-2">
+        <Pill variant="neutral" className="!py-[2px] !px-[6px] !text-[9.5px]">
+          <PillDot color={typeDotColor} />
+          {typeLabel}
+        </Pill>
+        <span className="text-base shrink-0 opacity-50 leading-none">{TYPE_ICONS[obj.type]}</span>
       </div>
 
-      {/* Technology tags */}
-      {obj.technology && obj.technology.length > 0 && (
-        <div className="flex flex-wrap gap-1 mt-2">
-          {obj.technology.map((tech) => (
+      {/* Name */}
+      <div className="text-[14px] font-semibold tracking-tight text-text-base truncate">
+        {obj.name}
+      </div>
+
+      {/* Description (TipTap HTML preview) */}
+      {obj.description && stripHtml(obj.description) && (
+        <div
+          className="node-desc-html text-[11px] text-text-2 mt-0.5 leading-relaxed"
+          dangerouslySetInnerHTML={{ __html: obj.description }}
+        />
+      )}
+
+      {/* Metadata row — tech stack joined with · and optional editing indicator */}
+      {(metaParts.length > 0 || (remoteEditors && remoteEditors.length > 0)) && (
+        <div className="flex items-center justify-between gap-2 mt-2 font-mono text-[10px] text-text-3">
+          <span className="truncate">{metaParts.join(' · ')}</span>
+          {remoteEditors && remoteEditors.length > 0 && (
             <span
-              key={tech}
-              className="text-[10px] px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-400"
+              className="flex items-center gap-1 text-coral shrink-0"
+              title={`${remoteEditors.join(', ')} editing`}
             >
-              {tech}
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-coral" />
+              editing
             </span>
-          ))}
+          )}
         </div>
       )}
 
