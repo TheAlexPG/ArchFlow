@@ -13,6 +13,7 @@ import { cn } from '../../utils/cn'
 import { SectionLabel } from '../ui'
 import { detectParentGroup, nodeToRect } from './group-utils'
 import { TYPE_BORDER_COLORS, TYPE_LABELS } from './node-utils'
+import { NewObjectModal } from './NewObjectModal'
 
 // ─── Type helpers (match AddObjectToolbar's logic exactly) ────────────────────
 
@@ -249,6 +250,7 @@ interface AddObjectFABProps {
 export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [search, setSearch] = useState('')
+  const [newObjectType, setNewObjectType] = useState<ObjectType | null>(null)
 
   // ── Data hooks (identical to AddObjectToolbar) ──────────────────────────
   const { data: diagram } = useDiagram(diagramId)
@@ -296,8 +298,13 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
   }
 
   const handleCreateNew = (type: ObjectType) => {
-    const name = prompt(`New ${TYPE_LABELS[type]} name:`)
-    if (!name?.trim()) return
+    setNewObjectType(type)
+    // Keep FAB popup open until user confirms in the modal
+  }
+
+  const handleNewObjectSubmit = (name: string) => {
+    if (!newObjectType) return
+    const type = newObjectType
     const placementX = 200 + Math.random() * 300
     const placementY = 150 + Math.random() * 250
     createObject.mutate(
@@ -330,6 +337,7 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
         },
       },
     )
+    setNewObjectType(null)
     setIsOpen(false)
   }
 
@@ -650,6 +658,17 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
             </span>
           </div>
         </div>
+      )}
+
+      {/* ── New object name modal (replaces native prompt) ── */}
+      {newObjectType && (
+        <NewObjectModal
+          open={true}
+          onClose={() => setNewObjectType(null)}
+          objectType={newObjectType}
+          existingNames={objects.map((o) => o.name)}
+          onSubmit={handleNewObjectSubmit}
+        />
       )}
     </div>
   )
