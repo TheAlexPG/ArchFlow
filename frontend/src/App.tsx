@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/reac
 import { useEffect, useRef } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthPage } from './components/auth/AuthPage'
+import { DesignGalleryPage } from './pages/DesignGalleryPage'
 import { AuthCallback } from './components/auth/AuthCallback'
 import { ActivityPage } from './pages/ActivityPage'
 import { ConnectionsPage } from './pages/ConnectionsPage'
@@ -180,6 +181,15 @@ function App() {
               <ProtectedRoute>
                 <SettingsPage />
               </ProtectedRoute>
+            }
+          />
+          {/* DEV-only design gallery — redirect to / in production */}
+          <Route
+            path="/design"
+            element={
+              import.meta.env.DEV
+                ? <DesignGalleryPage />
+                : <Navigate to="/" replace />
             }
           />
         </Routes>
