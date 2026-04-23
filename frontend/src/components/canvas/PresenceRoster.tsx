@@ -31,8 +31,8 @@ export const PresenceRoster = memo(function PresenceRoster({ users }: Props) {
     <div
       style={{
         position: 'absolute',
-        top: 12,
-        right: 12,
+        top: 16,
+        right: 64,
         zIndex: 1001,
         display: 'flex',
         alignItems: 'center',
