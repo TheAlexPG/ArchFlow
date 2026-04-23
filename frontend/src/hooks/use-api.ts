@@ -350,6 +350,31 @@ export function useUpdateConnection() {
   })
 }
 
+export function useFlipConnection() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id }: { id: string }) => {
+      const { data: result } = await api.post<Connection>(`/connections/${id}/flip`)
+      return result
+    },
+    onSuccess: (updated) => {
+      qc.setQueryData(['connections', updated.id], updated)
+      qc.setQueriesData<Connection[] | undefined>(
+        { queryKey: ['connections'] },
+        (prev) => {
+          if (!prev || !Array.isArray(prev)) return prev
+          const idx = prev.findIndex((c) => c.id === updated.id)
+          if (idx === -1) return [...prev, updated]
+          const next = [...prev]
+          next[idx] = updated
+          return next
+        },
+      )
+      void qc.invalidateQueries({ queryKey: ['connections'] })
+    },
+  })
+}
+
 // ─── Comments ────────────────────────────────────────────
 
 export function useComments(targetType: CommentTargetType, targetId: string | null) {

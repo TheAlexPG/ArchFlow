@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import {
   useConnection,
   useDeleteConnection,
+  useFlipConnection,
   useObjects,
   useUpdateConnection,
 } from '../../hooks/use-api'
@@ -20,6 +21,7 @@ export function EdgeSidebar() {
   const { data: conn } = useConnection(selectedEdgeId)
   const { data: objects = [] } = useObjects()
   const updateConn = useUpdateConnection()
+  const flipConn = useFlipConnection()
   const deleteConn = useDeleteConnection()
 
   const [label, setLabel] = useState('')
@@ -51,12 +53,7 @@ export function EdgeSidebar() {
   }
 
   const handleFlip = () => {
-    updateConn.mutate({
-      id: conn.id,
-      // swap by updating with new source_id/target_id — need separate endpoint,
-      // for now toggle direction
-      direction: conn.direction === 'unidirectional' ? 'bidirectional' : 'unidirectional',
-    })
+    flipConn.mutate({ id: conn.id })
   }
 
   const handleDelete = () => {
