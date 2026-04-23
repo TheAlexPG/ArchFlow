@@ -325,10 +325,15 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     // ── Connection-structure key ──────────────────────────────────────────
     // Include all visual fields so the edge rebuild runs whenever any of them
     // change (not just direction or id).
+    // source_id and target_id MUST be included: a flip operation swaps them
+    // without changing direction/shape/handles.  For same-side handles
+    // (e.g. top↔top) the handle names are symmetric under swap, so a flip
+    // would otherwise produce an identical key and the early-return would
+    // prevent setEdges from being called — leaving the canvas arrow stale.
     const connKey = filtered
       .map(
         (c) =>
-          `${c.id}:${c.shape}:${c.label_size}:${c.direction}:${c.label ?? ''}:${c.protocol ?? ''}:${c.source_handle ?? ''}:${c.target_handle ?? ''}`,
+          `${c.id}:${c.source_id}:${c.target_id}:${c.shape}:${c.label_size}:${c.direction}:${c.label ?? ''}:${c.protocol ?? ''}:${c.source_handle ?? ''}:${c.target_handle ?? ''}`,
       )
       .join(',')
 
