@@ -148,15 +148,37 @@ export function EdgeSidebar() {
 
         {/* Label size */}
         <Field label={`Label size: ${conn.label_size.toFixed(0)}px`}>
-          <input
-            type="range"
-            min={8}
-            max={20}
-            step={1}
-            value={conn.label_size}
-            onChange={(e) => handleUpdate({ label_size: parseFloat(e.target.value) })}
-            className="w-full accent-blue-500"
-          />
+          <div className="relative w-full">
+            <input
+              type="range"
+              min={8}
+              max={20}
+              step={1}
+              value={conn.label_size}
+              onChange={(e) => handleUpdate({ label_size: parseFloat(e.target.value) })}
+              style={{
+                // filled-track trick: gradient from accent to track bg
+                background: `linear-gradient(to right, #f97316 0%, #f97316 ${((conn.label_size - 8) / (20 - 8)) * 100}%, #404040 ${((conn.label_size - 8) / (20 - 8)) * 100}%, #404040 100%)`,
+              }}
+              className={[
+                'w-full h-1.5 rounded-full appearance-none cursor-pointer outline-none',
+                'focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 focus-visible:ring-offset-neutral-900',
+                // Thumb – webkit
+                '[&::-webkit-slider-thumb]:appearance-none',
+                '[&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4',
+                '[&::-webkit-slider-thumb]:rounded-full',
+                '[&::-webkit-slider-thumb]:bg-orange-500',
+                '[&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-neutral-900',
+                '[&::-webkit-slider-thumb]:shadow-[0_0_0_1px_rgba(249,115,22,0.4),0_2px_6px_rgba(0,0,0,0.5)]',
+                '[&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-110',
+                // Thumb – moz
+                '[&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4',
+                '[&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2',
+                '[&::-moz-range-thumb]:bg-orange-500 [&::-moz-range-thumb]:border-neutral-900',
+                '[&::-moz-range-thumb]:cursor-pointer',
+              ].join(' ')}
+            />
+          </div>
         </Field>
 
         {/* Protocol */}
