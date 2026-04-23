@@ -301,14 +301,27 @@ See [`docs/architecture/`](docs/architecture/) for ADRs and ongoing design.
 
 ## 🤝 Contributing
 
-Branching model: `dev` → `stage` → `main`. PRs land on `dev`; releases promote through `stage` to `main`.
+PRs welcome — bug fixes, features, docs, everything. Full workflow in
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
-Before you push:
+**TL;DR:**
 
-```bash
-make lint
-make test
-```
+1. `main` is protected. Branch off: `git switch -c feat/my-thing`.
+2. Small, focused commits. Conventional prefixes: `feat/`, `fix/`,
+   `refactor/`, `docs/`, `chore/`, `test/`.
+3. Before pushing:
+
+   ```bash
+   make lint
+   make test
+   ```
+
+4. Open a PR targeting `main`. CI runs `build-backend` and
+   `build-frontend` — both must be green to merge.
+5. Squash merge keeps `main` linear.
+
+Bugs → [GitHub issues](https://github.com/TheAlexPG/ArchFlow/issues).
+Security issues → [private advisories](https://github.com/TheAlexPG/ArchFlow/security/advisories).
 
 ---
 
