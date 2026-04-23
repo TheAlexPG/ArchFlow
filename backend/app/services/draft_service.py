@@ -130,6 +130,7 @@ async def _clone_diagram(
         description=source_diagram.description,
         scope_object_id=source_diagram.scope_object_id,
         settings=source_diagram.settings,
+        workspace_id=source_diagram.workspace_id,
         draft_id=draft.id,
     )
     db.add(forked_diagram)
@@ -165,6 +166,7 @@ async def _clone_diagram(
             owner_team=src_obj.owner_team,
             external_links=src_obj.external_links,
             metadata_=src_obj.metadata_,
+            workspace_id=src_obj.workspace_id,
             draft_id=draft.id,
             source_object_id=src_obj.id,
         )
