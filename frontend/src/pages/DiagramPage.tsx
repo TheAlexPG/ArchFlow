@@ -451,10 +451,9 @@ export function DiagramPage() {
                 : undefined,
             }}
           >
-            <AddObjectFAB
-                diagramId={diagramId}
-                className="absolute left-4 top-1/2 -translate-y-1/2 z-30"
-              />
+            <div className="absolute left-4 top-1/2 -translate-y-1/2 z-30">
+              <AddObjectFAB diagramId={diagramId} />
+            </div>
             <div className="absolute inset-0">
               <ArchFlowCanvas diagramId={diagramId} />
             </div>

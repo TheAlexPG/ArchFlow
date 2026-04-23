@@ -242,13 +242,11 @@ const ANNOTATION_CONFIGS: {
 
 interface AddObjectFABProps {
   diagramId?: string
-  /** Caller positions the FAB via className, e.g. "absolute left-4 top-1/2 -translate-y-1/2 z-30" */
-  className?: string
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function AddObjectFAB({ diagramId, className }: AddObjectFABProps) {
+export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [search, setSearch] = useState('')
 
@@ -369,7 +367,7 @@ export function AddObjectFAB({ diagramId, className }: AddObjectFABProps) {
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div ref={containerRef} className={cn('relative', className)}>
+    <div ref={containerRef} className="relative">
       {/* ── FAB button ── */}
       <button
         onClick={() => setIsOpen((v) => !v)}
