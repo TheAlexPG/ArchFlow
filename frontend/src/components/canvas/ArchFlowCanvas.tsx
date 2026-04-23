@@ -157,7 +157,16 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
       // cursor offset that Chrome senders otherwise produce for remote peers.
       const vvOffX = window.visualViewport?.offsetLeft ?? 0
       const vvOffY = window.visualViewport?.offsetTop ?? 0
-      const pos = screenToFlowPosition({ x: event.clientX + vvOffX, y: event.clientY + vvOffY })
+      // Disable snap-to-grid for cursor broadcasts so the pin tracks the actual
+      // pointer sub-pixel position rather than the nearest grid intersection.
+      // Without this, at high zoom levels the grid-snapped error (up to
+      // gridSize/2 flow units = gridSize/2 * zoom screen pixels) becomes
+      // visually significant — e.g. at zoom=2 with snapGrid=[10,10], the pin
+      // can drift up to 10 CSS pixels from the real cursor.
+      const pos = screenToFlowPosition(
+        { x: event.clientX + vvOffX, y: event.clientY + vvOffY },
+        { snapToGrid: false },
+      )
       sendCursor(pos.x, pos.y)
     },
     [screenToFlowPosition, sendCursor],
