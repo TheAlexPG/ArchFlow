@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useRef, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AppSidebar } from '../components/nav/AppSidebar'
 import { PageToolbar } from '../components/nav/PageToolbar'
@@ -9,9 +9,10 @@ import { SectionLabel } from '../components/ui/SectionLabel'
 import { StatusPill } from '../components/ui/Pill'
 import type { PillVariant } from '../components/ui/Pill'
 import { PreviewCard } from '../components/common/PreviewCard'
+import { Modal } from '../components/common/Modal'
+import { NewDiagramModal } from '../components/diagram/NewDiagramModal'
 import {
   useDiagrams,
-  useCreateDiagram,
   useDeleteDiagram,
   useUpdateDiagram,
 } from '../hooks/use-diagrams'
@@ -45,14 +46,6 @@ const TYPE_LABELS: Record<string, string> = {
   custom:           'Custom',
 }
 
-const DIAGRAM_TYPE_LABELS_FOR_CREATE: Record<string, string> = {
-  system_landscape: 'L1 — System Landscape',
-  system_context:   'L1 — System Context',
-  container:        'L2 — Container',
-  component:        'L3 — Component',
-  custom:           'Custom',
-}
-
 // Types in display order for grouped table
 const ORDERED_TYPES: DiagramType[] = [
   'system_landscape',
@@ -79,6 +72,17 @@ const LEVEL_ROWS: { level: 1 | 2 | 3 | 4; label: string; types: string[] }[] = [
   { level: 4, label: 'Level 4 · Code',       types: ['custom'] },
 ]
 
+// Folder color palette (swatches for create modal — UI-only, not persisted to backend)
+// NOTE: The backend Pack model has no `color` field. Colors are derived
+// deterministically from pack name at render time.
+const FOLDER_COLORS = [
+  { id: 'coral',  hex: '#FF6B35', label: 'Coral' },
+  { id: 'purple', hex: '#c084fc', label: 'Purple' },
+  { id: 'blue',   hex: '#60a5fa', label: 'Blue' },
+  { id: 'green',  hex: '#4ade80', label: 'Green' },
+  { id: 'amber',  hex: '#fbbf24', label: 'Amber' },
+]
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function timeAgo(iso: string): string {
@@ -102,7 +106,16 @@ function slugify(name: string): string {
   return name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
 }
 
-// ─── Icon SVGs per type ───────────────────────────────────────────────────────
+/** Deterministic folder color from name hash → one of the 5 palette entries */
+function folderColorFromName(name: string): string {
+  let h = 0
+  for (let i = 0; i < name.length; i++) {
+    h = (h * 31 + name.charCodeAt(i)) >>> 0
+  }
+  return FOLDER_COLORS[h % FOLDER_COLORS.length]?.hex ?? '#FF6B35'
+}
+
+// ─── SVG icon components ──────────────────────────────────────────────────────
 
 function TypeIcon({ type }: { type: string }) {
   const color = TYPE_COLOR[type]?.icon ?? '#71717a'
@@ -129,11 +142,9 @@ function TypeIcon({ type }: { type: string }) {
   )
 }
 
-// ─── Folder icon for sidebar ──────────────────────────────────────────────────
-
 function FolderIcon({ color }: { color: string }) {
   return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill={color + '40'} stroke={color} strokeWidth="1.5">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill={color + '33'} stroke={color} strokeWidth="1.5">
       <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
     </svg>
   )
@@ -147,11 +158,415 @@ function ChevronDown() {
   )
 }
 
+// Clean 14px Lucide-style action icons (stroke-width 1.5)
+
+function IconMoreHorizontal() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+      <circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/>
+    </svg>
+  )
+}
+
+function IconPin({ filled }: { filled?: boolean }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill={filled ? '#FF6B35' : 'none'} stroke={filled ? '#FF6B35' : 'currentColor'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2L8 8H2l7 6-2.5 8L12 18l5.5 4L15 14l7-6h-6z"/>
+    </svg>
+  )
+}
+
+function IconTrash() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>
+    </svg>
+  )
+}
+
+function IconFolderMove() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+      <path d="M12 11v6M9 14l3-3 3 3"/>
+    </svg>
+  )
+}
+
+function IconPencil() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+    </svg>
+  )
+}
+
+function IconPlusSm() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+      <path d="M12 5v14M5 12h14"/>
+    </svg>
+  )
+}
+
+// ─── Create Folder Modal ──────────────────────────────────────────────────────
+
+function CreateFolderModal({
+  open,
+  onClose,
+  onCreate,
+  isPending,
+}: {
+  open: boolean
+  onClose: () => void
+  onCreate: (name: string) => void
+  isPending: boolean
+}) {
+  const [name, setName] = useState('')
+  const [selectedColor, setSelectedColor] = useState(FOLDER_COLORS[0].id)
+
+  const resetAndClose = () => {
+    setName('')
+    setSelectedColor(FOLDER_COLORS[0].id)
+    onClose()
+  }
+
+  const handleCreate = () => {
+    const trimmed = name.trim()
+    if (!trimmed) return
+    onCreate(trimmed)
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={resetAndClose}
+      title="Create folder"
+      width={320}
+      footer={
+        <>
+          <Button variant="ghost" onClick={resetAndClose}>Cancel</Button>
+          <Button
+            variant="primary"
+            disabled={!name.trim() || isPending}
+            onClick={handleCreate}
+          >
+            {isPending ? 'Creating…' : 'Create'}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <div>
+          <label className="block font-mono text-[10.5px] uppercase tracking-[0.07em] text-text-3 mb-1.5">
+            Name
+          </label>
+          <input
+            autoFocus
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleCreate()
+              if (e.key === 'Escape') resetAndClose()
+            }}
+            placeholder="e.g. Backend services"
+            className="w-full bg-surface border border-border-base rounded-md px-3 py-2 text-[13px] text-text-base outline-none focus:border-border-hi placeholder:text-text-4 transition-colors"
+          />
+        </div>
+
+        <div>
+          <label className="block font-mono text-[10.5px] uppercase tracking-[0.07em] text-text-3 mb-2">
+            Colour <span className="text-text-4 normal-case">(display only)</span>
+          </label>
+          <div className="flex items-center gap-2">
+            {FOLDER_COLORS.map((c) => (
+              <button
+                key={c.id}
+                title={c.label}
+                onClick={() => setSelectedColor(c.id)}
+                style={{ background: c.hex, ['--tw-ring-color' as string]: c.hex } as React.CSSProperties}
+                className={cn(
+                  'w-6 h-6 rounded-full transition-all duration-100',
+                  selectedColor === c.id
+                    ? 'ring-2 ring-offset-2 ring-offset-[#171717] scale-110'
+                    : 'opacity-70 hover:opacity-100 hover:scale-105',
+                )}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+// ─── Row context menu (3-dot) ─────────────────────────────────────────────────
+
+interface RowMenuProps {
+  packs: DiagramPack[]
+  currentPackId: string | null
+  isPinned: boolean
+  diagramName: string
+  onMoveToFolder: (packId: string | null) => void
+  onTogglePin: () => void
+  onDelete: () => void
+  onRename?: () => void
+}
+
+function RowMenu({
+  packs,
+  currentPackId,
+  isPinned,
+  diagramName,
+  onMoveToFolder,
+  onTogglePin,
+  onDelete,
+}: RowMenuProps) {
+  const [open, setOpen] = useState(false)
+  const [moveFolderOpen, setMoveFolderOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false)
+        setMoveFolderOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); setMoveFolderOpen(false) }}
+        title="Actions"
+        className="w-6 h-6 flex items-center justify-center rounded text-text-3 hover:text-text-base hover:bg-surface-hi transition-colors"
+      >
+        <IconMoreHorizontal />
+      </button>
+
+      {open && (
+        <div
+          className="absolute right-0 top-full mt-1 z-30 bg-panel border border-border-base rounded-md shadow-lg min-w-[160px] py-1"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Move to folder */}
+          <div className="relative">
+            <button
+              className="w-full text-left px-3 py-1.5 text-[12px] text-text-2 hover:bg-surface hover:text-text-base flex items-center gap-2 transition-colors"
+              onClick={() => setMoveFolderOpen((v) => !v)}
+            >
+              <IconFolderMove />
+              Move to folder
+              <svg className="ml-auto" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 6 6 6-6 6"/></svg>
+            </button>
+
+            {moveFolderOpen && (
+              <div className="absolute left-full top-0 ml-1 z-30 bg-panel border border-border-base rounded-md shadow-lg min-w-[160px] py-1">
+                <button
+                  className={cn(
+                    'w-full text-left px-3 py-1.5 text-[12px] hover:bg-surface transition-colors flex items-center gap-2',
+                    currentPackId === null ? 'text-coral font-medium' : 'text-text-2',
+                  )}
+                  onClick={() => { onMoveToFolder(null); setOpen(false); setMoveFolderOpen(false) }}
+                >
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+                  Unfiled
+                </button>
+                {packs.length > 0 && <div className="h-px bg-border-base mx-2 my-1" />}
+                {packs.map((p) => {
+                  const color = folderColorFromName(p.name)
+                  return (
+                    <button
+                      key={p.id}
+                      className={cn(
+                        'w-full text-left px-3 py-1.5 text-[12px] hover:bg-surface transition-colors flex items-center gap-2',
+                        currentPackId === p.id ? 'text-coral font-medium' : 'text-text-2',
+                      )}
+                      onClick={() => { onMoveToFolder(p.id); setOpen(false); setMoveFolderOpen(false) }}
+                    >
+                      <FolderIcon color={color} />
+                      <span className="truncate">{p.name}</span>
+                    </button>
+                  )
+                })}
+                {packs.length === 0 && (
+                  <div className="px-3 py-1.5 text-[11px] text-text-4 italic">No folders yet</div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Pin toggle */}
+          <button
+            className="w-full text-left px-3 py-1.5 text-[12px] text-text-2 hover:bg-surface hover:text-text-base flex items-center gap-2 transition-colors"
+            onClick={() => { onTogglePin(); setOpen(false) }}
+          >
+            <IconPin filled={isPinned} />
+            {isPinned ? 'Unpin' : 'Pin'}
+          </button>
+
+          <div className="h-px bg-border-base mx-2 my-1" />
+
+          {/* Delete */}
+          <button
+            className="w-full text-left px-3 py-1.5 text-[12px] text-text-2 hover:bg-surface hover:text-red-400 flex items-center gap-2 transition-colors"
+            onClick={() => {
+              if (confirm(`Delete "${diagramName}"?`)) {
+                onDelete()
+              }
+              setOpen(false)
+            }}
+          >
+            <IconTrash />
+            Delete
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Folder tree item (sidebar) ───────────────────────────────────────────────
+
+interface FolderTreeItemProps {
+  pack: DiagramPack
+  count: number
+  isActive: boolean
+  isRenaming: boolean
+  renameValue: string
+  isAdmin: boolean
+  isDragOver: boolean
+  onClick: () => void
+  onRenameStart: () => void
+  onRenameChange: (v: string) => void
+  onRenameCommit: () => void
+  onRenameCancel: () => void
+  onDelete: () => void
+  onDragOver: (e: React.DragEvent) => void
+  onDragLeave: () => void
+  onDrop: (e: React.DragEvent) => void
+}
+
+function FolderTreeItem({
+  pack,
+  count,
+  isActive,
+  isRenaming,
+  renameValue,
+  isAdmin,
+  isDragOver,
+  onClick,
+  onRenameStart,
+  onRenameChange,
+  onRenameCommit,
+  onRenameCancel,
+  onDelete,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+}: FolderTreeItemProps) {
+  const color = folderColorFromName(pack.name)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [menuOpen])
+
+  if (isRenaming) {
+    return (
+      <div className="flex items-center gap-1 px-2 py-1">
+        <input
+          autoFocus
+          value={renameValue}
+          onChange={(e) => onRenameChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') onRenameCommit()
+            if (e.key === 'Escape') onRenameCancel()
+          }}
+          className="flex-1 bg-surface border border-border-base rounded px-1.5 py-0.5 text-[11.5px] outline-none focus:border-border-hi font-mono text-text-base"
+        />
+        <button onClick={onRenameCommit} className="text-[10px] text-text-3 hover:text-text-base px-1">Save</button>
+        <button onClick={onRenameCancel} className="text-[10px] text-text-4 px-1">✕</button>
+      </div>
+    )
+  }
+
+  return (
+    <div
+      className={cn(
+        'group flex items-center gap-2 px-2 py-1.5 rounded text-[12.5px] cursor-pointer transition-all duration-[100ms] select-none',
+        isActive
+          ? 'bg-coral-glow text-coral'
+          : 'text-text-2 hover:bg-surface hover:text-text-base',
+        isDragOver && 'ring-1 ring-coral/60 bg-coral-glow/60 scale-[1.02]',
+      )}
+      onClick={onClick}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
+      <FolderIcon color={color} />
+      <span className="flex-1 truncate">{pack.name}</span>
+      <span className="font-mono text-[10.5px] text-text-3">{count}</span>
+
+      {isAdmin && (
+        <div className="relative" ref={menuRef}>
+          <button
+            onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v) }}
+            className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center rounded text-text-4 hover:text-text-2 hover:bg-surface-hi transition-all"
+            title="Folder options"
+          >
+            <IconMoreHorizontal />
+          </button>
+          {menuOpen && (
+            <div
+              className="absolute right-0 top-full mt-1 z-30 bg-panel border border-border-base rounded-md shadow-lg min-w-[140px] py-1"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                className="w-full text-left px-3 py-1.5 text-[12px] text-text-2 hover:bg-surface hover:text-text-base flex items-center gap-2 transition-colors"
+                onClick={() => { onRenameStart(); setMenuOpen(false) }}
+              >
+                <IconPencil />
+                Rename
+              </button>
+              <div className="h-px bg-border-base mx-2 my-1" />
+              <button
+                className="w-full text-left px-3 py-1.5 text-[12px] text-text-2 hover:bg-surface hover:text-red-400 flex items-center gap-2 transition-colors"
+                onClick={() => {
+                  if (confirm(`Delete folder "${pack.name}"? Diagrams will remain unfiled.`)) onDelete()
+                  setMenuOpen(false)
+                }}
+              >
+                <IconTrash />
+                Delete folder
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export function DiagramsPage() {
   const { data: diagrams = [], isLoading } = useDiagrams()
-  const createDiagram = useCreateDiagram()
   const deleteDiagram = useDeleteDiagram()
   const updateDiagram = useUpdateDiagram()
   const navigate = useNavigate()
@@ -159,20 +574,28 @@ export function DiagramsPage() {
   // Search / filter state
   const [search, setSearch] = useState('')
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<string | null>(null)
+  // null = all, '__type__' + type = filter by type, pack id = filter by folder
+  const [selectedFolderFilter, setSelectedFolderFilter] = useState<string | null>(null)
 
   // View mode
   const [view, setView] = useState<'list' | 'grid'>('list')
 
-  // Create modal state
-  const [showCreate, setShowCreate] = useState(false)
-  const [newName, setNewName] = useState('')
-  const [newType, setNewType] = useState('system_landscape')
+  // Show/hide by-type grouping toggle
+  const [showByType, setShowByType] = useState(true)
 
-  // Pack management state (preserved)
-  const [newPackName, setNewPackName] = useState('')
-  const [showNewPackInput, setShowNewPackInput] = useState(false)
+  // New diagram modal state
+  const [createOpen, setCreateOpen] = useState(false)
+
+  // Create folder modal
+  const [showCreateFolder, setShowCreateFolder] = useState(false)
+
+  // Pack renaming state
   const [renamingPack, setRenamingPack] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
+
+  // Drag state — tracks which folder is being hovered
+  const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null)
+  const dragDiagramId = useRef<string | null>(null)
 
   const wsId = useWorkspaceStore((s) => s.currentWorkspaceId)
   const { data: workspaces = [] } = useWorkspaces()
@@ -185,23 +608,33 @@ export function DiagramsPage() {
   const deletePack = useDeletePack(wsId)
   const setDiagramPack = useSetDiagramPack()
 
+  // ── Sorted packs ───────────────────────────────────────────────────────────
+  const sortedPacks: DiagramPack[] = useMemo(
+    () => [...packs].sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name)),
+    [packs],
+  )
+
   // ── Filtered + sorted diagrams ─────────────────────────────────────────────
   const filtered = useMemo(() => {
     let rows = diagrams
+
     if (search) {
       const q = search.toLowerCase()
       rows = rows.filter((d) => d.name.toLowerCase().includes(q))
     }
-    if (selectedTypeFilter) {
-      // If the filter matches a level row, expand to all types in that level
+
+    if (selectedFolderFilter !== null) {
+      rows = rows.filter((d) => d.pack_id === selectedFolderFilter)
+    } else if (selectedTypeFilter) {
       const levelRow = LEVEL_ROWS.find((lr) => lr.types.includes(selectedTypeFilter))
       const matchTypes = levelRow ? levelRow.types : [selectedTypeFilter]
       rows = rows.filter((d) => matchTypes.includes(d.type))
     }
+
     return [...rows].sort(
       (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
     )
-  }, [diagrams, search, selectedTypeFilter])
+  }, [diagrams, search, selectedTypeFilter, selectedFolderFilter])
 
   // ── Counts per type (full, unfiltered — for sidebar) ──────────────────────
   const countByType = useMemo(() => {
@@ -219,47 +652,70 @@ export function DiagramsPage() {
     }))
   }, [diagrams])
 
-  // ── Pack handlers ──────────────────────────────────────────────────────────
-  const handleCreatePack = () => {
-    const name = newPackName.trim()
-    if (!name) return
-    createPack.mutate(name)
-    setNewPackName('')
-    setShowNewPackInput(false)
-  }
+  // ── Count per pack (real folders, unfiltered) ──────────────────────────────
+  const countByPack = useMemo(() => {
+    const map: Record<string, number> = {}
+    for (const d of diagrams) {
+      if (d.pack_id) map[d.pack_id] = (map[d.pack_id] ?? 0) + 1
+    }
+    return map
+  }, [diagrams])
 
-  const handleRenamePack = (packId: string) => {
+  // ── Pack handlers ──────────────────────────────────────────────────────────
+  const handleCreatePack = useCallback((name: string) => {
+    createPack.mutate(name, {
+      onSuccess: () => setShowCreateFolder(false),
+    })
+  }, [createPack])
+
+  const handleRenamePack = useCallback((packId: string) => {
     const name = renameValue.trim()
     if (!name) return
     renamePack.mutate({ packId, name })
     setRenamingPack(null)
     setRenameValue('')
-  }
+  }, [renamePack, renameValue])
 
-  // ── Create diagram handler ─────────────────────────────────────────────────
-  const handleCreate = () => {
-    if (!newName.trim()) return
-    createDiagram.mutate(
-      { name: newName.trim(), type: newType },
-      {
-        onSuccess: (diagram) => {
-          setShowCreate(false)
-          setNewName('')
-          navigate(`/diagram/${diagram.id}`)
-        },
-      },
-    )
-  }
+  // ── Drag-and-drop handlers ────────────────────────────────────────────────
+  const handleDragStart = useCallback((diagramId: string) => {
+    dragDiagramId.current = diagramId
+  }, [])
 
-  const sortedPacks: DiagramPack[] = [...packs].sort(
-    (a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name),
-  )
+  const handleDragOverFolder = useCallback((e: React.DragEvent, folderId: string) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setDragOverFolderId(folderId)
+  }, [])
+
+  const handleDragLeaveFolder = useCallback(() => {
+    setDragOverFolderId(null)
+  }, [])
+
+  const handleDropOnFolder = useCallback((folderId: string) => {
+    const diagramId = dragDiagramId.current
+    if (diagramId) {
+      setDiagramPack.mutate({ diagramId, packId: folderId })
+    }
+    dragDiagramId.current = null
+    setDragOverFolderId(null)
+  }, [setDiagramPack])
 
   // ── Header meta ──────────────────────────────────────────────────────────
-  const headerTitle = selectedTypeFilter
-    ? (TYPE_LABELS[selectedTypeFilter] ?? 'Filtered')
-    : 'All Diagrams'
-  const headerBreadcrumb = selectedTypeFilter ? `type / ${selectedTypeFilter}` : 'all diagrams'
+  const headerTitle = (() => {
+    if (selectedFolderFilter) {
+      return packs.find((p) => p.id === selectedFolderFilter)?.name ?? 'Folder'
+    }
+    if (selectedTypeFilter) {
+      return TYPE_LABELS[selectedTypeFilter] ?? 'Filtered'
+    }
+    return 'All Diagrams'
+  })()
+
+  const headerBreadcrumb = (() => {
+    if (selectedFolderFilter) return `folders / ${headerTitle.toLowerCase()}`
+    if (selectedTypeFilter) return `by type / ${selectedTypeFilter}`
+    return 'all diagrams'
+  })()
 
   const mostRecentUpdate = filtered[0]?.updated_at
   const metaLine = `${filtered.length} diagram${filtered.length !== 1 ? 's' : ''}${mostRecentUpdate ? ` · last updated ${timeAgo(mostRecentUpdate)}` : ''}`
@@ -273,7 +729,7 @@ export function DiagramsPage() {
         : 'text-text-2 hover:bg-surface hover:text-text-base',
     )
 
-  // ── Grouped table rows ────────────────────────────────────────────────────
+  // ── Grouped table rows (by type) ──────────────────────────────────────────
   const grouped = useMemo(() => {
     return ORDERED_TYPES.map((type) => ({
       type,
@@ -281,12 +737,6 @@ export function DiagramsPage() {
       items: filtered.filter((d) => d.type === type),
     })).filter((g) => g.items.length > 0)
   }, [filtered])
-
-  // ── Pack management (preserve) ────────────────────────────────────────────
-  const packMap: Record<string, typeof filtered> = {}
-  for (const p of sortedPacks) {
-    packMap[p.id] = filtered.filter((d) => d.pack_id === p.id)
-  }
 
   return (
     <div className="flex h-screen bg-bg text-text-base">
@@ -301,9 +751,9 @@ export function DiagramsPage() {
           <aside className="w-[260px] flex-shrink-0 bg-panel border-r border-border-base flex flex-col overflow-hidden">
 
             {/* Sidebar header */}
-            <div className="p-4 border-b border-border-base flex items-center justify-between flex-shrink-0">
+            <div className="px-4 py-3 border-b border-border-base flex items-center justify-between flex-shrink-0">
               <div className="flex items-center gap-2 text-text-base">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
                   <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
                 </svg>
                 <span className="text-[13px] font-medium">Diagrams</span>
@@ -311,7 +761,7 @@ export function DiagramsPage() {
               <Button
                 size="icon"
                 variant="ghost"
-                onClick={() => setShowCreate(true)}
+                onClick={() => setCreateOpen(true)}
                 title="New diagram"
               >
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -323,97 +773,158 @@ export function DiagramsPage() {
             {/* Sidebar scroll body */}
             <div className="flex-1 overflow-y-auto p-3 space-y-4">
 
-              {/* Pinned section */}
-              <div>
-                <SectionLabel counter={diagrams.filter((d) => d.pinned).length} className="mb-2 px-2">
-                  Pinned
-                </SectionLabel>
+              {/* All diagrams + Pinned quick links */}
+              <div className="space-y-0.5">
+                {/* All diagrams */}
                 <div
-                  className={treeItemCls(selectedTypeFilter === '__recent__')}
+                  className={treeItemCls(!selectedTypeFilter && !selectedFolderFilter && !search)}
+                  onClick={() => { setSelectedTypeFilter(null); setSelectedFolderFilter(null) }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                    <rect x="3" y="3" width="18" height="18" rx="2"/>
+                    <path d="M3 9h18M9 9v12"/>
+                  </svg>
+                  <span className="flex-1">All diagrams</span>
+                  <span className="font-mono text-[10.5px] text-text-3">{diagrams.length}</span>
+                </div>
+
+                {/* Pinned */}
+                <div
+                  className={treeItemCls(selectedTypeFilter === '__pinned__')}
                   onClick={() => setSelectedTypeFilter(
-                    selectedTypeFilter === '__recent__' ? null : '__recent__'
+                    selectedTypeFilter === '__pinned__' ? null : '__pinned__'
                   )}
                 >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="12" r="10"/>
-                    <path d="M12 6v6l4 2"/>
-                  </svg>
-                  <span className="flex-1">Recent</span>
+                  <IconPin filled={false} />
+                  <span className="flex-1">Pinned</span>
                   <span className="font-mono text-[10.5px] text-text-3">
                     {diagrams.filter((d) => d.pinned).length}
                   </span>
                 </div>
               </div>
 
-              {/* Packs section — grouped by type */}
+              {/* ── Folders section (real workspace packs) ──────────────── */}
               <div>
-                <SectionLabel counter={ORDERED_TYPES.length} className="mb-2 px-2">
-                  Packs
-                </SectionLabel>
-                <div className="space-y-0.5">
-                  {ORDERED_TYPES.map((type) => {
-                    const count = countByType[type] ?? 0
-                    if (count === 0) return null
-                    const color = TYPE_COLOR[type]?.folder ?? '#71717a'
-                    const isActive = selectedTypeFilter === type
-                    return (
-                      <div
-                        key={type}
-                        className={treeItemCls(isActive)}
-                        onClick={() => setSelectedTypeFilter(isActive ? null : type)}
-                      >
-                        <ChevronDown />
-                        <FolderIcon color={color} />
-                        <span className="flex-1 truncate">{TYPE_LABELS[type] ?? type}</span>
-                        <span className="font-mono text-[10.5px] text-text-3">{count}</span>
-                      </div>
-                    )
-                  })}
-                </div>
-
-                {/* Admin: new pack input */}
-                {isAdmin && (
-                  <div className="mt-1">
-                    {showNewPackInput ? (
-                      <div className="flex items-center gap-1 px-2 py-1">
-                        <input
-                          autoFocus
-                          value={newPackName}
-                          onChange={(e) => setNewPackName(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') handleCreatePack()
-                            if (e.key === 'Escape') { setShowNewPackInput(false); setNewPackName('') }
-                          }}
-                          placeholder="Pack name…"
-                          className="flex-1 bg-surface border border-border-base rounded px-2 py-0.5 text-[11.5px] outline-none focus:border-border-hi font-mono"
-                        />
-                        <button onClick={handleCreatePack} className="text-[11px] text-text-3 hover:text-text-base px-1">Save</button>
-                        <button onClick={() => { setShowNewPackInput(false); setNewPackName('') }} className="text-[11px] text-text-4 hover:text-text-3 px-1">✕</button>
-                      </div>
-                    ) : (
+                <div className="flex items-center justify-between px-2 mb-2">
+                  <span className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-text-3">
+                    Folders
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <span className="font-mono text-[10.5px] text-text-4">{sortedPacks.length}</span>
+                    {isAdmin && (
                       <button
-                        onClick={() => setShowNewPackInput(true)}
-                        className="w-full text-left text-[12px] text-text-4 hover:text-text-3 px-2 py-1 transition-colors"
+                        onClick={() => setShowCreateFolder(true)}
+                        title="New folder"
+                        className="w-5 h-5 flex items-center justify-center rounded text-text-4 hover:text-text-base hover:bg-surface-hi transition-colors ml-1"
                       >
-                        + New pack
+                        <IconPlusSm />
                       </button>
                     )}
+                  </div>
+                </div>
+
+                <div className="space-y-0.5">
+                  {sortedPacks.map((pack) => {
+                    const count = countByPack[pack.id] ?? 0
+                    return (
+                      <FolderTreeItem
+                        key={pack.id}
+                        pack={pack}
+                        count={count}
+                        isActive={selectedFolderFilter === pack.id}
+                        isRenaming={renamingPack === pack.id}
+                        renameValue={renameValue}
+                        isAdmin={isAdmin}
+                        isDragOver={dragOverFolderId === pack.id}
+                        onClick={() => {
+                          setSelectedFolderFilter(
+                            selectedFolderFilter === pack.id ? null : pack.id,
+                          )
+                          setSelectedTypeFilter(null)
+                        }}
+                        onRenameStart={() => { setRenamingPack(pack.id); setRenameValue(pack.name) }}
+                        onRenameChange={setRenameValue}
+                        onRenameCommit={() => handleRenamePack(pack.id)}
+                        onRenameCancel={() => { setRenamingPack(null); setRenameValue('') }}
+                        onDelete={() => deletePack.mutate(pack.id)}
+                        onDragOver={(e) => handleDragOverFolder(e, pack.id)}
+                        onDragLeave={handleDragLeaveFolder}
+                        onDrop={() => handleDropOnFolder(pack.id)}
+                      />
+                    )
+                  })}
+
+                  {sortedPacks.length === 0 && (
+                    <div className="px-2 py-2 text-[11.5px] text-text-4 italic">
+                      No folders yet
+                      {isAdmin && (
+                        <button
+                          onClick={() => setShowCreateFolder(true)}
+                          className="ml-1 text-text-3 hover:text-text-base underline underline-offset-2 transition-colors"
+                        >
+                          Create one
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* ── By type section ─────────────────────────────────────── */}
+              <div>
+                <button
+                  onClick={() => setShowByType((v) => !v)}
+                  className="flex items-center gap-1.5 px-2 mb-2 w-full group"
+                >
+                  <span className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-text-3">
+                    By type
+                  </span>
+                  <svg
+                    width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                    className={cn('text-text-4 transition-transform duration-150', showByType ? '' : '-rotate-90')}
+                  >
+                    <path d="m6 9 6 6 6-6"/>
+                  </svg>
+                </button>
+
+                {showByType && (
+                  <div className="space-y-0.5">
+                    {ORDERED_TYPES.map((type) => {
+                      const count = countByType[type] ?? 0
+                      if (count === 0) return null
+                      const color = TYPE_COLOR[type]?.folder ?? '#71717a'
+                      const isActive = selectedTypeFilter === type && !selectedFolderFilter
+                      return (
+                        <div
+                          key={type}
+                          className={treeItemCls(isActive)}
+                          onClick={() => {
+                            setSelectedFolderFilter(null)
+                            setSelectedTypeFilter(isActive ? null : type)
+                          }}
+                        >
+                          <FolderIcon color={color} />
+                          <span className="flex-1 truncate">{TYPE_LABELS[type] ?? type}</span>
+                          <span className="font-mono text-[10.5px] text-text-3">{count}</span>
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
               </div>
 
-              {/* C4 Level filter */}
+              {/* ── C4 Level filter ──────────────────────────────────────── */}
               <div>
                 <SectionLabel className="mb-2 px-2">C4 Level filter</SectionLabel>
                 <div className="space-y-0.5">
                   {countByLevel.map(({ level, label, types, count }) => {
-                    const isActive = types.some((t) => t === selectedTypeFilter)
+                    const isActive = types.some((t) => t === selectedTypeFilter) && !selectedFolderFilter
                     return (
                       <div
                         key={level}
                         className={treeItemCls(isActive)}
                         onClick={() => {
-                          // toggle: if already selected, clear; else set first type of this level
+                          setSelectedFolderFilter(null)
                           if (isActive) {
                             setSelectedTypeFilter(null)
                           } else {
@@ -429,62 +940,6 @@ export function DiagramsPage() {
                   })}
                 </div>
               </div>
-
-              {/* Pack list (real packs from API) */}
-              {sortedPacks.length > 0 && (
-                <div>
-                  <SectionLabel counter={sortedPacks.length} className="mb-2 px-2">
-                    Workspace packs
-                  </SectionLabel>
-                  <div className="space-y-0.5">
-                    {sortedPacks.map((pack) => {
-                      const count = packMap[pack.id]?.length ?? 0
-                      const isRenaming = renamingPack === pack.id
-                      return (
-                        <div key={pack.id} className="group">
-                          {isRenaming ? (
-                            <div className="flex items-center gap-1 px-2 py-1">
-                              <input
-                                autoFocus
-                                value={renameValue}
-                                onChange={(e) => setRenameValue(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') handleRenamePack(pack.id)
-                                  if (e.key === 'Escape') { setRenamingPack(null); setRenameValue('') }
-                                }}
-                                className="flex-1 bg-surface border border-border-base rounded px-1.5 py-0.5 text-[11.5px] outline-none focus:border-border-hi font-mono"
-                              />
-                              <button onClick={() => handleRenamePack(pack.id)} className="text-[10px] text-text-3 hover:text-text-base px-1">Save</button>
-                              <button onClick={() => { setRenamingPack(null); setRenameValue('') }} className="text-[10px] text-text-4 px-1">✕</button>
-                            </div>
-                          ) : (
-                            <div className={treeItemCls(false)}>
-                              <ChevronDown />
-                              <FolderIcon color="#71717a" />
-                              <span className="flex-1 truncate">{pack.name}</span>
-                              <span className="font-mono text-[10.5px] text-text-3">{count}</span>
-                              {isAdmin && (
-                                <div className="hidden group-hover:flex items-center gap-0.5 ml-1" onClick={(e) => e.stopPropagation()}>
-                                  <button
-                                    onClick={() => { setRenamingPack(pack.id); setRenameValue(pack.name) }}
-                                    className="text-[10px] text-text-4 hover:text-text-3 px-0.5"
-                                    title="Rename"
-                                  >✎</button>
-                                  <button
-                                    onClick={() => { if (confirm(`Delete pack "${pack.name}"?`)) deletePack.mutate(pack.id) }}
-                                    className="text-[10px] text-text-4 hover:text-red-400 px-0.5"
-                                    title="Delete"
-                                  >✕</button>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
             </div>
           </aside>
 
@@ -561,7 +1016,7 @@ export function DiagramsPage() {
                 {/* New diagram */}
                 <Button
                   variant="primary"
-                  onClick={() => setShowCreate(true)}
+                  onClick={() => setCreateOpen(true)}
                   leftIcon={
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                       <path d="M12 5v14M5 12h14"/>
@@ -573,45 +1028,36 @@ export function DiagramsPage() {
               </div>
             </div>
 
-            {/* Create modal (inline, preserved behavior) */}
-            {showCreate && (
-              <div className="mx-8 mt-4 bg-panel border border-border-base rounded-lg p-4 max-w-lg flex-shrink-0">
-                <div className="text-[13px] font-medium mb-3 text-text-base">New diagram</div>
-                <input
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  placeholder="Diagram name…"
-                  autoFocus
-                  onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
-                  className="w-full bg-surface border border-border-base rounded px-3 py-1.5 text-[13px] outline-none focus:border-border-hi mb-2 text-text-base placeholder:text-text-4"
-                />
-                <select
-                  value={newType}
-                  onChange={(e) => setNewType(e.target.value)}
-                  className="w-full bg-surface border border-border-base rounded px-3 py-1.5 text-[13px] outline-none focus:border-border-hi mb-3 text-text-base"
-                >
-                  {Object.entries(DIAGRAM_TYPE_LABELS_FOR_CREATE).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </select>
-                <div className="flex gap-2">
-                  <Button variant="primary" onClick={handleCreate}>Create</Button>
-                  <Button onClick={() => { setShowCreate(false); setNewName('') }}>Cancel</Button>
-                </div>
-              </div>
-            )}
-
             {isLoading && (
               <div className="px-8 py-4 text-[12.5px] text-text-3">Loading…</div>
             )}
 
+            {/* ── Folder empty state ─────────────────────────────────── */}
+            {selectedFolderFilter && filtered.length === 0 && !isLoading && (
+              <div
+                className="mx-8 mt-8 border-2 border-dashed border-border-base rounded-xl p-10 flex flex-col items-center gap-2 text-center"
+                onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }}
+                onDrop={() => {
+                  const diagramId = dragDiagramId.current
+                  if (diagramId) {
+                    setDiagramPack.mutate({ diagramId, packId: selectedFolderFilter })
+                  }
+                  dragDiagramId.current = null
+                }}
+              >
+                <FolderIcon color={folderColorFromName(packs.find((p) => p.id === selectedFolderFilter)?.name ?? '')} />
+                <div className="text-[13px] text-text-3 mt-1">No diagrams in this folder</div>
+                <div className="text-[11.5px] text-text-4">Drop diagrams here to add them</div>
+              </div>
+            )}
+
             {/* ── List view ─────────────────────────────────────────────── */}
-            {view === 'list' && !isLoading && (
+            {view === 'list' && !isLoading && (filtered.length > 0 || !selectedFolderFilter) && (
               <div className="flex-1 overflow-y-auto">
                 {/* Column header */}
                 <div
                   className="sticky top-0 bg-panel z-10 px-8 py-2 grid gap-3 border-b border-border-base"
-                  style={{ gridTemplateColumns: '1.5rem 2fr 1fr 0.7fr 1fr 5rem' }}
+                  style={{ gridTemplateColumns: '1.5rem 2fr 1fr 0.7fr 1fr 7rem' }}
                 >
                   <div />
                   {(['DIAGRAM', 'TYPE', 'LEVEL', 'UPDATED', 'STATUS'] as const).map((col) => (
@@ -621,13 +1067,14 @@ export function DiagramsPage() {
                   ))}
                 </div>
 
-                {/* Grouped rows */}
-                {grouped.length === 0 && (
+                {/* Empty state */}
+                {grouped.length === 0 && !selectedFolderFilter && (
                   <div className="px-8 py-6 text-[12.5px] text-text-3 italic">
                     No diagrams match the current filter.
                   </div>
                 )}
 
+                {/* Grouped rows */}
                 {grouped.map(({ type, label, items }) => (
                   <div key={type}>
                     {/* Group header */}
@@ -648,8 +1095,10 @@ export function DiagramsPage() {
                       return (
                         <div
                           key={d.id}
+                          draggable
+                          onDragStart={() => handleDragStart(d.id)}
                           className="grid gap-3 px-8 py-2.5 items-center border-b border-border-base cursor-pointer text-[13px] hover:bg-surface transition-colors duration-[80ms] group"
-                          style={{ gridTemplateColumns: '1.5rem 2fr 1fr 0.7fr 1fr 5rem' }}
+                          style={{ gridTemplateColumns: '1.5rem 2fr 1fr 0.7fr 1fr 7rem' }}
                           onClick={() => navigate(`/diagram/${d.id}`)}
                         >
                           {/* Icon well */}
@@ -680,33 +1129,36 @@ export function DiagramsPage() {
                           <div className="font-mono text-[11.5px] text-text-3">{timeAgo(d.updated_at)}</div>
 
                           {/* Status + row actions */}
-                          <div className="flex items-center justify-end gap-2">
+                          <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
                             <StatusPill status={status}>
                               {status === 'done' ? 'LIVE' : status.toUpperCase()}
                             </StatusPill>
-                            {/* 3-dot menu on hover */}
-                            <div
-                              className="hidden group-hover:flex items-center gap-1"
-                              onClick={(e) => e.stopPropagation()}
+
+                            {/* Pin toggle — hover-reveal */}
+                            <button
+                              onClick={() => updateDiagram.mutate({ id: d.id, pinned: !d.pinned })}
+                              title={d.pinned ? 'Unpin' : 'Pin'}
+                              className={cn(
+                                'w-6 h-6 flex items-center justify-center rounded transition-all',
+                                d.pinned
+                                  ? 'text-coral opacity-100'
+                                  : 'opacity-0 group-hover:opacity-100 text-text-3 hover:text-text-base hover:bg-surface-hi',
+                              )}
                             >
-                              <PackMoveMenu
+                              <IconPin filled={d.pinned} />
+                            </button>
+
+                            {/* 3-dot row menu — hover-reveal */}
+                            <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                              <RowMenu
                                 packs={packs}
                                 currentPackId={d.pack_id}
-                                onSelect={(packId) => setDiagramPack.mutate({ diagramId: d.id, packId })}
+                                isPinned={d.pinned}
+                                diagramName={d.name}
+                                onMoveToFolder={(packId) => setDiagramPack.mutate({ diagramId: d.id, packId })}
+                                onTogglePin={() => updateDiagram.mutate({ id: d.id, pinned: !d.pinned })}
+                                onDelete={() => deleteDiagram.mutate(d.id)}
                               />
-                              <button
-                                onClick={() => updateDiagram.mutate({ id: d.id, pinned: !d.pinned })}
-                                title={d.pinned ? 'Unpin' : 'Pin'}
-                                className="text-[10px] text-text-4 hover:text-text-3"
-                              >
-                                {d.pinned ? '📌' : '📍'}
-                              </button>
-                              <button
-                                onClick={() => { if (confirm(`Delete "${d.name}"?`)) deleteDiagram.mutate(d.id) }}
-                                className="text-[10px] text-text-4 hover:text-red-400"
-                              >
-                                ✕
-                              </button>
                             </div>
                           </div>
                         </div>
@@ -724,19 +1176,50 @@ export function DiagramsPage() {
                   {filtered.map((d) => {
                     const status = diagramStatus(d)
                     return (
-                      <PreviewCard
+                      <div
                         key={d.id}
-                        name={d.name}
-                        typeLabel={TYPE_LABELS[d.type] ?? d.type}
-                        slug={slugify(d.name)}
-                        updatedLabel={timeAgo(d.updated_at)}
-                        status={status}
-                        isModified={!!d.draft_id}
-                        onClick={() => navigate(`/diagram/${d.id}`)}
-                      />
+                        draggable
+                        onDragStart={() => handleDragStart(d.id)}
+                        className="relative group"
+                      >
+                        <PreviewCard
+                          name={d.name}
+                          typeLabel={TYPE_LABELS[d.type] ?? d.type}
+                          slug={slugify(d.name)}
+                          updatedLabel={timeAgo(d.updated_at)}
+                          status={status}
+                          isModified={!!d.draft_id}
+                          onClick={() => navigate(`/diagram/${d.id}`)}
+                        />
+                        {/* Card overlay actions */}
+                        <div
+                          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            onClick={() => updateDiagram.mutate({ id: d.id, pinned: !d.pinned })}
+                            title={d.pinned ? 'Unpin' : 'Pin'}
+                            className={cn(
+                              'w-6 h-6 flex items-center justify-center rounded bg-panel/80 backdrop-blur-sm border border-border-base transition-colors',
+                              d.pinned ? 'text-coral' : 'text-text-3 hover:text-text-base',
+                            )}
+                          >
+                            <IconPin filled={d.pinned} />
+                          </button>
+                          <RowMenu
+                            packs={packs}
+                            currentPackId={d.pack_id}
+                            isPinned={d.pinned}
+                            diagramName={d.name}
+                            onMoveToFolder={(packId) => setDiagramPack.mutate({ diagramId: d.id, packId })}
+                            onTogglePin={() => updateDiagram.mutate({ id: d.id, pinned: !d.pinned })}
+                            onDelete={() => deleteDiagram.mutate(d.id)}
+                          />
+                        </div>
+                      </div>
                     )
                   })}
-                  {filtered.length === 0 && (
+                  {filtered.length === 0 && !selectedFolderFilter && (
                     <div className="col-span-3 text-[12.5px] text-text-3 italic py-6">
                       No diagrams match the current filter.
                     </div>
@@ -749,7 +1232,7 @@ export function DiagramsPage() {
             <div className="px-8 py-2 border-t border-border-base flex items-center justify-between flex-shrink-0">
               <span className="font-mono text-[11px] text-text-3">
                 {filtered.length} total
-                {selectedTypeFilter || search ? ` · ${filtered.length} filtered` : ''}
+                {selectedTypeFilter || selectedFolderFilter || search ? ` · ${filtered.length} filtered` : ''}
                 {' '}· {diagrams.length} in workspace
               </span>
               <div className="flex items-center gap-1.5 font-mono text-[10.5px] text-text-3">
@@ -762,60 +1245,22 @@ export function DiagramsPage() {
           </section>
         </div>
       </div>
-    </div>
-  )
-}
 
-// ─── PackMoveMenu (preserved) ─────────────────────────────────────────────────
+      {/* ── Create folder modal ──────────────────────────────────────────── */}
+      <CreateFolderModal
+        open={showCreateFolder}
+        onClose={() => setShowCreateFolder(false)}
+        onCreate={handleCreatePack}
+        isPending={createPack.isPending}
+      />
 
-function PackMoveMenu({
-  packs,
-  currentPackId,
-  onSelect,
-}: {
-  packs: DiagramPack[]
-  currentPackId: string | null
-  onSelect: (packId: string | null) => void
-}) {
-  const [open, setOpen] = useState(false)
-
-  return (
-    <div className="relative">
-      <button
-        onClick={(e) => { e.stopPropagation(); setOpen((v) => !v) }}
-        className="text-[10px] text-text-4 hover:text-text-3"
-        title="Move to pack"
-      >
-        ⋯
-      </button>
-      {open && (
-        <div
-          className="absolute right-0 top-full mt-1 z-20 bg-panel border border-border-base rounded-md shadow-lg min-w-[140px]"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            className={cn(
-              'w-full text-left px-3 py-1.5 text-[11.5px] hover:bg-surface transition-colors',
-              currentPackId === null ? 'text-coral' : 'text-text-2',
-            )}
-            onClick={() => { onSelect(null); setOpen(false) }}
-          >
-            Unfiled
-          </button>
-          {packs.map((p) => (
-            <button
-              key={p.id}
-              className={cn(
-                'w-full text-left px-3 py-1.5 text-[11.5px] hover:bg-surface transition-colors',
-                currentPackId === p.id ? 'text-coral' : 'text-text-2',
-              )}
-              onClick={() => { onSelect(p.id); setOpen(false) }}
-            >
-              {p.name}
-            </button>
-          ))}
-        </div>
-      )}
+      {/* ── New diagram modal ─────────────────────────────────────────────── */}
+      <NewDiagramModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        defaultPackId={selectedFolderFilter}
+        onCreated={(d) => navigate(`/diagram/${d.id}`)}
+      />
     </div>
   )
 }
