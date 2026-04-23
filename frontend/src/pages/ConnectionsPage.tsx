@@ -15,7 +15,7 @@ export function ConnectionsPage() {
       source: objectMap.get(c.source_id)?.name || '—',
       target: objectMap.get(c.target_id)?.name || '—',
       label: c.label,
-      protocol: c.protocol,
+      protocol_id: c.protocol_id,
       direction: c.direction,
     }))
   }, [connections, objectMap])
@@ -28,7 +28,7 @@ export function ConnectionsPage() {
         r.source.toLowerCase().includes(q) ||
         r.target.toLowerCase().includes(q) ||
         r.label?.toLowerCase().includes(q) ||
-        r.protocol?.toLowerCase().includes(q),
+        r.protocol_id?.toLowerCase().includes(q),
     )
   }, [rows, search])
 
@@ -73,7 +73,7 @@ export function ConnectionsPage() {
                     {r.direction === 'bidirectional' ? '⇄ bidirectional' : '→ outgoing'}
                   </td>
                   <td className="px-4 py-2 text-neutral-400 text-xs">{r.label || '—'}</td>
-                  <td className="px-4 py-2 text-neutral-400 text-xs">{r.protocol || '—'}</td>
+                  <td className="px-4 py-2 text-neutral-400 text-xs">{r.protocol_id || '—'}</td>
                 </tr>
               ))}
             </tbody>

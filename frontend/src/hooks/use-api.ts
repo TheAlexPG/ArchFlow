@@ -37,6 +37,10 @@ import type {
   ModelObject,
   ObjectCreate,
   ObjectUpdate,
+  TechCategory,
+  Technology,
+  TechnologyCreate,
+  TechnologyUpdate,
 } from '../types/model'
 import { api } from '../lib/api-client'
 
@@ -1295,6 +1299,85 @@ export function useMarkAllNotificationsRead() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['notifications'] })
+    },
+  })
+}
+
+// ─── Technology catalog ──────────────────────────────────
+
+export interface UseTechnologiesParams {
+  q?: string
+  category?: TechCategory
+  scope?: 'all' | 'builtin' | 'custom'
+}
+
+export function useTechnologies(
+  workspaceId: string | null | undefined,
+  params: UseTechnologiesParams = {},
+) {
+  const { q, category, scope } = params
+  return useQuery({
+    queryKey: ['technologies', workspaceId, { q, category, scope }],
+    queryFn: async () => {
+      const { data } = await api.get<Technology[]>(
+        `/workspaces/${workspaceId}/technologies`,
+        { params: { q, category, scope } },
+      )
+      return data
+    },
+    enabled: !!workspaceId,
+    // Built-in catalog is effectively static — cache it generously so the
+    // picker opens instantly. WS events on custom mutations invalidate.
+    staleTime: 5 * 60 * 1000,
+  })
+}
+
+export function useCreateCustomTechnology(workspaceId: string | null | undefined) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (payload: TechnologyCreate) => {
+      const { data } = await api.post<Technology>(
+        `/workspaces/${workspaceId}/technologies`,
+        payload,
+      )
+      return data
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['technologies', workspaceId] })
+    },
+  })
+}
+
+export function useUpdateCustomTechnology(workspaceId: string | null | undefined) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({
+      id,
+      update,
+    }: {
+      id: string
+      update: TechnologyUpdate
+    }) => {
+      const { data } = await api.patch<Technology>(
+        `/workspaces/${workspaceId}/technologies/${id}`,
+        update,
+      )
+      return data
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['technologies', workspaceId] })
+    },
+  })
+}
+
+export function useDeleteCustomTechnology(workspaceId: string | null | undefined) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await api.delete(`/workspaces/${workspaceId}/technologies/${id}`)
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['technologies', workspaceId] })
     },
   })
 }

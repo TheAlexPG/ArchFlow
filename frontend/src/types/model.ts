@@ -32,7 +32,7 @@ export interface ModelObject {
   description: string | null
   icon: string | null
   parent_id: string | null
-  technology: string[] | null
+  technology_ids: string[] | null
   tags: string[] | null
   owner_team: string | null
   external_links: Record<string, string> | null
@@ -46,7 +46,7 @@ export interface Connection {
   source_id: string
   target_id: string
   label: string | null
-  protocol: string | null
+  protocol_id: string | null
   direction: ConnectionDirection
   tags: string[] | null
   source_handle: string | null
@@ -60,12 +60,59 @@ export interface Connection {
 
 export interface ConnectionUpdate {
   label?: string | null
-  protocol?: string | null
+  protocol_id?: string | null
   direction?: ConnectionDirection
   tags?: string[] | null
   shape?: EdgeShape
   label_size?: number
   via_object_ids?: string[] | null
+}
+
+export type TechCategory =
+  | 'language'
+  | 'framework'
+  | 'database'
+  | 'cloud'
+  | 'saas'
+  | 'tool'
+  | 'protocol'
+  | 'other'
+
+export interface Technology {
+  id: string
+  workspace_id: string | null
+  slug: string
+  name: string
+  iconify_name: string
+  category: TechCategory
+  color: string | null
+  aliases: string[] | null
+  created_by_user_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface TechnologyCreate {
+  name: string
+  slug?: string | null
+  iconify_name: string
+  category: TechCategory
+  color?: string | null
+  aliases?: string[] | null
+}
+
+export interface TechnologyUpdate {
+  name?: string | null
+  iconify_name?: string | null
+  category?: TechCategory
+  color?: string | null
+  aliases?: string[] | null
+}
+
+export interface TechnologyDeleteConflict {
+  object_refs: number
+  connection_refs: number
+  detail: string
 }
 
 export interface DiagramPack {
@@ -107,7 +154,7 @@ export interface ObjectCreate {
   description?: string | null
   icon?: string | null
   parent_id?: string | null
-  technology?: string[] | null
+  technology_ids?: string[] | null
   tags?: string[] | null
   owner_team?: string | null
   metadata?: Record<string, unknown> | null
@@ -121,7 +168,7 @@ export interface ObjectUpdate {
   description?: string | null
   icon?: string | null
   parent_id?: string | null
-  technology?: string[] | null
+  technology_ids?: string[] | null
   tags?: string[] | null
   owner_team?: string | null
   metadata?: Record<string, unknown> | null
@@ -131,7 +178,7 @@ export interface ConnectionCreate {
   source_id: string
   target_id: string
   label?: string | null
-  protocol?: string | null
+  protocol_id?: string | null
   direction?: ConnectionDirection
   tags?: string[] | null
   source_handle?: string | null

@@ -48,7 +48,10 @@ export function C4Edge({
   }
 
   const label = (data as Record<string, unknown>)?.label as string | undefined
-  const protocol = (data as Record<string, unknown>)?.protocol as string | undefined
+  // TODO(tech-catalog): resolve protocol_id → Technology.name via the
+  // catalog so the label renders a human string (M7). For now shows the
+  // raw UUID if present.
+  const protocol = (data as Record<string, unknown>)?.protocol_id as string | undefined
   const flowStep = (data as Record<string, unknown>)?.flowStep as number | null | undefined
   const flowCurrent = (data as Record<string, unknown>)?.flowCurrent as boolean | undefined
 

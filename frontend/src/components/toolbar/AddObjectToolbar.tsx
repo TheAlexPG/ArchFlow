@@ -90,7 +90,8 @@ export function AddObjectToolbar({ diagramId }: AddObjectToolbarProps) {
       (o) =>
         o.name.toLowerCase().includes(q) ||
         o.description?.toLowerCase().includes(q) ||
-        o.technology?.some((t) => t.toLowerCase().includes(q)),
+        // TODO(tech-catalog): match by resolved catalog name/aliases (M7).
+        o.technology_ids?.some((t) => t.toLowerCase().includes(q)),
     )
   }, [objects, search])
 
@@ -223,7 +224,7 @@ export function AddObjectToolbar({ diagramId }: AddObjectToolbarProps) {
                         title={
                           inDiagram
                             ? 'Already in this diagram'
-                            : `${TYPE_LABELS[obj.type]}${obj.technology ? ` — ${obj.technology.join(', ')}` : ''}`
+                            : `${TYPE_LABELS[obj.type]}${obj.technology_ids ? ` — ${obj.technology_ids.join(', ')}` : ''}`
                         }
                       >
                         <span style={{ opacity: 0.5 }}>{TYPE_ICONS[obj.type]}</span>

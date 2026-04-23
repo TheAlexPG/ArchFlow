@@ -44,7 +44,9 @@ export function EdgeSidebar({ diagramId }: EdgeSidebarProps) {
   useEffect(() => {
     if (conn) {
       setLabel(conn.label || '')
-      setProtocol(conn.protocol || '')
+      // TODO(tech-catalog): swap this free-text input for TechnologyPicker
+      // (M7). For now the input shows the raw protocol UUID if any.
+      setProtocol(conn.protocol_id || '')
     }
   }, [conn])
 
@@ -215,7 +217,7 @@ export function EdgeSidebar({ diagramId }: EdgeSidebarProps) {
           <input
             value={protocol}
             onChange={(e) => setProtocol(e.target.value)}
-            onBlur={() => handleUpdate({ protocol: protocol || null })}
+            onBlur={() => handleUpdate({ protocol_id: protocol || null })}
             placeholder="REST, gRPC, WebSocket..."
             className="bg-neutral-800 text-neutral-200 text-sm rounded px-2 py-1 w-full border border-neutral-700"
           />

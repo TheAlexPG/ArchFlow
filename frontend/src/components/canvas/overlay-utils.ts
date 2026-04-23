@@ -23,7 +23,7 @@ export function extractFilterValue(obj: ModelObject, dim: FilterDim): string | n
   if (dim === 'status') return obj.status
   if (dim === 'teams') return obj.owner_team || null
   if (dim === 'tags') return obj.tags?.[0] || null
-  if (dim === 'technology') return obj.technology?.[0] || null
+  if (dim === 'technology') return obj.technology_ids?.[0] || null
   return null
 }
 
@@ -64,7 +64,7 @@ export function collectLegend(
   for (const obj of objects) {
     const values: string[] = []
     if (dim === 'tags') values.push(...(obj.tags || []))
-    else if (dim === 'technology') values.push(...(obj.technology || []))
+    else if (dim === 'technology') values.push(...(obj.technology_ids || []))
     else {
       const v = extractFilterValue(obj, dim)
       if (v) values.push(v)

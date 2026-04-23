@@ -66,7 +66,7 @@ function connectionToEdge(conn: Connection): Edge {
       : undefined,
     data: {
       label: conn.label,
-      protocol: conn.protocol,
+      protocol_id: conn.protocol_id,
       shape: conn.shape,
       labelSize: conn.label_size,
     },

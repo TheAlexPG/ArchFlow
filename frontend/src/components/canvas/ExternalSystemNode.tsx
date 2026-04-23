@@ -51,9 +51,10 @@ export function ExternalSystemNode({ data, selected }: NodeProps) {
         />
       )}
 
-      {obj.technology && obj.technology.length > 0 && (
+      {/* TODO(tech-catalog): replace UUID list with TechBadge row (M7). */}
+      {obj.technology_ids && obj.technology_ids.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8 }}>
-          {obj.technology.map((tech) => (
+          {obj.technology_ids.map((tech) => (
             <span
               key={tech}
               style={{

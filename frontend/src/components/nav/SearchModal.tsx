@@ -45,7 +45,8 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
         (o) =>
           o.name.toLowerCase().includes(q) ||
           o.description?.toLowerCase().includes(q) ||
-          o.technology?.some((t) => t.toLowerCase().includes(q)),
+          // TODO(tech-catalog): match by resolved catalog name/aliases (M7).
+          o.technology_ids?.some((t) => t.toLowerCase().includes(q)),
       )
     : []
   const filteredDiagrams = q
@@ -120,9 +121,10 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
                 >
                   <span style={{ opacity: 0.5 }}>{TYPE_ICONS[o.type as ObjectType]}</span>
                   {o.name}
-                  {o.technology && o.technology.length > 0 && (
+                  {/* TODO(tech-catalog): render TechBadge row (M7). */}
+                  {o.technology_ids && o.technology_ids.length > 0 && (
                     <span style={{ fontSize: 10, color: '#525252' }}>
-                      {o.technology.join(', ')}
+                      {o.technology_ids.join(', ')}
                     </span>
                   )}
                 </div>

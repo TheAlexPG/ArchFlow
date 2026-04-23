@@ -40,7 +40,10 @@ function matchesSearch(obj: ModelObject, query: string): boolean {
   return (
     obj.name.toLowerCase().includes(q) ||
     (obj.description?.toLowerCase().includes(q) ?? false) ||
-    (obj.technology?.some((t) => t.toLowerCase().includes(q)) ?? false)
+    // TODO(tech-catalog): resolve technology_ids against the catalog and
+    // match by display name/aliases (M7). Matching by UUID is useless to a
+    // user typing "postgres" but keeps the search from crashing.
+    (obj.technology_ids?.some((t) => t.toLowerCase().includes(q)) ?? false)
   )
 }
 

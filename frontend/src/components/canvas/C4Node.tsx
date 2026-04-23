@@ -244,9 +244,10 @@ export function C4Node({ data, selected }: NodeProps) {
       </div>
 
       {/* Technology tags */}
-      {obj.technology && obj.technology.length > 0 && (
+      {/* TODO(tech-catalog): replace UUID list with TechBadge row (M7). */}
+      {obj.technology_ids && obj.technology_ids.length > 0 && (
         <div className="flex flex-wrap gap-1 mt-2">
-          {obj.technology.map((tech) => (
+          {obj.technology_ids.map((tech) => (
             <span
               key={tech}
               className="text-[10px] px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-400"

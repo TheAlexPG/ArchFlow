@@ -19,7 +19,7 @@ export function ObjectsPage() {
       (o) =>
         o.name.toLowerCase().includes(q) ||
         o.description?.toLowerCase().includes(q) ||
-        o.technology?.some((t) => t.toLowerCase().includes(q)),
+        o.technology_ids?.some((t) => t.toLowerCase().includes(q)),
     )
   }, [objects, search])
 
@@ -99,7 +99,7 @@ function ObjectRow({ obj, onEdit }: { obj: ModelObject; onEdit: (id: string) => 
         </span>
       </td>
       <td className="px-4 py-2 text-neutral-400 text-xs">
-        {obj.technology?.join(', ') || '—'}
+        {obj.technology_ids?.join(', ') || '—'}
       </td>
       <td className="px-4 py-2 text-neutral-400 text-xs">{obj.owner_team || '—'}</td>
       <td className="px-4 py-2 text-xs">

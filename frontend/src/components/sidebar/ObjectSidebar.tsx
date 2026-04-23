@@ -189,10 +189,13 @@ export function ObjectSidebar({
             </Field>
 
             {/* Technology */}
+            {/* TODO(tech-catalog): swap TagEditor (free text) for
+                TechnologyPicker (M7) — the backend now stores UUIDs, so
+                until the picker lands this shows raw ids. */}
             <Field label="Technology">
               <TagEditor
-                tags={obj.technology || []}
-                onChange={(tags) => handleFieldChange('technology', tags)}
+                tags={obj.technology_ids || []}
+                onChange={(tags) => handleFieldChange('technology_ids', tags)}
                 placeholder="Add technology..."
               />
             </Field>
