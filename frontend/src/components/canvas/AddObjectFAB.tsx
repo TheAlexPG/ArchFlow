@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   useAddObjectToDiagram,
   useCreateObject,
@@ -348,6 +349,7 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
 
   // ── Close on click-outside / Escape ─────────────────────────────────────
   const containerRef = useRef<HTMLDivElement>(null)
+  const popupRef = useRef<HTMLDivElement>(null)
   const fabRef = useRef<HTMLButtonElement>(null)
 
   // Popup anchors its horizontal edge to the FAB's right side but floats to
@@ -368,7 +370,12 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
   useEffect(() => {
     if (!isOpen) return
     const handlePointerDown = (e: PointerEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      const target = e.target as Node
+      // Popup is portaled to <body> so we check both the FAB wrapper and
+      // the popup root for the outside-click test.
+      const inFab = containerRef.current?.contains(target)
+      const inPopup = popupRef.current?.contains(target)
+      if (!inFab && !inPopup) {
         setIsOpen(false)
       }
     }
@@ -433,9 +440,11 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
         <PlusIcon />
       </button>
 
-      {/* ── Popup ── */}
-      {isOpen && (
+      {/* ── Popup (portal to body so position:fixed is viewport-relative,
+          not relative to the transformed canvas-left wrapper) ── */}
+      {isOpen && createPortal(
         <div
+          ref={popupRef}
           className="add-popup flex flex-col"
           style={{
             position: 'fixed',
@@ -449,7 +458,7 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
             borderRadius: 12,
             boxShadow:
               '0 20px 60px -10px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.02)',
-            zIndex: 30,
+            zIndex: 60,
             overflow: 'hidden',
           }}
         >
@@ -678,7 +687,8 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
               {' '}add
             </span>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
       {/* ── New object name modal (replaces native prompt) ── */}
