@@ -136,6 +136,7 @@ export interface ConnectionCreate {
   tags?: string[] | null
   source_handle?: string | null
   target_handle?: string | null
+  shape?: EdgeShape
 }
 
 export type CommentTargetType = 'object' | 'connection' | 'diagram'

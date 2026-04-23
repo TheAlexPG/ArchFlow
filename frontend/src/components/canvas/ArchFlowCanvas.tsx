@@ -305,21 +305,42 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     matchesFilterValue,
   ])
 
-  // Filter connections to only those between objects in this diagram
+  // Sync connections → React Flow edges AND apply overlay/flow-playback styling.
+  //
+  // Both concerns are merged into one effect intentionally: the overlay effect
+  // (dependencyChain, filterDim, flowPlayback) and the connection-sync effect
+  // previously called setEdges independently.  When both fired in the same React
+  // render cycle (e.g. a flow is playing and a connection's direction changes),
+  // the overlay effect ran AFTER the sync effect, called getEdges() which still
+  // returned React Flow's committed pre-sync edges, and clobbered the freshly
+  // built edge list — causing direction / marker changes to visually revert.
+  // Merging into one effect guarantees a single setEdges call per render, so
+  // the clobber is structurally impossible.
   useEffect(() => {
     const objectIds = new Set(diagramObjects.map((d) => d.object_id))
     const filtered = connections.filter(
       (c) => objectIds.has(c.source_id) && objectIds.has(c.target_id),
     )
-    // Include all visual fields in key so edge re-renders when they change
-    const key = filtered
+
+    // ── Connection-structure key ──────────────────────────────────────────
+    // Include all visual fields so the edge rebuild runs whenever any of them
+    // change (not just direction or id).
+    const connKey = filtered
       .map(
         (c) =>
           `${c.id}:${c.shape}:${c.label_size}:${c.direction}:${c.label ?? ''}:${c.protocol ?? ''}:${c.source_handle ?? ''}:${c.target_handle ?? ''}`,
       )
       .join(',')
-    if (key === prevConnsRef.current) return
-    prevConnsRef.current = key
+
+    // ── Overlay/playback key ──────────────────────────────────────────────
+    // Captures the visual-only inputs that affect opacity / flowStep but do
+    // NOT change edge structure (id / markers / path shape).
+    const overlayKey = `${dependencyChain ? JSON.stringify([...dependencyChain.edges]) : ''}|${filterDim}|${flowPlayback?.currentConnId ?? ''}|${flowPlayback ? [...flowPlayback.stepNumbers.entries()].map(([k,v]) => k+':'+v).join(',') : ''}`
+
+    const combinedKey = connKey + '||' + overlayKey
+    if (combinedKey === prevConnsRef.current) return
+    prevConnsRef.current = combinedKey
+
     // Preserve selection state across re-renders + apply overlay opacity +
     // flow playback step number/highlight.
     const currentEdges = getEdges()
@@ -352,11 +373,11 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
         return existing?.selected ? { ...withStyle, selected: true } : withStyle
       }),
     )
-  }, [connections, diagramObjects, setEdges, getEdges, dependencyChain, flowPlayback])
+  }, [connections, diagramObjects, setEdges, getEdges, dependencyChain, flowPlayback, filterDim])
 
-  // Apply dimming + color overlay to existing nodes/edges whenever the
-  // dependency focus or active filter changes. For freshly-created nodes,
-  // the same styles are also applied during the main build effect.
+  // Apply dimming + color overlay to existing nodes whenever the dependency
+  // focus or active filter changes. Edges are handled by the effect above
+  // (merged to prevent a second setEdges call from clobbering direction changes).
   useEffect(() => {
     const currentNodes = getNodes()
     if (currentNodes.length > 0) {
@@ -380,33 +401,7 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
         }),
       )
     }
-    const currentEdges = getEdges()
-    if (currentEdges.length > 0) {
-      setEdges(
-        currentEdges.map((e) => {
-          const connId = ((e.data as { connId?: string })?.connId) ?? e.id
-          const flowStep = flowPlayback?.stepNumbers.get(connId)
-          const isCurrent = flowPlayback?.currentConnId === connId
-          const opacity = flowPlayback
-            ? flowStep
-              ? 1
-              : 0.1
-            : dependencyChain && !dependencyChain.edges.has(connId)
-              ? 0.15
-              : 1
-          return {
-            ...e,
-            style: { ...e.style, opacity },
-            data: {
-              ...(e.data || {}),
-              flowStep: flowStep ?? null,
-              flowCurrent: isCurrent,
-            },
-          }
-        }),
-      )
-    }
-  }, [dependencyChain, filterDim, flowPlayback, matchesFilterValue, getNodes, setNodes, getEdges, setEdges])
+  }, [dependencyChain, filterDim, matchesFilterValue, getNodes, setNodes])
 
   // ESC clears the dependencies focus overlay.
   useEffect(() => {
@@ -568,6 +563,7 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
           target_id: params.target,
           source_handle: params.sourceHandle || null,
           target_handle: params.targetHandle || null,
+          shape: 'smoothstep',
         })
       }
     },
