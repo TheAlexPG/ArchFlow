@@ -327,12 +327,10 @@ export function useUpdateConnection() {
       return result
     },
     onSuccess: (updated) => {
-      // Write the updated connection into the individual-item cache immediately
-      // so the sidebar reflects changes (direction, shape, etc.) without
-      // waiting for the full list refetch.
+      // Write the updated connection into the individual-item cache so the
+      // sidebar reflects changes (direction, shape, etc.) without a refetch.
       qc.setQueryData(['connections', updated.id], updated)
-      // Patch the list cache so the canvas edge re-renders in the same tick
-      // (avoids the round-trip delay that leaves the arrow visually stale).
+      // Patch the list cache so the canvas edge re-renders in the same tick.
       qc.setQueriesData<Connection[] | undefined>(
         { queryKey: ['connections'] },
         (prev) => {
@@ -344,8 +342,12 @@ export function useUpdateConnection() {
           return next
         },
       )
-      // Still invalidate so any stale queries (e.g. draft-scoped lists) refetch.
-      void qc.invalidateQueries({ queryKey: ['connections'] })
+      // Intentionally NOT invalidating: a background refetch that was in
+      // flight when the user rapidly clicks another direction/shape can
+      // return a stale payload AFTER our optimistic patch, silently
+      // overwriting the fresh state. The live value equals `updated` (the
+      // server already persisted it), and WS broadcasts keep multi-tab
+      // viewers in sync.
     },
   })
 }
@@ -370,7 +372,8 @@ export function useFlipConnection() {
           return next
         },
       )
-      void qc.invalidateQueries({ queryKey: ['connections'] })
+      // See useUpdateConnection for why invalidateQueries is intentionally
+      // omitted — a background refetch can race the optimistic patch.
     },
   })
 }
