@@ -10,6 +10,7 @@ from app.core.database import get_db
 from app.models.technology import TechCategory
 from app.models.user import User
 from app.models.workspace import Role
+from app.realtime.manager import fire_and_forget_publish
 from app.schemas.technology import (
     TechnologyCreate,
     TechnologyDeleteConflict,
@@ -46,12 +47,16 @@ async def create_custom_technology(
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        return await technology_service.create_custom(
+        tech = await technology_service.create_custom(
             db, workspace_id, payload, user_id=user.id
         )
     except IntegrityError as e:
         await db.rollback()
         raise HTTPException(409, "A technology with this slug already exists") from e
+
+    body = TechnologyResponse.model_validate(tech).model_dump(mode="json")
+    fire_and_forget_publish(workspace_id, "technology.created", {"technology": body})
+    return tech
 
 
 @router.patch("/{technology_id}", response_model=TechnologyResponse)
@@ -68,7 +73,10 @@ async def update_custom_technology(
         raise HTTPException(404, "Technology not found")
     if tech.workspace_id is None:
         raise HTTPException(403, "Built-in technologies are read-only")
-    return await technology_service.update_custom(db, tech, payload, user_id=user.id)
+    tech = await technology_service.update_custom(db, tech, payload, user_id=user.id)
+    body = TechnologyResponse.model_validate(tech).model_dump(mode="json")
+    fire_and_forget_publish(workspace_id, "technology.updated", {"technology": body})
+    return tech
 
 
 @router.delete(
@@ -105,3 +113,6 @@ async def delete_custom_technology(
                 "detail": "Technology is referenced by objects/connections",
             },
         )
+    fire_and_forget_publish(
+        workspace_id, "technology.deleted", {"id": str(technology_id)}
+    )
