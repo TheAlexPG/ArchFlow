@@ -26,7 +26,7 @@ OBJECT_FIELDS = (
     "description",
     "icon",
     "parent_id",
-    "technology",
+    "technology_ids",
     "tags",
     "owner_team",
     "external_links",

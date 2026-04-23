@@ -56,7 +56,7 @@ async def _build_context(
             "scope": obj.scope.value if hasattr(obj.scope, "value") else str(obj.scope),
             "status": obj.status.value if hasattr(obj.status, "value") else str(obj.status),
             "description_html": obj.description,
-            "technology": obj.technology,
+            "technology_ids": [str(t) for t in (obj.technology_ids or [])],
             "tags": obj.tags,
             "owner_team": obj.owner_team,
         },

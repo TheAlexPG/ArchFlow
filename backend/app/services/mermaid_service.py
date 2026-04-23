@@ -188,7 +188,8 @@ async def import_mermaid(db: AsyncSession, src: str) -> dict:
             name=obj["name"],
             type=obj["type"],
             description=obj.get("description"),
-            technology=obj.get("technology"),
+            # TODO(tech-catalog): resolve obj["technology"] text against the
+            # catalog once importers know their target workspace.
         )
         db.add(model_obj)
         await db.flush()
