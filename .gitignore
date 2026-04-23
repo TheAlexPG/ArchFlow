@@ -45,3 +45,6 @@ Thumbs.db
 
 # Claude
 .claude/
+
+# Taskmaster (local planning / session state)
+.taskmaster/
