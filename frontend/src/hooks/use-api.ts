@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useWorkspaceStore } from '../stores/workspace-store'
 import type {
   ApiKey,
   ApiKeyCreate,
@@ -102,8 +103,13 @@ export function useGlobalActivity(params: {
   limit?: number
   offset?: number
 }) {
+  const workspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
+  // Include workspaceId in the query key so React Query treats each workspace
+  // as a separate cache entry.  WorkspaceCacheReset in App.tsx calls
+  // removeQueries() on switch — this is belt-and-suspenders to ensure stale
+  // cross-workspace events are never served from a warmed cache slot.
   return useQuery({
-    queryKey: ['activity', params],
+    queryKey: ['activity', workspaceId, params],
     queryFn: async () => {
       const { data } = await api.get<ActivityLogEntry[]>('/activity', {
         params: {
