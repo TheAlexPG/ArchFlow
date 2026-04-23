@@ -7,6 +7,7 @@
 *Draw your systems the way you think about them.*
 *Fork. Comment. Review. Ship.*
 
+[![Deploy](https://github.com/TheAlexPG/ArchFlow/actions/workflows/deploy.yml/badge.svg?branch=main)](https://github.com/TheAlexPG/ArchFlow/actions/workflows/deploy.yml)
 ![License](https://img.shields.io/badge/license-AGPL--3.0-blue)
 ![FastAPI](https://img.shields.io/badge/FastAPI-async-009688?logo=fastapi&logoColor=white)
 ![Postgres](https://img.shields.io/badge/Postgres-16-336791?logo=postgresql&logoColor=white)
