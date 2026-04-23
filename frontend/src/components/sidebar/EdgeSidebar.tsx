@@ -126,14 +126,16 @@ export function EdgeSidebar({ diagramId }: EdgeSidebarProps) {
           </div>
         </Field>
 
-        {/* Swap sender / receiver */}
-        <button
-          onClick={handleFlip}
-          className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded text-xs bg-neutral-800 border border-neutral-700 text-neutral-300 hover:text-neutral-100 hover:border-neutral-500 transition-colors"
-        >
-          <span className="text-base">⇄</span>
-          <span>Swap sender / receiver</span>
-        </button>
+        {/* Swap sender / receiver — only meaningful for a one-way arrow. */}
+        {conn.direction === 'unidirectional' && (
+          <button
+            onClick={handleFlip}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded text-xs bg-neutral-800 border border-neutral-700 text-neutral-300 hover:text-neutral-100 hover:border-neutral-500 transition-colors"
+          >
+            <span className="text-base">⇄</span>
+            <span>Swap sender / receiver</span>
+          </button>
+        )}
 
         {/* Shape */}
         <Field label="Shape">
