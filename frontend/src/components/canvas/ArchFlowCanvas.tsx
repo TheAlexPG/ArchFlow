@@ -146,7 +146,18 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
   const onMouseMove = useCallback(
     (event: React.MouseEvent) => {
       if (document.hidden) return
-      const pos = screenToFlowPosition({ x: event.clientX, y: event.clientY })
+      // Chrome emits clientX/Y relative to the *visual* viewport when a
+      // visual-viewport offset is active (pinch-zoom or OS-level display
+      // zoom on some setups), while getBoundingClientRect() — which
+      // screenToFlowPosition uses internally — returns layout-viewport
+      // coordinates.  Safari always keeps both in the same space, so it is
+      // unaffected.  Correcting clientX/Y by visualViewport.offsetLeft/Top
+      // brings Chrome into the same layout-viewport frame before the
+      // screenToFlowPosition call and eliminates the constant-per-session
+      // cursor offset that Chrome senders otherwise produce for remote peers.
+      const vvOffX = window.visualViewport?.offsetLeft ?? 0
+      const vvOffY = window.visualViewport?.offsetTop ?? 0
+      const pos = screenToFlowPosition({ x: event.clientX + vvOffX, y: event.clientY + vvOffY })
       sendCursor(pos.x, pos.y)
     },
     [screenToFlowPosition, sendCursor],
