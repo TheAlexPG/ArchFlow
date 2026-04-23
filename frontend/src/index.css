@@ -398,6 +398,12 @@ select {
   to   { opacity: 1; transform: none; }
 }
 
+/* Modal center-scale entrance */
+@keyframes modal-scale-in {
+  0%   { opacity: 0; transform: scale(0.93); filter: blur(2px); }
+  100% { opacity: 1; transform: scale(1);    filter: blur(0); }
+}
+
 /* ─── Task 012: Add Object FAB + Popup component classes ──────────────────── */
 
 /*

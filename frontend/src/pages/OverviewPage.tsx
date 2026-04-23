@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { AppSidebar } from '../components/nav/AppSidebar'
 import { PageToolbar, SearchButton } from '../components/nav/PageToolbar'
 import { SearchModal } from '../components/nav/SearchModal'
+import { NewDiagramModal } from '../components/diagram/NewDiagramModal'
 import {
-  useCreateDiagram,
   useDeleteDiagram,
   useDiagrams,
   useUpdateDiagram,
@@ -14,7 +14,6 @@ import { useConnections, useObjects, useGlobalActivity } from '../hooks/use-api'
 import { useAuthStore } from '../stores/auth-store'
 import {
   Avatar,
-  Button,
   SectionLabel,
   StatusPill,
   type PillVariant,
@@ -251,7 +250,6 @@ export function OverviewPage() {
   const { data: diagrams = [] } = useDiagrams()
   const { data: objects = [] } = useObjects()
   const { data: connections = [] } = useConnections()
-  const createDiagram = useCreateDiagram()
   const deleteDiagram = useDeleteDiagram()
   const updateDiagram = useUpdateDiagram()
   const navigate = useNavigate()
@@ -260,9 +258,7 @@ export function OverviewPage() {
   // TODO(redesign): wire real activity feed — useGlobalActivity returns backend log
   const { data: activityLog = [] } = useGlobalActivity({ limit: 5 })
 
-  const [showCreate, setShowCreate] = useState(false)
-  const [newName, setNewName] = useState('')
-  const [newType, setNewType] = useState('system_landscape')
+  const [createOpen, setCreateOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const toggleSearch = useCallback(() => setSearchOpen((v) => !v), [])
 
@@ -276,20 +272,6 @@ export function OverviewPage() {
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [])
-
-  const handleCreate = () => {
-    if (!newName.trim()) return
-    createDiagram.mutate(
-      { name: newName.trim(), type: newType },
-      {
-        onSuccess: (diagram) => {
-          setShowCreate(false)
-          setNewName('')
-          navigate(`/diagram/${diagram.id}`)
-        },
-      },
-    )
-  }
 
   const recent = useMemo(
     () =>
@@ -389,7 +371,7 @@ export function OverviewPage() {
             <>
               <SearchButton onClick={toggleSearch} />
               <button
-                onClick={() => setShowCreate(true)}
+                onClick={() => setCreateOpen(true)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-coral border border-coral text-bg text-[12.5px] font-medium hover:bg-coral-2 hover:border-coral-2 transition-colors"
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -403,47 +385,6 @@ export function OverviewPage() {
 
         {/* Main scrollable content */}
         <div className="flex-1 overflow-y-auto p-8">
-
-          {/* Create modal */}
-          {showCreate && (
-            <div className="bg-panel border border-border-base rounded-xl shadow-window p-5 mb-8 max-w-lg">
-              <div className="text-[13px] font-medium mb-4 text-text-base">New diagram</div>
-              <input
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                placeholder="Diagram name…"
-                autoFocus
-                onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
-                className="w-full bg-surface border border-border-base rounded-lg px-3 py-2 text-[13px] text-text-base placeholder:text-text-4 outline-none focus:border-border-hi mb-2.5"
-              />
-              <select
-                value={newType}
-                onChange={(e) => setNewType(e.target.value)}
-                className="w-full bg-surface border border-border-base rounded-lg px-3 py-2 text-[13px] text-text-base outline-none focus:border-border-hi mb-4"
-              >
-                <option value="system_landscape">L1 — System Landscape</option>
-                <option value="system_context">L1 — System Context</option>
-                <option value="container">L2 — Container</option>
-                <option value="component">L3 — Component</option>
-                <option value="custom">Custom</option>
-              </select>
-              <div className="flex gap-2">
-                <Button
-                  variant="primary"
-                  onClick={handleCreate}
-                  disabled={createDiagram.isPending}
-                >
-                  Create
-                </Button>
-                <Button
-                  variant="default"
-                  onClick={() => { setShowCreate(false); setNewName('') }}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          )}
 
           {/* ── Hero row ── */}
           <div className="flex items-end justify-between mb-10">
@@ -608,7 +549,7 @@ export function OverviewPage() {
               <div className="space-y-2">
                 {/* Primary — coral accented */}
                 <button
-                  onClick={() => setShowCreate(true)}
+                  onClick={() => setCreateOpen(true)}
                   className="w-full text-left p-4 rounded-lg border border-border-base bg-surface hover:border-coral hover:bg-coral-glow transition-all duration-150 group"
                 >
                   <div className="flex items-center gap-2 mb-1">
@@ -663,6 +604,11 @@ export function OverviewPage() {
         </div>
       </div>
       <SearchModal open={searchOpen} onClose={toggleSearch} />
+      <NewDiagramModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={(d) => navigate(`/diagram/${d.id}`)}
+      />
     </div>
   )
 }
