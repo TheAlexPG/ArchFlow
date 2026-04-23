@@ -18,14 +18,14 @@ import { NewObjectModal } from './NewObjectModal'
 
 // ─── Type helpers (match AddObjectToolbar's logic exactly) ────────────────────
 
-const ALL_QUICK_TYPES: ObjectType[] = ['system', 'actor', 'external_system', 'app', 'store', 'group']
+const ALL_QUICK_TYPES: ObjectType[] = ['system', 'actor', 'external_system', 'app', 'store', 'component', 'group']
 
 const DIAGRAM_LEVEL_LABEL: Record<DiagramType, string> = {
   system_landscape: 'L1 · System Landscape',
   system_context: 'L1 · System Context',
   container: 'L2 · Container',
   component: 'L3 · Component',
-  custom: 'Custom',
+  custom: 'L4 · Code',
 }
 
 function getQuickTypesForDiagram(diagramType: DiagramType | undefined): ObjectType[] {
