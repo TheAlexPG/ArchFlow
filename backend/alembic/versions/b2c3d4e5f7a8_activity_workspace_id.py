@@ -1,7 +1,7 @@
 """Add workspace_id to activity_log and backfill from target tables.
 
-Revision ID: a1b2c3d4e5f6
-Revises: f1a2b3c4d5e6
+Revision ID: b2c3d4e5f7a8
+Revises: eb9e2003d7b9
 Create Date: 2026-04-23 12:00:00.000000
 
 Strategy
@@ -24,8 +24,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "a1b2c3d4e5f6"
-down_revision: str | Sequence[str] | None = "f1a2b3c4d5e6"
+revision: str = "b2c3d4e5f7a8"
+down_revision: str | Sequence[str] | None = "eb9e2003d7b9"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -55,7 +55,7 @@ def upgrade() -> None:
         UPDATE activity_log al
         SET    workspace_id = mo.workspace_id
         FROM   model_objects mo
-        WHERE  al.target_type = 'object'
+        WHERE  al.target_type = 'OBJECT'
           AND  al.target_id   = mo.id
           AND  al.workspace_id IS NULL
         """
@@ -67,7 +67,7 @@ def upgrade() -> None:
         UPDATE activity_log al
         SET    workspace_id = d.workspace_id
         FROM   diagrams d
-        WHERE  al.target_type = 'diagram'
+        WHERE  al.target_type = 'DIAGRAM'
           AND  al.target_id   = d.id
           AND  al.workspace_id IS NULL
         """
@@ -81,7 +81,7 @@ def upgrade() -> None:
         SET    workspace_id = mo.workspace_id
         FROM   connections c
         JOIN   model_objects mo ON mo.id = c.source_id
-        WHERE  al.target_type = 'connection'
+        WHERE  al.target_type = 'CONNECTION'
           AND  al.target_id   = c.id
           AND  al.workspace_id IS NULL
         """
