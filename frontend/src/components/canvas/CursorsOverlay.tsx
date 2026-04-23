@@ -1,4 +1,5 @@
 import { memo } from 'react'
+import { useViewport } from '@xyflow/react'
 import type { CursorState, SelectionState } from '../../hooks/use-realtime'
 
 interface Props {
@@ -19,15 +20,27 @@ function CursorPin({ userId, state }: { userId: string; state: CursorState }) {
   const hue = hueFromId(userId)
   const color = `hsl(${hue}, 70%, 60%)`
 
+  // CursorsOverlay is rendered inside ReactFlow's Pane layer, which sits
+  // *outside* the Viewport CSS transform element. That means left/top must
+  // be in pane-relative pixels, not raw flow-space units.
+  //
+  // The mapping from flow coords → pane pixels is:
+  //   paneX = flowX * zoom + panX
+  //   paneY = flowY * zoom + panY
+  // where (panX, panY, zoom) is exactly what useViewport() returns.
+  // This mirrors ReactFlow's internal rendererPointToPoint() function.
+  const { x: panX, y: panY, zoom } = useViewport()
+  const paneX = state.x * zoom + panX
+  const paneY = state.y * zoom + panY
+
   return (
-    // Positioned in flow-coordinate space by the parent container transform.
-    // The parent (ReactFlow) handles the viewport CSS transform, so we only
-    // need to set left/top in flow units.
+    // Positioned using pane-relative pixels derived from flow-space coordinates
+    // and the viewer's current pan/zoom transform.
     <div
       style={{
         position: 'absolute',
-        left: state.x,
-        top: state.y,
+        left: paneX,
+        top: paneY,
         pointerEvents: 'none',
         // Lift above nodes/edges so cursors are always visible.
         zIndex: 1000,
