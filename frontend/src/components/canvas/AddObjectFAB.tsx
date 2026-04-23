@@ -419,12 +419,13 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
       {/* ── Popup ── */}
       {isOpen && (
         <div
-          className="absolute add-popup"
+          className="absolute add-popup flex flex-col"
           style={{
             left: 'calc(100% + 12px)',
             top: '50%',
             transform: 'translateY(-50%)',
             width: 340,
+            maxHeight: 'min(620px, calc(100vh - 160px))',
             background: 'var(--color-panel)',
             border: '1px solid var(--color-border-base)',
             borderRadius: 12,
@@ -434,8 +435,9 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
             overflow: 'hidden',
           }}
         >
-          {/* ── Popup header: search ── */}
+          {/* ── Fixed header: search ── */}
           <div
+            className="flex-shrink-0"
             style={{
               padding: '10px 12px 10px',
               borderBottom: '1px solid var(--color-border-base)',
@@ -467,10 +469,11 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
             </div>
           </div>
 
-          {/* ── Popup body (scrollable) ── */}
-          <div className="max-h-[360px] overflow-y-auto p-2">
-
-            {/* Section 1: From object pool */}
+          {/* ── Scrollable pool section ── */}
+          <div
+            className="flex-shrink-0 px-2 pt-2 pb-1"
+            style={{ maxHeight: 280, overflowY: 'auto' }}
+          >
             <div
               className="popup-section px-1 pt-1 pb-2"
               style={{ animationDelay: '0ms' }}
@@ -546,13 +549,13 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
                 </div>
               )}
             </div>
+          </div>
 
-            {/* Divider */}
-            <div
-              className="my-2 mx-2 border-t border-border-base"
-            />
-
-            {/* Section 2: Create new object */}
+          {/* ── Fixed: Create new object ── */}
+          <div
+            className="flex-shrink-0 px-2 pt-1 pb-2"
+            style={{ borderTop: '1px solid var(--color-border-base)' }}
+          >
             <div
               className="popup-section px-1 pt-1 pb-2"
               style={{ animationDelay: '120ms' }}
@@ -566,7 +569,6 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
 
               <div className="grid grid-cols-4 gap-1.5 px-1">
                 {CREATE_TYPE_CONFIGS.filter((c) =>
-                  // Show only types relevant to this diagram level
                   quickTypes.includes(c.type),
                 ).map((cfg, idx) => (
                   <button
@@ -601,13 +603,15 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
                   ))}
               </div>
             </div>
+          </div>
 
-            {/* Divider */}
-            <div className="my-2 mx-2 border-t border-border-base" />
-
-            {/* Section 3: Add annotation */}
+          {/* ── Fixed: Add annotation ── */}
+          <div
+            className="flex-shrink-0 px-2 pb-2"
+            style={{ borderTop: '1px solid var(--color-border-base)' }}
+          >
             <div
-              className="popup-section px-1 pt-1 pb-1"
+              className="popup-section px-1 pt-2 pb-1"
               style={{ animationDelay: '220ms' }}
             >
               <div className="px-2 mb-2">
@@ -620,7 +624,6 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
                     onClick={() => handleAnnotation(ann.value)}
                     title={`Drop a ${ann.label.toLowerCase()} pin on the canvas`}
                     className={cn(
-                      // Base pill look
                       'popup-item flex items-center gap-1.5 px-2.5 py-1',
                       'font-mono text-[10.5px] tracking-[0.02em]',
                       'rounded-full border cursor-pointer',
@@ -637,9 +640,9 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
             </div>
           </div>
 
-          {/* ── Footer ── */}
+          {/* ── Fixed footer ── */}
           <div
-            className="px-3 py-2 border-t border-border-base flex items-center justify-between font-mono text-[10px] text-text-3"
+            className="flex-shrink-0 px-3 py-2 border-t border-border-base flex items-center justify-between font-mono text-[10px] text-text-3"
           >
             <span>Click canvas to place</span>
             <span className="flex items-center gap-1">
