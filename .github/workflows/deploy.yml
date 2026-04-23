@@ -3,6 +3,8 @@ name: Deploy to production
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -61,6 +63,10 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     needs: [build-backend, build-frontend]
+    # Only deploy after a real merge to main. On PR events the two build
+    # jobs still run (so they can gate the PR), but deploy is skipped —
+    # otherwise every open PR would race to SSH into prod.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - uses: appleboy/ssh-action@v1
         with:
