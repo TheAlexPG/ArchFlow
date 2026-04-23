@@ -54,7 +54,11 @@ const edgeTypes: EdgeTypes = {
 }
 
 function connectionToEdge(conn: Connection): Edge {
-  const bidirectional = conn.direction === 'bidirectional'
+  const arrow = { type: MarkerType.ArrowClosed, color: '#525252' }
+  const markerEnd =
+    conn.direction === 'undirected' ? undefined : arrow
+  const markerStart =
+    conn.direction === 'bidirectional' ? arrow : undefined
   return {
     id: conn.id,
     source: conn.source_id,
@@ -62,8 +66,8 @@ function connectionToEdge(conn: Connection): Edge {
     sourceHandle: conn.source_handle,
     targetHandle: conn.target_handle,
     type: 'c4',
-    markerEnd: { type: MarkerType.ArrowClosed, color: '#525252' },
-    markerStart: bidirectional ? { type: MarkerType.ArrowClosed, color: '#525252' } : undefined,
+    markerEnd,
+    markerStart,
     data: {
       label: conn.label,
       protocol: conn.protocol,

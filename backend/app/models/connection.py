@@ -11,6 +11,7 @@ from app.models.base import Base, TimestampMixin, UUIDMixin
 class ConnectionDirection(str, enum.Enum):
     UNIDIRECTIONAL = "unidirectional"
     BIDIRECTIONAL = "bidirectional"
+    UNDIRECTED = "undirected"
 
 
 class EdgeShape(str, enum.Enum):
