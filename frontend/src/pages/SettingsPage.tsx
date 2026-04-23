@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { AppSidebar } from '../components/nav/AppSidebar'
+import { PageToolbar } from '../components/nav/PageToolbar'
 import {
   useApiKeys,
   useCreateApiKey,
@@ -31,9 +32,11 @@ export function SettingsPage() {
   const [justCreated, setJustCreated] = useState<ApiKeyWithSecret | null>(null)
 
   return (
-    <div className="flex h-screen bg-neutral-950 text-neutral-200">
+    <div className="flex h-screen bg-bg text-text-base">
       <AppSidebar />
-      <div className="flex-1 overflow-y-auto p-8">
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <PageToolbar breadcrumb={['alex / personal', 'Settings']} />
+        <div className="flex-1 overflow-y-auto p-8">
         <h1 className="text-xl font-semibold mb-6">Settings</h1>
 
         <section className="max-w-3xl mb-10">
@@ -96,6 +99,7 @@ export function SettingsPage() {
         </section>
 
         <WebhooksSection />
+        </div>
       </div>
 
       {createOpen && (

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { AppSidebar } from '../components/nav/AppSidebar'
+import { PageToolbar } from '../components/nav/PageToolbar'
 import { useConnections, useObjects } from '../hooks/use-api'
 
 export function ConnectionsPage() {
@@ -33,9 +34,11 @@ export function ConnectionsPage() {
   }, [rows, search])
 
   return (
-    <div className="flex h-screen bg-neutral-950 text-neutral-200">
+    <div className="flex h-screen bg-bg text-text-base">
       <AppSidebar />
-      <div className="flex-1 overflow-y-auto p-8">
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <PageToolbar breadcrumb={['alex / personal', 'Connections']} />
+        <div className="flex-1 overflow-y-auto p-8">
         <div className="flex items-center justify-between mb-6 gap-4">
           <h1 className="text-xl font-semibold">Connections</h1>
           <input
@@ -78,6 +81,7 @@ export function ConnectionsPage() {
               ))}
             </tbody>
           </table>
+        </div>
         </div>
       </div>
     </div>

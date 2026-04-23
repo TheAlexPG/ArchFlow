@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AppSidebar } from '../components/nav/AppSidebar'
+import { PageToolbar, SearchButton } from '../components/nav/PageToolbar'
 import { SearchModal } from '../components/nav/SearchModal'
 import {
   useCreateDiagram,
@@ -92,18 +93,25 @@ export function OverviewPage() {
   )
 
   return (
-    <div className="flex h-screen bg-neutral-950 text-neutral-200">
+    <div className="flex h-screen bg-bg text-text-base">
       <AppSidebar />
-      <div className="flex-1 overflow-y-auto p-8">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-xl font-semibold">Overview</h1>
-          <button
-            onClick={() => setShowCreate(true)}
-            className="text-sm bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded"
-          >
-            + Create diagram
-          </button>
-        </div>
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <PageToolbar
+          breadcrumb={['alex / personal', 'Overview']}
+          actions={
+            <>
+              <SearchButton onClick={toggleSearch} />
+              <button
+                onClick={() => setShowCreate(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-coral border border-coral text-bg text-[12.5px] font-medium hover:bg-coral/90 transition-colors"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14"/></svg>
+                New diagram
+              </button>
+            </>
+          }
+        />
+        <div className="flex-1 overflow-y-auto p-8">
 
         {showCreate && (
           <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4 mb-6 max-w-lg">
@@ -197,6 +205,7 @@ export function OverviewPage() {
             <Stat value={orphanObjects} label="Orphan objects" warn={orphanObjects > 0} />
           </div>
         </Section>
+        </div>
       </div>
       <SearchModal open={searchOpen} onClose={toggleSearch} />
     </div>

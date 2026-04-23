@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AppSidebar } from '../components/nav/AppSidebar'
+import { PageToolbar } from '../components/nav/PageToolbar'
 import {
   useDiagrams,
   useCreateDiagram,
@@ -257,9 +258,11 @@ export function DiagramsPage() {
   )
 
   return (
-    <div className="flex h-screen bg-neutral-950 text-neutral-200">
+    <div className="flex h-screen bg-bg text-text-base">
       <AppSidebar />
-      <div className="flex-1 overflow-y-auto p-8">
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <PageToolbar breadcrumb={['alex / personal', 'Diagrams']} />
+        <div className="flex-1 overflow-y-auto p-8">
         <div className="flex items-center justify-between mb-6 gap-4">
           <h1 className="text-xl font-semibold">All diagrams</h1>
           <div className="flex gap-3 items-center">
@@ -421,6 +424,7 @@ export function DiagramsPage() {
         <div className="mt-3 text-[11px] text-neutral-600">
           Total diagrams: {diagrams.length}
         </div>
+      </div>
       </div>
     </div>
   )
