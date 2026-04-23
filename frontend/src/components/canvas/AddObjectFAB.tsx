@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   useAddObjectToDiagram,
   useCreateObject,
@@ -348,6 +348,22 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
 
   // ── Close on click-outside / Escape ─────────────────────────────────────
   const containerRef = useRef<HTMLDivElement>(null)
+  const fabRef = useRef<HTMLButtonElement>(null)
+
+  // Popup anchors its horizontal edge to the FAB's right side but floats to
+  // the viewport's vertical centre — so it never clips off the screen
+  // regardless of where the FAB itself sits within the canvas.
+  const [popupLeft, setPopupLeft] = useState(72)
+  useLayoutEffect(() => {
+    if (!isOpen) return
+    const recompute = () => {
+      const rect = fabRef.current?.getBoundingClientRect()
+      if (rect) setPopupLeft(rect.right + 12)
+    }
+    recompute()
+    window.addEventListener('resize', recompute)
+    return () => window.removeEventListener('resize', recompute)
+  }, [isOpen])
 
   useEffect(() => {
     if (!isOpen) return
@@ -378,6 +394,7 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
     <div ref={containerRef} className="relative">
       {/* ── FAB button ── */}
       <button
+        ref={fabRef}
         onClick={() => setIsOpen((v) => !v)}
         title="Add to canvas (A)"
         aria-label="Add object to diagram"
@@ -419,13 +436,14 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
       {/* ── Popup ── */}
       {isOpen && (
         <div
-          className="absolute add-popup flex flex-col"
+          className="add-popup flex flex-col"
           style={{
-            left: 'calc(100% + 12px)',
-            top: '50%',
+            position: 'fixed',
+            left: popupLeft,
+            top: '50vh',
             transform: 'translateY(-50%)',
             width: 340,
-            maxHeight: 'min(620px, calc(100vh - 160px))',
+            maxHeight: 'min(640px, calc(100vh - 40px))',
             background: 'var(--color-panel)',
             border: '1px solid var(--color-border-base)',
             borderRadius: 12,
