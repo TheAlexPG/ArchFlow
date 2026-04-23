@@ -1211,6 +1211,9 @@ export function DiagramsPage() {
                           updatedLabel={timeAgo(d.updated_at)}
                           status={status}
                           isModified={!!d.draft_id}
+                          diagramId={d.id}
+                          diagramType={d.type}
+                          draftId={d.draft_id}
                           onClick={() => navigate(`/diagram/${d.id}`)}
                         />
                         {/* Card overlay actions */}

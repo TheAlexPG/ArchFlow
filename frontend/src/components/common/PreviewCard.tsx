@@ -1,6 +1,7 @@
 import { cn } from '../../utils/cn'
 import { StatusPill } from '../ui/Pill'
 import type { PillVariant } from '../ui/Pill'
+import { DiagramPreviewSvg } from './DiagramPreviewSvg'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -13,36 +14,18 @@ export interface PreviewCardProps {
   isModified?: boolean
   onClick?: () => void
   className?: string
-}
-
-// ─── Canvas thumbnail SVG ────────────────────────────────────────────────────
-
-function CanvasThumbnail() {
-  return (
-    <svg
-      width="100%"
-      height="100%"
-      viewBox="0 0 200 90"
-      preserveAspectRatio="xMidYMid meet"
-      className="opacity-40"
-      aria-hidden="true"
-    >
-      {/* Dotted grid pattern */}
-      <defs>
-        <pattern id="card-dots" x="0" y="0" width="16" height="16" patternUnits="userSpaceOnUse">
-          <circle cx="0.5" cy="0.5" r="0.5" fill="#26262c"/>
-        </pattern>
-      </defs>
-      <rect width="200" height="90" fill="url(#card-dots)"/>
-      {/* Faint node rects */}
-      <rect x="20" y="20" width="60" height="30" rx="3" stroke="#35353d" strokeWidth="1" fill="#16161a"/>
-      <rect x="110" y="15" width="70" height="25" rx="3" stroke="#35353d" strokeWidth="1" fill="#16161a"/>
-      <rect x="60" y="55" width="80" height="22" rx="3" stroke="#35353d" strokeWidth="1" fill="#16161a"/>
-      {/* Faint lines */}
-      <line x1="80" y1="35" x2="110" y2="28" stroke="#26262c" strokeWidth="1"/>
-      <line x1="100" y1="45" x2="100" y2="55" stroke="#26262c" strokeWidth="1"/>
-    </svg>
-  )
+  /** Diagram id — when provided, the thumbnail renders the actual diagram
+   *  nodes + connections (gated by IntersectionObserver). Without it we fall
+   *  back to the pre-baked motif keyed by `diagramType`. */
+  diagramId?: string
+  /** C4 diagram type — used for the fallback motif while real data loads and
+   *  for empty diagrams. Accepted as a plain string since some callers (the
+   *  useDiagrams hook in particular) type it as `string` rather than the
+   *  narrow `DiagramType` literal. */
+  diagramType?: string
+  /** Optional draft id, forwarded to the real-preview object/connection hooks
+   *  so draft-only diagrams show their fork pool. */
+  draftId?: string | null
 }
 
 // ─── PreviewCard ─────────────────────────────────────────────────────────────
@@ -56,6 +39,9 @@ export function PreviewCard({
   isModified,
   onClick,
   className,
+  diagramId,
+  diagramType,
+  draftId,
 }: PreviewCardProps) {
   return (
     <div
@@ -69,7 +55,12 @@ export function PreviewCard({
     >
       {/* Thumbnail */}
       <div className="h-[90px] bg-bg border-b border-border-base flex items-center justify-center overflow-hidden">
-        <CanvasThumbnail />
+        <DiagramPreviewSvg
+          diagramId={diagramId}
+          fallbackType={diagramType}
+          draftId={draftId ?? null}
+          className="opacity-80"
+        />
       </div>
 
       {/* Footer */}

@@ -18,6 +18,7 @@ import {
   StatusPill,
   type PillVariant,
 } from '../components/ui'
+import { DiagramPreviewSvg } from '../components/common/DiagramPreviewSvg'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -97,58 +98,6 @@ function useDisplayName(): string {
   }, [accessToken])
 }
 
-// ─── SVG thumbnails per diagram type ──────────────────────────────────────────
-
-function DiagramThumbnail({ type }: { type: string }) {
-  if (type === 'system_landscape' || type === 'system_context') {
-    return (
-      <svg width="100%" height="100%" viewBox="0 0 300 140" className="absolute inset-0">
-        <circle cx="50" cy="70" r="12" fill="none" stroke="#c084fc" strokeWidth="1.5" />
-        <rect x="100" y="55" width="50" height="30" rx="4" fill="#16161a" stroke="#FF6B35" strokeWidth="1.5" />
-        <rect x="180" y="55" width="50" height="30" rx="4" fill="#16161a" stroke="#FF6B35" strokeWidth="1.5" />
-        <rect x="260" y="55" width="30" height="30" rx="4" fill="#16161a" stroke="#FF6B35" strokeWidth="1.5" />
-        <path d="M62 70 Q80 70 100 70" stroke="#52525b" strokeWidth="1" fill="none" />
-        <path d="M150 70 L180 70" stroke="#52525b" strokeWidth="1" fill="none" />
-        <path d="M230 70 L260 70" stroke="#52525b" strokeWidth="1" fill="none" />
-      </svg>
-    )
-  }
-  if (type === 'container') {
-    return (
-      <svg width="100%" height="100%" viewBox="0 0 300 140" className="absolute inset-0">
-        <rect x="40" y="30" width="80" height="30" rx="4" fill="#16161a" stroke="#60a5fa" strokeWidth="1.5" />
-        <rect x="40" y="80" width="80" height="30" rx="4" fill="#16161a" stroke="#60a5fa" strokeWidth="1.5" />
-        <rect x="180" y="55" width="80" height="30" rx="4" fill="#16161a" stroke="#4ade80" strokeWidth="1.5" />
-        <path d="M120 45 Q150 45 180 65" stroke="#52525b" strokeWidth="1" fill="none" />
-        <path d="M120 95 Q150 95 180 75" stroke="#52525b" strokeWidth="1" fill="none" />
-      </svg>
-    )
-  }
-  if (type === 'component') {
-    return (
-      <svg width="100%" height="100%" viewBox="0 0 300 140" className="absolute inset-0">
-        <rect x="30" y="40" width="60" height="20" rx="3" fill="#16161a" stroke="#FF6B35" strokeWidth="1.2" />
-        <rect x="30" y="70" width="60" height="20" rx="3" fill="#16161a" stroke="#FF6B35" strokeWidth="1.2" />
-        <rect x="120" y="25" width="60" height="20" rx="3" fill="#16161a" stroke="#FF6B35" strokeWidth="1.2" />
-        <rect x="120" y="55" width="60" height="20" rx="3" fill="#16161a" stroke="#FF6B35" strokeWidth="1.2" />
-        <rect x="120" y="85" width="60" height="20" rx="3" fill="#16161a" stroke="#FF6B35" strokeWidth="1.2" />
-        <rect x="210" y="55" width="60" height="20" rx="3" fill="#16161a" stroke="#4ade80" strokeWidth="1.2" />
-        <path d="M90 50 L120 35" stroke="#52525b" strokeWidth="0.8" fill="none" />
-        <path d="M90 80 L120 65" stroke="#52525b" strokeWidth="0.8" fill="none" />
-        <path d="M180 65 L210 65" stroke="#52525b" strokeWidth="0.8" fill="none" />
-      </svg>
-    )
-  }
-  // custom / fallback
-  return (
-    <svg width="100%" height="100%" viewBox="0 0 300 140" className="absolute inset-0">
-      <rect x="60" y="45" width="70" height="50" rx="4" fill="#16161a" stroke="#FF6B35" strokeWidth="1.5" />
-      <rect x="170" y="45" width="70" height="50" rx="4" fill="#16161a" stroke="#52525b" strokeWidth="1.5" />
-      <path d="M130 70 L170 70" stroke="#52525b" strokeWidth="1" fill="none" />
-    </svg>
-  )
-}
-
 // ─── PreviewCard ───────────────────────────────────────────────────────────────
 
 type DiagramStatusVariant = 'draft' | 'review' | 'done' | 'processing' | 'input'
@@ -189,7 +138,12 @@ function PreviewCard({
     >
       {/* Thumbnail */}
       <div className="h-[140px] canvas-bg relative flex items-center justify-center overflow-hidden">
-        <DiagramThumbnail type={diagram.type} />
+        <DiagramPreviewSvg
+          diagramId={diagram.id}
+          fallbackType={diagram.type}
+          draftId={diagram.draft_id}
+          className="absolute inset-0"
+        />
       </div>
 
       {/* Footer */}
