@@ -795,6 +795,14 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
        */
       onlyRenderVisibleElements
       fitView
+      /*
+       * Cap auto-zoom at 1× so fitView never scales a small diagram up past
+       * native resolution — a fractional scale like 1.23 pushes React Flow's
+       * viewport transform onto fractional pixels and the whole canvas
+       * rasterises soft / blurry. Diagrams with few nodes now render crisp
+       * at 1:1 with generous surrounding padding instead.
+       */
+      fitViewOptions={{ maxZoom: 1, padding: 0.2 }}
       snapToGrid
       snapGrid={[10, 10]}
       defaultEdgeOptions={{
