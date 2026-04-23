@@ -59,8 +59,12 @@ function connectionToEdge(conn: Connection): Edge {
     conn.direction === 'undirected' ? undefined : arrow
   const markerStart =
     conn.direction === 'bidirectional' ? arrow : undefined
+  // Embed direction in the id so React Flow treats a direction change as a
+  // new edge (unmount + remount). Without this, React Flow's internal edge
+  // diffing merges by id and `markerStart: undefined` does NOT clear a
+  // previously-set markerStart — the stale arrow lingers until page reload.
   return {
-    id: conn.id,
+    id: `${conn.id}:${conn.direction}`,
     source: conn.source_id,
     target: conn.target_id,
     sourceHandle: conn.source_handle,
@@ -74,6 +78,10 @@ function connectionToEdge(conn: Connection): Edge {
       shape: conn.shape,
       labelSize: conn.label_size,
       direction: conn.direction,
+      // Raw connection UUID (without the direction fingerprint suffix) so
+      // other parts of the canvas can look up flow steps / dependency chains
+      // by the original ID.
+      connId: conn.id,
     },
   }
 }
@@ -316,14 +324,15 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     const currentEdges = getEdges()
     setEdges(
       filtered.map(connectionToEdge).map((e) => {
+        const connId = (e.data as { connId: string }).connId
         const existing = currentEdges.find((ce) => ce.id === e.id)
-        const flowStep = flowPlayback?.stepNumbers.get(e.id)
-        const isCurrent = flowPlayback?.currentConnId === e.id
+        const flowStep = flowPlayback?.stepNumbers.get(connId)
+        const isCurrent = flowPlayback?.currentConnId === connId
         const flowOpacity = flowPlayback
           ? flowStep
             ? 1
             : 0.1
-          : dependencyChain && !dependencyChain.edges.has(e.id)
+          : dependencyChain && !dependencyChain.edges.has(connId)
             ? 0.15
             : 1
         const withStyle = {
@@ -370,13 +379,14 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     if (currentEdges.length > 0) {
       setEdges(
         currentEdges.map((e) => {
-          const flowStep = flowPlayback?.stepNumbers.get(e.id)
-          const isCurrent = flowPlayback?.currentConnId === e.id
+          const connId = ((e.data as { connId?: string })?.connId) ?? e.id
+          const flowStep = flowPlayback?.stepNumbers.get(connId)
+          const isCurrent = flowPlayback?.currentConnId === connId
           const opacity = flowPlayback
             ? flowStep
               ? 1
               : 0.1
-            : dependencyChain && !dependencyChain.edges.has(e.id)
+            : dependencyChain && !dependencyChain.edges.has(connId)
               ? 0.15
               : 1
           return {
@@ -562,7 +572,13 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
   const onSelectionChange = useCallback(
     ({ nodes: sel, edges: selEdges }: OnSelectionChangeParams) => {
       if (sel.length > 0) selectNode(sel[0].id)
-      else if (selEdges.length > 0) selectEdge(selEdges[0].id)
+      else if (selEdges.length > 0) {
+        // Edge IDs are fingerprinted as `${connId}:${direction}` — pass the
+        // raw connection UUID to the store so EdgeSidebar can fetch it.
+        const selEdge = selEdges[0]
+        const connId = ((selEdge.data as { connId?: string })?.connId) ?? selEdge.id
+        selectEdge(connId)
+      }
       else selectNode(null)
       // Broadcast to other users so they see who's looking at what.
       sendSelection(sel.map((n) => n.id))
@@ -603,7 +619,10 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
   const onEdgesDelete = useCallback(
     (edges: Edge[]) => {
       for (const edge of edges) {
-        deleteConnection.mutate(edge.id)
+        // Edge IDs are fingerprinted as `${connId}:${direction}` — extract
+        // the raw connection UUID for the delete API call.
+        const connId = ((edge.data as { connId?: string })?.connId) ?? edge.id
+        deleteConnection.mutate(connId)
       }
     },
     [deleteConnection],
