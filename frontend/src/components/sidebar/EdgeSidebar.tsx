@@ -7,13 +7,19 @@ import {
   useUpdateConnection,
 } from '../../hooks/use-api'
 import { useCanvasStore } from '../../stores/canvas-store'
-import type { EdgeShape } from '../../types/model'
+import type { ConnectionDirection, EdgeShape } from '../../types/model'
 
 const SHAPES: { value: EdgeShape; label: string; icon: string }[] = [
   { value: 'curved', label: 'Curved', icon: '∿' },
   { value: 'straight', label: 'Straight', icon: '─' },
   { value: 'step', label: 'Step', icon: '⌐' },
   { value: 'smoothstep', label: 'Smooth', icon: '⌒' },
+]
+
+const DIRECTIONS: { value: ConnectionDirection; label: string; icon: string }[] = [
+  { value: 'unidirectional', label: 'Outgoing', icon: '→' },
+  { value: 'bidirectional', label: 'Bidirectional', icon: '⇄' },
+  { value: 'undirected', label: 'Undirected', icon: '—' },
 ]
 
 export function EdgeSidebar() {
@@ -83,32 +89,42 @@ export function EdgeSidebar() {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* Sender/Receiver */}
+        {/* Sender */}
         <Field label="Sender">
-          <span className="text-sm text-neutral-300">{source?.name || '—'}</span>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm text-neutral-300">{source?.name || '—'}</span>
+            <button
+              onClick={handleFlip}
+              title="Swap sender and receiver"
+              className="w-6 h-6 flex items-center justify-center rounded-full bg-neutral-800 border border-neutral-600 text-neutral-300 hover:text-neutral-100 hover:border-neutral-500 transition-colors text-xs flex-shrink-0"
+            >
+              ⇄
+            </button>
+          </div>
         </Field>
+
+        {/* Receiver */}
         <Field label="Receiver">
           <span className="text-sm text-neutral-300">{target?.name || '—'}</span>
         </Field>
 
         {/* Direction */}
         <Field label="Direction">
-          <div className="flex items-center gap-2">
-            <select
-              value={conn.direction}
-              onChange={(e) => handleUpdate({ direction: e.target.value })}
-              className="bg-neutral-800 text-neutral-200 text-sm rounded px-2 py-1 flex-1 border border-neutral-700"
-            >
-              <option value="unidirectional">Outgoing →</option>
-              <option value="bidirectional">Bidirectional ⇄</option>
-            </select>
-            <button
-              onClick={handleFlip}
-              className="text-xs text-blue-400 hover:text-blue-300 px-2 py-1 rounded border border-neutral-700 hover:border-neutral-600"
-              title="Flip source/target"
-            >
-              ⇄ Flip
-            </button>
+          <div className="flex gap-1">
+            {DIRECTIONS.map((d) => (
+              <button
+                key={d.value}
+                onClick={() => handleUpdate({ direction: d.value })}
+                className={`flex-1 px-2 py-1 rounded text-xs border transition-colors ${
+                  conn.direction === d.value
+                    ? 'bg-neutral-700 border-neutral-600 text-neutral-100'
+                    : 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-neutral-200'
+                }`}
+              >
+                <span className="text-base">{d.icon}</span>
+                <div className="text-[10px] mt-0.5">{d.label}</div>
+              </button>
+            ))}
           </div>
         </Field>
 
@@ -160,9 +176,16 @@ export function EdgeSidebar() {
               className={[
                 'w-full h-1.5 rounded-full appearance-none cursor-pointer outline-none',
                 'focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 focus-visible:ring-offset-neutral-900',
+                // Runnable-track – webkit: transparent so the input's gradient shows through
+                '[&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:rounded-full',
+                '[&::-webkit-slider-runnable-track]:bg-transparent',
+                // Runnable-track – moz: transparent so the input's gradient shows through
+                '[&::-moz-range-track]:h-1.5 [&::-moz-range-track]:rounded-full',
+                '[&::-moz-range-track]:bg-transparent',
                 // Thumb – webkit
                 '[&::-webkit-slider-thumb]:appearance-none',
                 '[&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4',
+                '[&::-webkit-slider-thumb]:-mt-[5px]',
                 '[&::-webkit-slider-thumb]:rounded-full',
                 '[&::-webkit-slider-thumb]:bg-orange-500',
                 '[&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-neutral-900',
