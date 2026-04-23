@@ -33,6 +33,10 @@ class ActivityLog(Base, UUIDMixin):
     `changes` shape for action=updated:
         {"name": {"before": "Old", "after": "New"}, "status": {...}}
     For action=created/deleted: snapshot of the row as a single dict, or None.
+
+    `workspace_id` is denormalized here for fast workspace-scoped queries.
+    It is nullable to maintain backward compatibility with rows written before
+    the column was added; those rows are excluded from workspace-scoped feeds.
     """
 
     __tablename__ = "activity_log"
@@ -50,6 +54,12 @@ class ActivityLog(Base, UUIDMixin):
         ForeignKey("users.id", ondelete="SET NULL"),
         default=None,
     )
+    workspace_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="SET NULL"),
+        default=None,
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -57,4 +67,5 @@ class ActivityLog(Base, UUIDMixin):
     __table_args__ = (
         Index("ix_activity_log_target", "target_type", "target_id"),
         Index("ix_activity_log_created_at", "created_at"),
+        Index("ix_activity_log_workspace_id", "workspace_id"),
     )
