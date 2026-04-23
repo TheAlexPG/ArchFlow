@@ -325,7 +325,11 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     setEdges(
       filtered.map(connectionToEdge).map((e) => {
         const connId = (e.data as { connId: string }).connId
-        const existing = currentEdges.find((ce) => ce.id === e.id)
+        // Match by connId, not edge id — when direction changes the fingerprinted
+        // id differs but we still want to preserve the `selected` state.
+        const existing = currentEdges.find(
+          (ce) => ((ce.data as { connId?: string })?.connId ?? ce.id) === connId,
+        )
         const flowStep = flowPlayback?.stepNumbers.get(connId)
         const isCurrent = flowPlayback?.currentConnId === connId
         const flowOpacity = flowPlayback
