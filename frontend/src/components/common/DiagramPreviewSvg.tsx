@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useId, useRef, useState } from 'react'
 import {
   useDiagramObjects,
   useObjects,
@@ -30,7 +30,9 @@ export interface DiagramPreviewSvgProps {
 // rescales cleanly via preserveAspectRatio=xMidYMid meet.
 const VIEW_W = 300
 const VIEW_H = 140
-const PAD = 10
+// Internal padding so nodes don't kiss the frame edges. ~18px each side in
+// viewBox coords keeps the content airy but still prominent.
+const PAD = 18
 
 // Default node size when a DiagramObjectData row doesn't carry width/height
 // (older diagrams where resize was never persisted). ArchFlowCanvas applies
@@ -40,6 +42,15 @@ const DEFAULT_W = 180
 const DEFAULT_H = 60
 const GROUP_DEFAULT_W = 320
 const GROUP_DEFAULT_H = 220
+
+// Cap rendered nodes so ultra-dense diagrams don't turn into illegible noise.
+// Anything past this gets folded into a "+N more" overlay.
+const MAX_NODES = 20
+
+// Minimum rendered node footprint in viewBox units — keeps 2-3 nodes readable.
+const MIN_NODE_W = 24
+const MIN_NODE_H = 16
+const MIN_ACTOR_R = 9
 
 /** Type → stroke colour (matches minimap + canvas node restyle). */
 function colorFor(type: ObjectType | undefined): string {
@@ -60,6 +71,17 @@ function colorFor(type: ObjectType | undefined): string {
       return '#52525b' // text-4 fallback
   }
 }
+
+// Types we emit per-type linear gradients for. Actor gets a radialGradient
+// instead, so it's not in this list.
+const RECT_TYPES: ObjectType[] = [
+  'system',
+  'app',
+  'store',
+  'component',
+  'group',
+  'external_system',
+]
 
 // ─── IntersectionObserver-gated mount ─────────────────────────────────────────
 //
@@ -185,6 +207,7 @@ function FallbackSvg({ type }: { type?: string }) {
 interface PreparedNode {
   id: string
   type: ObjectType
+  /** Projected (viewBox-space) rect. */
   x: number
   y: number
   w: number
@@ -192,23 +215,42 @@ interface PreparedNode {
   /** Truthy for group nodes so we can draw them first (behind the others) and
    *  with a dashed stroke. */
   isGroup: boolean
+  /** Projected centre — cached to avoid recomputing for each incident edge. */
+  cx: number
+  cy: number
 }
 
-/** Resolve {DiagramObjectData, ModelObject} pairs into normalized geometry
- *  inside the shared viewBox. Returns null if no usable nodes. */
+interface Prepared {
+  nodes: PreparedNode[]
+  /** Number of nodes that had to be dropped because of MAX_NODES. 0 if none. */
+  hiddenCount: number
+  /** Average rendered footprint in viewBox units — used to derive stroke
+   *  widths that scale with density without getting line-arty. */
+  avgSize: number
+}
+
+/** Resolve {DiagramObjectData, ModelObject} pairs into normalized projected
+ *  geometry inside the shared viewBox. Returns null if no usable nodes. */
 function prepareNodes(
   diagramObjects: DiagramObjectData[],
   objectById: Map<string, ModelObject>,
-): { nodes: PreparedNode[]; transform: (x: number, y: number) => [number, number]; scale: number } | null {
-  const raws: PreparedNode[] = []
+): Prepared | null {
+  interface RawNode {
+    id: string
+    type: ObjectType
+    x: number
+    y: number
+    w: number
+    h: number
+    isGroup: boolean
+  }
+  const raws: RawNode[] = []
   for (const dObj of diagramObjects) {
     const obj = objectById.get(dObj.object_id)
     if (!obj) continue
     const isGroup = obj.type === 'group'
-    const w =
-      dObj.width ?? (isGroup ? GROUP_DEFAULT_W : DEFAULT_W)
-    const h =
-      dObj.height ?? (isGroup ? GROUP_DEFAULT_H : DEFAULT_H)
+    const w = dObj.width ?? (isGroup ? GROUP_DEFAULT_W : DEFAULT_W)
+    const h = dObj.height ?? (isGroup ? GROUP_DEFAULT_H : DEFAULT_H)
     raws.push({
       id: obj.id,
       type: obj.type,
@@ -221,12 +263,39 @@ function prepareNodes(
   }
   if (raws.length === 0) return null
 
-  // Bounding box
+  // Cap at MAX_NODES. Preference: keep groups (structural context) then pick
+  // the nodes closest to the overall centroid so the thumbnail represents the
+  // "centre of mass" of the diagram rather than a random corner.
+  let hiddenCount = 0
+  let chosen = raws
+  if (raws.length > MAX_NODES) {
+    // Centroid of all node centres.
+    let sx = 0
+    let sy = 0
+    for (const n of raws) {
+      sx += n.x + n.w / 2
+      sy += n.y + n.h / 2
+    }
+    const cx = sx / raws.length
+    const cy = sy / raws.length
+    const scored = raws.map((n) => {
+      const dx = n.x + n.w / 2 - cx
+      const dy = n.y + n.h / 2 - cy
+      // Distance score; groups get a bonus so they survive the cut.
+      const bonus = n.isGroup ? -1e6 : 0
+      return { n, score: dx * dx + dy * dy + bonus }
+    })
+    scored.sort((a, b) => a.score - b.score)
+    chosen = scored.slice(0, MAX_NODES).map((s) => s.n)
+    hiddenCount = raws.length - chosen.length
+  }
+
+  // Bounding box of the chosen set
   let minX = Infinity
   let minY = Infinity
   let maxX = -Infinity
   let maxY = -Infinity
-  for (const n of raws) {
+  for (const n of chosen) {
     if (n.x < minX) minX = n.x
     if (n.y < minY) minY = n.y
     if (n.x + n.w > maxX) maxX = n.x + n.w
@@ -243,12 +312,83 @@ function prepareNodes(
   const offsetX = PAD + (innerW - bbW * scale) / 2
   const offsetY = PAD + (innerH - bbH * scale) / 2
 
-  const transform = (x: number, y: number): [number, number] => [
-    offsetX + (x - minX) * scale,
-    offsetY + (y - minY) * scale,
-  ]
+  // Singleton case: shrink so one-node diagrams don't fill the whole frame.
+  const isSingleton = chosen.length === 1
 
-  return { nodes: raws, transform, scale }
+  const nodes: PreparedNode[] = chosen.map((n) => {
+    let rx = n.x
+    let ry = n.y
+    let rw = n.w
+    let rh = n.h
+    if (isSingleton) {
+      const mcx = n.x + n.w / 2
+      const mcy = n.y + n.h / 2
+      rw = n.w * 0.55
+      rh = n.h * 0.55
+      rx = mcx - rw / 2
+      ry = mcy - rh / 2
+    }
+    // Project into viewBox coords.
+    let px = offsetX + (rx - minX) * scale
+    let py = offsetY + (ry - minY) * scale
+    let pw = rw * scale
+    let ph = rh * scale
+
+    // Enforce minimum footprint so leaf nodes always read — expand about the
+    // node's centre so the projected layout stays balanced. Groups are framing
+    // containers and naturally larger; skip the bump for them.
+    if (!n.isGroup) {
+      if (n.type === 'actor') {
+        const r = Math.max(pw, ph) / 2
+        if (r < MIN_ACTOR_R) {
+          const cx2 = px + pw / 2
+          const cy2 = py + ph / 2
+          pw = MIN_ACTOR_R * 2
+          ph = MIN_ACTOR_R * 2
+          px = cx2 - pw / 2
+          py = cy2 - ph / 2
+        }
+      } else {
+        if (pw < MIN_NODE_W) {
+          const cx2 = px + pw / 2
+          px = cx2 - MIN_NODE_W / 2
+          pw = MIN_NODE_W
+        }
+        if (ph < MIN_NODE_H) {
+          const cy2 = py + ph / 2
+          py = cy2 - MIN_NODE_H / 2
+          ph = MIN_NODE_H
+        }
+      }
+    }
+
+    return {
+      id: n.id,
+      type: n.type,
+      x: px,
+      y: py,
+      w: pw,
+      h: ph,
+      isGroup: n.isGroup,
+      cx: px + pw / 2,
+      cy: py + ph / 2,
+    }
+  })
+
+  // Average projected node size — used to scale stroke widths.
+  let sizeSum = 0
+  for (const n of nodes) sizeSum += (n.w + n.h) / 2
+  const avgSize = sizeSum / nodes.length
+
+  return { nodes, hiddenCount, avgSize }
+}
+
+/** Smoothstep-ish bezier between two projected points. dx = half the x-span,
+ *  which gives a soft S-curve when nodes are left/right-aligned and a flatter
+ *  curve when they're stacked. */
+function edgePath(ax: number, ay: number, bx: number, by: number): string {
+  const dx = (bx - ax) / 2
+  return `M ${ax.toFixed(2)} ${ay.toFixed(2)} C ${(ax + dx).toFixed(2)} ${ay.toFixed(2)}, ${(bx - dx).toFixed(2)} ${by.toFixed(2)}, ${bx.toFixed(2)} ${by.toFixed(2)}`
 }
 
 // ─── Real SVG ─────────────────────────────────────────────────────────────────
@@ -260,37 +400,39 @@ interface RealSvgProps {
 }
 
 function RealSvg({ diagramObjects, objectById, connections }: RealSvgProps) {
+  // Stable unique prefix for per-card <defs> IDs — prevents gradient/filter
+  // collisions when multiple previews are mounted on the same page. useId
+  // returns a deterministic string per React tree slot, stable across renders.
+  const uid = useId().replace(/:/g, '')
+
   const prepared = prepareNodes(diagramObjects, objectById)
   if (!prepared) return null
-  const { nodes, transform, scale } = prepared
+  const { nodes, hiddenCount, avgSize } = prepared
 
-  // Single-node case → centre at 50% scale so it doesn't fill the whole frame.
-  // Build a lookup for edge centres (projected coords).
-  const centreById = new Map<string, [number, number]>()
-  for (const n of nodes) {
-    const [tx, ty] = transform(n.x + n.w / 2, n.y + n.h / 2)
-    centreById.set(n.id, [tx, ty])
-  }
-
-  // Edges: filter to connections whose source AND target are in this diagram.
-  const inSet = new Set(nodes.map((n) => n.id))
+  // Edges: filter to connections whose source AND target are in the rendered
+  // set (drops edges to nodes we trimmed for MAX_NODES).
+  const rendered = new Set(nodes.map((n) => n.id))
   const edges = connections.filter(
-    (c) => inSet.has(c.source_id) && inSet.has(c.target_id),
+    (c) => rendered.has(c.source_id) && rendered.has(c.target_id),
   )
+  const centreById = new Map<string, [number, number]>()
+  for (const n of nodes) centreById.set(n.id, [n.cx, n.cy])
 
-  // Draw order: groups first (behind), then non-groups. Within each bucket we
-  // keep the data order — groups tend to be authored before their children so
-  // this happens to match real canvas Z-order.
+  // Draw order: groups first (behind), then leaf nodes. Within each bucket
+  // data order is preserved.
   const groupNodes = nodes.filter((n) => n.isGroup)
   const leafNodes = nodes.filter((n) => !n.isGroup)
 
-  // For single-node layouts, shrink a bit so it reads as "a node" rather than
-  // "a full-width panel".
-  const isSingleton = nodes.length === 1
+  // Stroke scales gently with average node footprint — thicker for sparse
+  // layouts (so they feel present) and slightly thinner for dense ones (so
+  // rectangles don't bleed into one another).
+  const strokeW = Math.max(1.1, Math.min(2, 1.0 + avgSize / 80))
 
-  // Thin stroke that scales slightly with the fit scale — keeps thumbnails
-  // from becoming line-art for dense diagrams.
-  const strokeW = Math.max(1, Math.min(1.5, 1.5 * Math.sqrt(scale)))
+  // IDs used for per-type gradients and the shared drop-shadow filter.
+  const rectGradId = (t: ObjectType) => `pv-${uid}-rect-${t}`
+  const actorGradId = `pv-${uid}-actor`
+  const shadowId = `pv-${uid}-shadow`
+  const vignetteId = `pv-${uid}-vignette`
 
   return (
     <svg
@@ -299,104 +441,157 @@ function RealSvg({ diagramObjects, objectById, connections }: RealSvgProps) {
       viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
       preserveAspectRatio="xMidYMid meet"
     >
-      {/* Groups (dashed) — behind everything */}
+      <defs>
+        {/* Per-type linear gradients: bright-ish at the top, fading toward a
+            translucent base. Gives rects a "plate" feel instead of a hollow
+            outline. Opacities kept low so dense layouts don't oversaturate. */}
+        {RECT_TYPES.map((t) => {
+          const c = colorFor(t)
+          return (
+            <linearGradient
+              key={t}
+              id={rectGradId(t)}
+              x1="0"
+              y1="0"
+              x2="0"
+              y2="1"
+            >
+              <stop offset="0%" stopColor={c} stopOpacity={0.22} />
+              <stop offset="100%" stopColor={c} stopOpacity={0.05} />
+            </linearGradient>
+          )
+        })}
+        {/* Radial gradient for actors — light highlight in the upper-left so
+            circles read as spheres rather than flat discs. */}
+        <radialGradient id={actorGradId} cx="30%" cy="30%" r="75%">
+          <stop offset="0%" stopColor="#c084fc" stopOpacity={0.38} />
+          <stop offset="100%" stopColor="#c084fc" stopOpacity={0.04} />
+        </radialGradient>
+        {/* Shared drop-shadow filter, applied once to the node group so the
+            GPU only does a single filter pass for the whole layer. */}
+        <filter
+          id={shadowId}
+          x="-10%"
+          y="-10%"
+          width="120%"
+          height="120%"
+        >
+          <feDropShadow
+            dx="0"
+            dy="1"
+            stdDeviation="1.2"
+            floodColor="#000"
+            floodOpacity={0.35}
+          />
+        </filter>
+        {/* Subtle central-ellipse vignette to push the content forward. */}
+        <radialGradient id={vignetteId} cx="50%" cy="45%" r="70%">
+          <stop offset="0%" stopColor="#000" stopOpacity={0} />
+          <stop offset="100%" stopColor="#000" stopOpacity={0.28} />
+        </radialGradient>
+      </defs>
+
+      {/* Vignette — draw behind everything else. */}
+      <rect
+        x={0}
+        y={0}
+        width={VIEW_W}
+        height={VIEW_H}
+        fill={`url(#${vignetteId})`}
+      />
+
+      {/* Groups (dashed frame + faint fill) — behind everything */}
       {groupNodes.map((n) => {
-        const [tx, ty] = transform(n.x, n.y)
-        const tw = n.w * scale
-        const th = n.h * scale
         const color = colorFor(n.type)
         return (
           <rect
             key={n.id}
-            x={tx}
-            y={ty}
-            width={tw}
-            height={th}
-            rx={3}
-            fill={color}
-            fillOpacity={0.06}
+            x={n.x}
+            y={n.y}
+            width={n.w}
+            height={n.h}
+            rx={4}
+            fill={`url(#${rectGradId('group')})`}
             stroke={color}
-            strokeWidth={strokeW}
-            strokeDasharray="3 2"
+            strokeWidth={Math.max(1, strokeW * 0.9)}
+            strokeDasharray="4 2.5"
+            strokeOpacity={0.85}
           />
         )
       })}
 
-      {/* Edges — drawn under leaf nodes so their endpoints get visually
-          "absorbed" by the node rects; for a map-view feel this is nicer than
-          visible arrow-heads poking out. */}
-      {edges.map((e) => {
-        const s = centreById.get(e.source_id)
-        const t = centreById.get(e.target_id)
-        if (!s || !t) return null
-        return (
-          <line
-            key={e.id}
-            x1={s[0]}
-            y1={s[1]}
-            x2={t[0]}
-            y2={t[1]}
-            stroke="#52525b"
-            strokeWidth={0.8}
-            strokeOpacity={0.9}
-          />
-        )
-      })}
+      {/* Edges — smoothstep-ish beziers between node centres. Drawn under the
+          leaf nodes so their endpoints get absorbed by the rects, giving a
+          clean map-view feel without an arrowhead marker. */}
+      <g stroke="#52525b" strokeOpacity={0.7} strokeWidth={0.8} fill="none" strokeLinecap="round">
+        {edges.map((e) => {
+          const s = centreById.get(e.source_id)
+          const t = centreById.get(e.target_id)
+          if (!s || !t) return null
+          return <path key={e.id} d={edgePath(s[0], s[1], t[0], t[1])} />
+        })}
+      </g>
 
-      {/* Leaf nodes */}
-      {leafNodes.map((n) => {
-        const color = colorFor(n.type)
-        // Single-node: downscale to 50% around its centre.
-        let x = n.x
-        let y = n.y
-        let w = n.w
-        let h = n.h
-        if (isSingleton) {
-          const cx = n.x + n.w / 2
-          const cy = n.y + n.h / 2
-          w = n.w * 0.5
-          h = n.h * 0.5
-          x = cx - w / 2
-          y = cy - h / 2
-        }
-        const [tx, ty] = transform(x, y)
-        const tw = w * scale
-        const th = h * scale
-
-        if (n.type === 'actor') {
-          // Actors render as circles in the canvas — keep that affordance.
-          const cx = tx + tw / 2
-          const cy = ty + th / 2
-          const r = Math.max(2, Math.min(tw, th) / 2)
+      {/* Leaf nodes — wrapped in a group so the drop-shadow filter runs once. */}
+      <g filter={`url(#${shadowId})`}>
+        {leafNodes.map((n) => {
+          const color = colorFor(n.type)
+          if (n.type === 'actor') {
+            const r = Math.max(2, Math.min(n.w, n.h) / 2)
+            return (
+              <circle
+                key={n.id}
+                cx={n.cx}
+                cy={n.cy}
+                r={r}
+                fill={`url(#${actorGradId})`}
+                stroke={color}
+                strokeWidth={strokeW}
+              />
+            )
+          }
           return (
-            <circle
+            <rect
               key={n.id}
-              cx={cx}
-              cy={cy}
-              r={r}
-              fill={color}
-              fillOpacity={0.1}
+              x={n.x}
+              y={n.y}
+              width={n.w}
+              height={n.h}
+              rx={3.5}
+              fill={`url(#${rectGradId(n.type)})`}
               stroke={color}
               strokeWidth={strokeW}
             />
           )
-        }
+        })}
+      </g>
 
-        return (
+      {/* "+N more" overlay when we trimmed nodes for density. */}
+      {hiddenCount > 0 && (
+        <g>
           <rect
-            key={n.id}
-            x={tx}
-            y={ty}
-            width={tw}
-            height={th}
-            rx={3}
-            fill={color}
-            fillOpacity={0.1}
-            stroke={color}
-            strokeWidth={strokeW}
+            x={VIEW_W - 46}
+            y={VIEW_H - 18}
+            width={38}
+            height={12}
+            rx={2.5}
+            fill="#0b0b0d"
+            fillOpacity={0.72}
+            stroke="#3f3f46"
+            strokeWidth={0.6}
           />
-        )
-      })}
+          <text
+            x={VIEW_W - 27}
+            y={VIEW_H - 9}
+            fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+            fontSize={7}
+            fill="#a1a1aa"
+            textAnchor="middle"
+          >
+            +{hiddenCount} more
+          </text>
+        </g>
+      )}
     </svg>
   )
 }
