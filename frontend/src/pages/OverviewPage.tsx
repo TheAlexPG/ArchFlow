@@ -10,8 +10,7 @@ import {
   useUpdateDiagram,
   type Diagram,
 } from '../hooks/use-diagrams'
-import { useConnections, useObjects, useGlobalActivity } from '../hooks/use-api'
-import { useAuthStore } from '../stores/auth-store'
+import { useConnections, useObjects, useGlobalActivity, useMe } from '../hooks/use-api'
 import {
   Avatar,
   SectionLabel,
@@ -80,22 +79,15 @@ function firstNameFromEmail(email: string): string {
   return first.charAt(0).toUpperCase() + first.slice(1)
 }
 
-/** Decode display name from JWT access token — same strategy as AppSidebar */
+/** First name from the authenticated user's profile (falls back gracefully). */
 function useDisplayName(): string {
-  const accessToken = useAuthStore((s) => s.accessToken)
-  return useMemo(() => {
-    if (!accessToken) return 'You'
-    try {
-      const payload = JSON.parse(atob(accessToken.split('.')[1]))
-      const email =
-        (payload.email as string | undefined) ??
-        (payload.sub as string | undefined) ??
-        ''
-      return firstNameFromEmail(email)
-    } catch {
-      return 'You'
-    }
-  }, [accessToken])
+  const { data: me } = useMe()
+  if (me?.name) {
+    const first = me.name.trim().split(/\s+/)[0]
+    if (first) return first.charAt(0).toUpperCase() + first.slice(1)
+  }
+  if (me?.email) return firstNameFromEmail(me.email)
+  return 'there'
 }
 
 // ─── PreviewCard ───────────────────────────────────────────────────────────────
@@ -267,11 +259,23 @@ export function OverviewPage() {
   const activityItems = useMemo(() => {
     if (activityLog.length > 0) {
       return activityLog.slice(0, 4).map((entry) => {
-        const diagramName =
+        const resolvedName =
           entry.target_type === 'diagram'
-            ? (diagrams.find((d) => d.id === entry.target_id)?.name ?? entry.target_id.slice(0, 8))
-            : null
-        const objectOrDiagram = diagramName ?? `${entry.target_type} ${entry.target_id.slice(0, 6)}`
+            ? diagrams.find((d) => d.id === entry.target_id)?.name
+            : entry.target_type === 'object'
+            ? objects.find((o) => o.id === entry.target_id)?.name
+            : entry.target_type === 'connection'
+            ? connections.find((c) => c.id === entry.target_id)?.label
+            : undefined
+        const typeLabel =
+          entry.target_type === 'diagram'
+            ? 'diagram'
+            : entry.target_type === 'object'
+            ? 'object'
+            : 'connection'
+        const objectOrDiagram = resolvedName
+          ? resolvedName
+          : `deleted ${typeLabel}`
         const actionLabel =
           entry.action === 'created' ? 'created' : entry.action === 'deleted' ? 'deleted' : 'edited'
         const pillVariant: PillVariant =
@@ -313,7 +317,7 @@ export function OverviewPage() {
       pillVariant: 'done' as const,
       pillText: i === 0 ? 'NEW' : 'NEW',
     }))
-  }, [activityLog, diagrams, recent, firstName])
+  }, [activityLog, diagrams, objects, connections, recent, firstName])
 
   return (
     <div className="flex h-screen bg-bg text-text-base">
