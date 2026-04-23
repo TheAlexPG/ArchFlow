@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { useReactFlow } from '@xyflow/react'
 import {
   useAddObjectToDiagram,
   useCreateObject,
@@ -267,6 +268,24 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
   const updateObject = useUpdateObject()
   const { setCommentComposeType } = useCanvasStore()
 
+  // Compute the flow-space coordinates at the centre of the currently
+  // visible canvas area — new objects get placed there instead of a
+  // random offset, so they always land where the user is looking.
+  // A tiny jitter (±24 flow units) prevents stacking when several objects
+  // are created rapidly from the same viewport.
+  const { screenToFlowPosition } = useReactFlow()
+  const viewportCenter = () => {
+    const el = document.querySelector('.react-flow')
+    if (!el) return { x: 250, y: 250 }
+    const rect = el.getBoundingClientRect()
+    const pos = screenToFlowPosition({
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2,
+    })
+    const jitter = () => (Math.random() - 0.5) * 48
+    return { x: pos.x + jitter(), y: pos.y + jitter() }
+  }
+
   // ── Derived ─────────────────────────────────────────────────────────────
   const inDiagramIds = useMemo(
     () => new Set(diagramObjects.map((d) => d.object_id)),
@@ -289,12 +308,8 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
   const handleAddExisting = (objectId: string) => {
     if (!diagramId) return
     if (inDiagramIds.has(objectId)) return
-    addToDiagram.mutate({
-      diagramId,
-      objectId,
-      x: 200 + Math.random() * 300,
-      y: 150 + Math.random() * 250,
-    })
+    const { x, y } = viewportCenter()
+    addToDiagram.mutate({ diagramId, objectId, x, y })
     setIsOpen(false)
   }
 
@@ -306,8 +321,7 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
   const handleNewObjectSubmit = (name: string) => {
     if (!newObjectType) return
     const type = newObjectType
-    const placementX = 200 + Math.random() * 300
-    const placementY = 150 + Math.random() * 250
+    const { x: placementX, y: placementY } = viewportCenter()
     createObject.mutate(
       { name: name.trim(), type },
       {
