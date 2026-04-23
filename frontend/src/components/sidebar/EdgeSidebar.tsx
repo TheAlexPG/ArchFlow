@@ -2,11 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import {
   useConnection,
   useDeleteConnection,
+  useFlipConnection,
   useObjects,
   useUpdateConnection,
 } from '../../hooks/use-api'
+import { useDiagram } from '../../hooks/use-diagrams'
 import { useCanvasStore } from '../../stores/canvas-store'
-import type { EdgeShape } from '../../types/model'
+import type { ConnectionDirection, EdgeShape } from '../../types/model'
 
 const SHAPES: { value: EdgeShape; label: string; icon: string }[] = [
   { value: 'curved', label: 'Curved', icon: '∿' },
@@ -15,11 +17,24 @@ const SHAPES: { value: EdgeShape; label: string; icon: string }[] = [
   { value: 'smoothstep', label: 'Smooth', icon: '⌒' },
 ]
 
-export function EdgeSidebar() {
+const DIRECTIONS: { value: ConnectionDirection; label: string; icon: string }[] = [
+  { value: 'unidirectional', label: 'Outgoing', icon: '→' },
+  { value: 'bidirectional', label: 'Bidirectional', icon: '⇄' },
+  { value: 'undirected', label: 'Undirected', icon: '—' },
+]
+
+interface EdgeSidebarProps {
+  diagramId?: string
+}
+
+export function EdgeSidebar({ diagramId }: EdgeSidebarProps) {
   const { selectedEdgeId, selectEdge } = useCanvasStore()
   const { data: conn } = useConnection(selectedEdgeId)
-  const { data: objects = [] } = useObjects()
+  const { data: diagram } = useDiagram(diagramId)
+  const draftId = diagram?.draft_id ?? null
+  const { data: objects = [] } = useObjects(draftId)
   const updateConn = useUpdateConnection()
+  const flipConn = useFlipConnection()
   const deleteConn = useDeleteConnection()
 
   const [label, setLabel] = useState('')
@@ -51,12 +66,7 @@ export function EdgeSidebar() {
   }
 
   const handleFlip = () => {
-    updateConn.mutate({
-      id: conn.id,
-      // swap by updating with new source_id/target_id — need separate endpoint,
-      // for now toggle direction
-      direction: conn.direction === 'unidirectional' ? 'bidirectional' : 'unidirectional',
-    })
+    flipConn.mutate({ id: conn.id })
   }
 
   const handleDelete = () => {
@@ -86,34 +96,46 @@ export function EdgeSidebar() {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* Sender/Receiver */}
+        {/* Sender */}
         <Field label="Sender">
           <span className="text-sm text-neutral-300">{source?.name || '—'}</span>
         </Field>
+
+        {/* Receiver */}
         <Field label="Receiver">
           <span className="text-sm text-neutral-300">{target?.name || '—'}</span>
         </Field>
 
         {/* Direction */}
         <Field label="Direction">
-          <div className="flex items-center gap-2">
-            <select
-              value={conn.direction}
-              onChange={(e) => handleUpdate({ direction: e.target.value })}
-              className="bg-neutral-800 text-neutral-200 text-sm rounded px-2 py-1 flex-1 border border-neutral-700"
-            >
-              <option value="unidirectional">Outgoing →</option>
-              <option value="bidirectional">Bidirectional ⇄</option>
-            </select>
-            <button
-              onClick={handleFlip}
-              className="text-xs text-blue-400 hover:text-blue-300 px-2 py-1 rounded border border-neutral-700 hover:border-neutral-600"
-              title="Flip source/target"
-            >
-              ⇄ Flip
-            </button>
+          <div className="flex gap-1">
+            {DIRECTIONS.map((d) => (
+              <button
+                key={d.value}
+                onClick={() => handleUpdate({ direction: d.value })}
+                className={`flex-1 px-2 py-1 rounded text-xs border transition-colors ${
+                  conn.direction === d.value
+                    ? 'bg-neutral-700 border-neutral-600 text-neutral-100'
+                    : 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-neutral-200'
+                }`}
+              >
+                <span className="text-base">{d.icon}</span>
+                <div className="text-[10px] mt-0.5">{d.label}</div>
+              </button>
+            ))}
           </div>
         </Field>
+
+        {/* Swap sender / receiver — only meaningful for a one-way arrow. */}
+        {conn.direction === 'unidirectional' && (
+          <button
+            onClick={handleFlip}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded text-xs bg-neutral-800 border border-neutral-700 text-neutral-300 hover:text-neutral-100 hover:border-neutral-500 transition-colors"
+          >
+            <span className="text-base">⇄</span>
+            <span>Swap sender / receiver</span>
+          </button>
+        )}
 
         {/* Shape */}
         <Field label="Shape">
@@ -148,15 +170,44 @@ export function EdgeSidebar() {
 
         {/* Label size */}
         <Field label={`Label size: ${conn.label_size.toFixed(0)}px`}>
-          <input
-            type="range"
-            min={8}
-            max={20}
-            step={1}
-            value={conn.label_size}
-            onChange={(e) => handleUpdate({ label_size: parseFloat(e.target.value) })}
-            className="w-full accent-blue-500"
-          />
+          <div className="relative w-full">
+            <input
+              type="range"
+              min={8}
+              max={20}
+              step={1}
+              value={conn.label_size}
+              onChange={(e) => handleUpdate({ label_size: parseFloat(e.target.value) })}
+              style={{
+                // filled-track trick: gradient from accent to track bg
+                background: `linear-gradient(to right, #f97316 0%, #f97316 ${((conn.label_size - 8) / (20 - 8)) * 100}%, #404040 ${((conn.label_size - 8) / (20 - 8)) * 100}%, #404040 100%)`,
+              }}
+              className={[
+                'w-full h-1.5 rounded-full appearance-none cursor-pointer outline-none',
+                'focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 focus-visible:ring-offset-neutral-900',
+                // Runnable-track – webkit: transparent so the input's gradient shows through
+                '[&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:rounded-full',
+                '[&::-webkit-slider-runnable-track]:bg-transparent',
+                // Runnable-track – moz: transparent so the input's gradient shows through
+                '[&::-moz-range-track]:h-1.5 [&::-moz-range-track]:rounded-full',
+                '[&::-moz-range-track]:bg-transparent',
+                // Thumb – webkit
+                '[&::-webkit-slider-thumb]:appearance-none',
+                '[&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4',
+                '[&::-webkit-slider-thumb]:-mt-[5px]',
+                '[&::-webkit-slider-thumb]:rounded-full',
+                '[&::-webkit-slider-thumb]:bg-orange-500',
+                '[&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-neutral-900',
+                '[&::-webkit-slider-thumb]:shadow-[0_0_0_1px_rgba(249,115,22,0.4),0_2px_6px_rgba(0,0,0,0.5)]',
+                '[&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-110',
+                // Thumb – moz
+                '[&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4',
+                '[&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2',
+                '[&::-moz-range-thumb]:bg-orange-500 [&::-moz-range-thumb]:border-neutral-900',
+                '[&::-moz-range-thumb]:cursor-pointer',
+              ].join(' ')}
+            />
+          </div>
         </Field>
 
         {/* Protocol */}

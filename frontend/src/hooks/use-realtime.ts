@@ -48,13 +48,17 @@ function wsUrl(path: string, token: string): string {
  *  ['objects', id]. If prev isn't an array (e.g. a single object), we
  *  leave it untouched — the single-entity merge is handled separately. */
 function mergeEntity<T extends { id: string }>(
-  prev: T[] | undefined,
+  prev: T[] | T | undefined,
   next: T,
-): T[] {
-  // Defensive: a non-array cache entry would have triggered .findIndex to
-  // throw. Treat it like "empty" and return a fresh array so we never hand
-  // setQueriesData something shaped wrong.
-  if (!prev || !Array.isArray(prev)) return [next]
+): T[] | T | undefined {
+  // setQueriesData({ queryKey: ['foo'] }) matches by PREFIX, so a callback
+  // here can receive both the list cache (['foo', { ... }], an array) AND
+  // the individual-item cache (['foo', id], a single object). Wrapping a
+  // single object into an array would corrupt the individual cache into an
+  // array-shaped blob that useFoo(id) can't read. Leave non-arrays alone —
+  // the individual cache is patched explicitly via setQueryData elsewhere.
+  if (prev === undefined) return [next]
+  if (!Array.isArray(prev)) return prev
   const idx = prev.findIndex((row) => row.id === next.id)
   if (idx === -1) return [...prev, next]
   const merged = [...prev]
@@ -177,9 +181,10 @@ export function useDiagramSocket(diagramId: string | null): DiagramSocketResult 
           const row = msg.diagram_object as { id: string } | undefined
           const dId = msg.diagram_id as string | undefined
           if (dId && row) {
-            queryClient.setQueriesData<Array<{ id: string }> | undefined>(
+            queryClient.setQueriesData(
               { queryKey: ['diagram-objects', dId] },
-              (prev) => mergeEntity(prev, row),
+              (prev: unknown) =>
+                mergeEntity(prev as Array<{ id: string }> | undefined, row),
             )
           } else if (dId) {
             void queryClient.invalidateQueries({

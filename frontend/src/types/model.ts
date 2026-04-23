@@ -11,7 +11,7 @@ export type ObjectScope = 'internal' | 'external'
 
 export type ObjectStatus = 'live' | 'future' | 'deprecated' | 'removed'
 
-export type ConnectionDirection = 'unidirectional' | 'bidirectional'
+export type ConnectionDirection = 'unidirectional' | 'bidirectional' | 'undirected'
 
 export type EdgeShape = 'curved' | 'straight' | 'step' | 'smoothstep'
 
@@ -136,6 +136,7 @@ export interface ConnectionCreate {
   tags?: string[] | null
   source_handle?: string | null
   target_handle?: string | null
+  shape?: EdgeShape
 }
 
 export type CommentTargetType = 'object' | 'connection' | 'diagram'

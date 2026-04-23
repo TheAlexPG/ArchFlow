@@ -54,21 +54,35 @@ const edgeTypes: EdgeTypes = {
 }
 
 function connectionToEdge(conn: Connection): Edge {
-  const bidirectional = conn.direction === 'bidirectional'
+  const arrow = { type: MarkerType.ArrowClosed, color: '#525252' }
+  const markerEnd =
+    conn.direction === 'undirected' ? undefined : arrow
+  const markerStart =
+    conn.direction === 'bidirectional' ? arrow : undefined
+  // Embed direction + endpoints in the id so React Flow treats any change
+  // as a new edge (unmount + remount). Without this, React Flow merges by
+  // id: `markerStart: undefined` does NOT clear a previously-set markerStart,
+  // and after a flip source/target may stay visually attached to the old
+  // endpoints because React Flow doesn't re-route existing edges.
   return {
-    id: conn.id,
+    id: `${conn.id}:${conn.direction}:${conn.source_id}:${conn.target_id}`,
     source: conn.source_id,
     target: conn.target_id,
     sourceHandle: conn.source_handle,
     targetHandle: conn.target_handle,
     type: 'c4',
-    markerEnd: { type: MarkerType.ArrowClosed, color: '#525252' },
-    markerStart: bidirectional ? { type: MarkerType.ArrowClosed, color: '#525252' } : undefined,
+    markerEnd,
+    markerStart,
     data: {
       label: conn.label,
       protocol: conn.protocol,
       shape: conn.shape,
       labelSize: conn.label_size,
+      direction: conn.direction,
+      // Raw connection UUID (without the direction fingerprint suffix) so
+      // other parts of the canvas can look up flow steps / dependency chains
+      // by the original ID.
+      connId: conn.id,
     },
   }
 }
@@ -146,7 +160,27 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
   const onMouseMove = useCallback(
     (event: React.MouseEvent) => {
       if (document.hidden) return
-      const pos = screenToFlowPosition({ x: event.clientX, y: event.clientY })
+      // Chrome emits clientX/Y relative to the *visual* viewport when a
+      // visual-viewport offset is active (pinch-zoom or OS-level display
+      // zoom on some setups), while getBoundingClientRect() — which
+      // screenToFlowPosition uses internally — returns layout-viewport
+      // coordinates.  Safari always keeps both in the same space, so it is
+      // unaffected.  Correcting clientX/Y by visualViewport.offsetLeft/Top
+      // brings Chrome into the same layout-viewport frame before the
+      // screenToFlowPosition call and eliminates the constant-per-session
+      // cursor offset that Chrome senders otherwise produce for remote peers.
+      const vvOffX = window.visualViewport?.offsetLeft ?? 0
+      const vvOffY = window.visualViewport?.offsetTop ?? 0
+      // Disable snap-to-grid for cursor broadcasts so the pin tracks the actual
+      // pointer sub-pixel position rather than the nearest grid intersection.
+      // Without this, at high zoom levels the grid-snapped error (up to
+      // gridSize/2 flow units = gridSize/2 * zoom screen pixels) becomes
+      // visually significant — e.g. at zoom=2 with snapGrid=[10,10], the pin
+      // can drift up to 10 CSS pixels from the real cursor.
+      const pos = screenToFlowPosition(
+        { x: event.clientX + vvOffX, y: event.clientY + vvOffY },
+        { snapToGrid: false },
+      )
       sendCursor(pos.x, pos.y)
     },
     [screenToFlowPosition, sendCursor],
@@ -271,34 +305,65 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     matchesFilterValue,
   ])
 
-  // Filter connections to only those between objects in this diagram
+  // Sync connections → React Flow edges AND apply overlay/flow-playback styling.
+  //
+  // Both concerns are merged into one effect intentionally: the overlay effect
+  // (dependencyChain, filterDim, flowPlayback) and the connection-sync effect
+  // previously called setEdges independently.  When both fired in the same React
+  // render cycle (e.g. a flow is playing and a connection's direction changes),
+  // the overlay effect ran AFTER the sync effect, called getEdges() which still
+  // returned React Flow's committed pre-sync edges, and clobbered the freshly
+  // built edge list — causing direction / marker changes to visually revert.
+  // Merging into one effect guarantees a single setEdges call per render, so
+  // the clobber is structurally impossible.
   useEffect(() => {
     const objectIds = new Set(diagramObjects.map((d) => d.object_id))
     const filtered = connections.filter(
       (c) => objectIds.has(c.source_id) && objectIds.has(c.target_id),
     )
-    // Include all visual fields in key so edge re-renders when they change
-    const key = filtered
+
+    // ── Connection-structure key ──────────────────────────────────────────
+    // Include all visual fields so the edge rebuild runs whenever any of them
+    // change (not just direction or id).
+    // source_id and target_id MUST be included: a flip operation swaps them
+    // without changing direction/shape/handles.  For same-side handles
+    // (e.g. top↔top) the handle names are symmetric under swap, so a flip
+    // would otherwise produce an identical key and the early-return would
+    // prevent setEdges from being called — leaving the canvas arrow stale.
+    const connKey = filtered
       .map(
         (c) =>
-          `${c.id}:${c.shape}:${c.label_size}:${c.direction}:${c.label ?? ''}:${c.protocol ?? ''}:${c.source_handle ?? ''}:${c.target_handle ?? ''}`,
+          `${c.id}:${c.source_id}:${c.target_id}:${c.shape}:${c.label_size}:${c.direction}:${c.label ?? ''}:${c.protocol ?? ''}:${c.source_handle ?? ''}:${c.target_handle ?? ''}`,
       )
       .join(',')
-    if (key === prevConnsRef.current) return
-    prevConnsRef.current = key
+
+    // ── Overlay/playback key ──────────────────────────────────────────────
+    // Captures the visual-only inputs that affect opacity / flowStep but do
+    // NOT change edge structure (id / markers / path shape).
+    const overlayKey = `${dependencyChain ? JSON.stringify([...dependencyChain.edges]) : ''}|${filterDim}|${flowPlayback?.currentConnId ?? ''}|${flowPlayback ? [...flowPlayback.stepNumbers.entries()].map(([k,v]) => k+':'+v).join(',') : ''}`
+
+    const combinedKey = connKey + '||' + overlayKey
+    if (combinedKey === prevConnsRef.current) return
+    prevConnsRef.current = combinedKey
+
     // Preserve selection state across re-renders + apply overlay opacity +
     // flow playback step number/highlight.
     const currentEdges = getEdges()
     setEdges(
       filtered.map(connectionToEdge).map((e) => {
-        const existing = currentEdges.find((ce) => ce.id === e.id)
-        const flowStep = flowPlayback?.stepNumbers.get(e.id)
-        const isCurrent = flowPlayback?.currentConnId === e.id
+        const connId = (e.data as { connId: string }).connId
+        // Match by connId, not edge id — when direction changes the fingerprinted
+        // id differs but we still want to preserve the `selected` state.
+        const existing = currentEdges.find(
+          (ce) => ((ce.data as { connId?: string })?.connId ?? ce.id) === connId,
+        )
+        const flowStep = flowPlayback?.stepNumbers.get(connId)
+        const isCurrent = flowPlayback?.currentConnId === connId
         const flowOpacity = flowPlayback
           ? flowStep
             ? 1
             : 0.1
-          : dependencyChain && !dependencyChain.edges.has(e.id)
+          : dependencyChain && !dependencyChain.edges.has(connId)
             ? 0.15
             : 1
         const withStyle = {
@@ -313,11 +378,11 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
         return existing?.selected ? { ...withStyle, selected: true } : withStyle
       }),
     )
-  }, [connections, diagramObjects, setEdges, getEdges, dependencyChain, flowPlayback])
+  }, [connections, diagramObjects, setEdges, getEdges, dependencyChain, flowPlayback, filterDim])
 
-  // Apply dimming + color overlay to existing nodes/edges whenever the
-  // dependency focus or active filter changes. For freshly-created nodes,
-  // the same styles are also applied during the main build effect.
+  // Apply dimming + color overlay to existing nodes whenever the dependency
+  // focus or active filter changes. Edges are handled by the effect above
+  // (merged to prevent a second setEdges call from clobbering direction changes).
   useEffect(() => {
     const currentNodes = getNodes()
     if (currentNodes.length > 0) {
@@ -341,32 +406,7 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
         }),
       )
     }
-    const currentEdges = getEdges()
-    if (currentEdges.length > 0) {
-      setEdges(
-        currentEdges.map((e) => {
-          const flowStep = flowPlayback?.stepNumbers.get(e.id)
-          const isCurrent = flowPlayback?.currentConnId === e.id
-          const opacity = flowPlayback
-            ? flowStep
-              ? 1
-              : 0.1
-            : dependencyChain && !dependencyChain.edges.has(e.id)
-              ? 0.15
-              : 1
-          return {
-            ...e,
-            style: { ...e.style, opacity },
-            data: {
-              ...(e.data || {}),
-              flowStep: flowStep ?? null,
-              flowCurrent: isCurrent,
-            },
-          }
-        }),
-      )
-    }
-  }, [dependencyChain, filterDim, flowPlayback, matchesFilterValue, getNodes, setNodes, getEdges, setEdges])
+  }, [dependencyChain, filterDim, matchesFilterValue, getNodes, setNodes])
 
   // ESC clears the dependencies focus overlay.
   useEffect(() => {
@@ -528,6 +568,7 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
           target_id: params.target,
           source_handle: params.sourceHandle || null,
           target_handle: params.targetHandle || null,
+          shape: 'smoothstep',
         })
       }
     },
@@ -537,7 +578,13 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
   const onSelectionChange = useCallback(
     ({ nodes: sel, edges: selEdges }: OnSelectionChangeParams) => {
       if (sel.length > 0) selectNode(sel[0].id)
-      else if (selEdges.length > 0) selectEdge(selEdges[0].id)
+      else if (selEdges.length > 0) {
+        // Edge IDs are fingerprinted as `${connId}:${direction}` — pass the
+        // raw connection UUID to the store so EdgeSidebar can fetch it.
+        const selEdge = selEdges[0]
+        const connId = ((selEdge.data as { connId?: string })?.connId) ?? selEdge.id
+        selectEdge(connId)
+      }
       else selectNode(null)
       // Broadcast to other users so they see who's looking at what.
       sendSelection(sel.map((n) => n.id))
@@ -578,7 +625,10 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
   const onEdgesDelete = useCallback(
     (edges: Edge[]) => {
       for (const edge of edges) {
-        deleteConnection.mutate(edge.id)
+        // Edge IDs are fingerprinted as `${connId}:${direction}` — extract
+        // the raw connection UUID for the delete API call.
+        const connId = ((edge.data as { connId?: string })?.connId) ?? edge.id
+        deleteConnection.mutate(connId)
       }
     },
     [deleteConnection],

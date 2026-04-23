@@ -15,7 +15,7 @@ class ConnectionCreate(BaseModel):
     tags: list[str] | None = None
     source_handle: str | None = None
     target_handle: str | None = None
-    shape: EdgeShape = EdgeShape.CURVED
+    shape: EdgeShape = EdgeShape.SMOOTHSTEP
     label_size: float = 11.0
     via_object_ids: list[str] | None = None
 

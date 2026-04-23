@@ -326,7 +326,55 @@ export function useUpdateConnection() {
       const { data: result } = await api.put<Connection>(`/connections/${id}`, data)
       return result
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['connections'] }),
+    onSuccess: (updated) => {
+      // Write the updated connection into the individual-item cache so the
+      // sidebar reflects changes (direction, shape, etc.) without a refetch.
+      qc.setQueryData(['connections', updated.id], updated)
+      // Patch the list cache so the canvas edge re-renders in the same tick.
+      qc.setQueriesData<Connection[] | undefined>(
+        { queryKey: ['connections'] },
+        (prev) => {
+          if (!prev || !Array.isArray(prev)) return prev
+          const idx = prev.findIndex((c) => c.id === updated.id)
+          if (idx === -1) return [...prev, updated]
+          const next = [...prev]
+          next[idx] = updated
+          return next
+        },
+      )
+      // Intentionally NOT invalidating: a background refetch that was in
+      // flight when the user rapidly clicks another direction/shape can
+      // return a stale payload AFTER our optimistic patch, silently
+      // overwriting the fresh state. The live value equals `updated` (the
+      // server already persisted it), and WS broadcasts keep multi-tab
+      // viewers in sync.
+    },
+  })
+}
+
+export function useFlipConnection() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id }: { id: string }) => {
+      const { data: result } = await api.post<Connection>(`/connections/${id}/flip`)
+      return result
+    },
+    onSuccess: (updated) => {
+      qc.setQueryData(['connections', updated.id], updated)
+      qc.setQueriesData<Connection[] | undefined>(
+        { queryKey: ['connections'] },
+        (prev) => {
+          if (!prev || !Array.isArray(prev)) return prev
+          const idx = prev.findIndex((c) => c.id === updated.id)
+          if (idx === -1) return [...prev, updated]
+          const next = [...prev]
+          next[idx] = updated
+          return next
+        },
+      )
+      // See useUpdateConnection for why invalidateQueries is intentionally
+      // omitted — a background refetch can race the optimistic patch.
+    },
   })
 }
 

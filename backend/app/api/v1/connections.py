@@ -119,6 +119,31 @@ async def update_connection(
     return conn
 
 
+@router.post("/{connection_id}/flip", response_model=ConnectionResponse)
+async def flip_connection(
+    connection_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    conn = await connection_service.get_connection(db, connection_id)
+    if not conn:
+        raise HTTPException(status_code=404, detail="Connection not found")
+    conn = await connection_service.flip_connection(db, conn)
+    if conn.draft_id is None:
+        body = ConnectionResponse.model_validate(conn).model_dump(mode="json")
+        fire_and_forget_emit("connection.updated", body)
+        src = await object_service.get_object(db, conn.source_id)
+        fire_and_forget_publish(
+            getattr(src, "workspace_id", None),
+            "connection.updated",
+            {"connection": body},
+        )
+        await _fanout_to_endpoint_diagrams(
+            db, conn.source_id, conn.target_id,
+            "connection.updated", {"connection": body},
+        )
+    return conn
+
+
 @router.delete("/{connection_id}", status_code=204)
 async def delete_connection(connection_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     conn = await connection_service.get_connection(db, connection_id)

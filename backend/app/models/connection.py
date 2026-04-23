@@ -11,6 +11,7 @@ from app.models.base import Base, TimestampMixin, UUIDMixin
 class ConnectionDirection(str, enum.Enum):
     UNIDIRECTIONAL = "unidirectional"
     BIDIRECTIONAL = "bidirectional"
+    UNDIRECTED = "undirected"
 
 
 class EdgeShape(str, enum.Enum):
@@ -39,7 +40,7 @@ class Connection(Base, UUIDMixin, TimestampMixin):
     source_handle: Mapped[str | None] = mapped_column(String(50), default=None)
     target_handle: Mapped[str | None] = mapped_column(String(50), default=None)
     shape: Mapped[EdgeShape] = mapped_column(
-        Enum(EdgeShape, name="edge_shape"), default=EdgeShape.CURVED
+        Enum(EdgeShape, name="edge_shape"), default=EdgeShape.SMOOTHSTEP
     )
     label_size: Mapped[float] = mapped_column(Float, default=11.0)
     via_object_ids: Mapped[list[str] | None] = mapped_column(ARRAY(String), default=None)
