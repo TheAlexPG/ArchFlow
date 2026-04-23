@@ -781,11 +781,34 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     >
       <Background color="#333" gap={10} size={1} />
       <Controls />
-      <MiniMap
-        nodeColor="#3b82f6"
-        maskColor="rgba(0, 0, 0, 0.7)"
-        style={{ background: '#171717', border: '1px solid #333' }}
-      />
+      {/* Minimap — wrapped so we can absolutely-position the MINIMAP label */}
+      <div className="relative">
+        <div className="absolute -top-6 right-0 font-mono text-[10px] uppercase tracking-[0.08em] text-text-3 pointer-events-none select-none">
+          MINIMAP
+        </div>
+        <MiniMap
+          pannable
+          zoomable
+          nodeColor={(node) => {
+            const obj = (node.data as { object?: { type?: string } })?.object
+            switch (obj?.type) {
+              case 'actor':       return '#c084fc' // accent-purple
+              case 'system':      return '#c084fc' // accent-purple
+              case 'app':         return '#FF6B35' // coral (container)
+              case 'store':       return '#FF6B35' // coral (container)
+              case 'component':   return '#60a5fa' // accent-blue
+              case 'group':       return '#4ade80' // accent-green
+              case 'external_system': return '#fbbf24' // accent-amber
+              default:            return '#52525b' // text-4 fallback
+            }
+          }}
+          nodeBorderRadius={3}
+          maskColor="rgba(10, 10, 11, 0.7)"
+          maskStrokeColor="var(--color-coral)"
+          maskStrokeWidth={1.5}
+          style={{ width: 200, height: 120 }}
+        />
+      </div>
       {diagramId && <CanvasComments diagramId={diagramId} />}
       <CursorsOverlay cursors={cursors} />
       <RemoteSelectionsOverlay selections={selections} />
