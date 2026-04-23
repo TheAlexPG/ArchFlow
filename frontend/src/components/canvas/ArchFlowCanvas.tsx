@@ -24,6 +24,7 @@ import {
   useDiagramObjects,
   useFlows,
   useObjects,
+  useRemoveObjectFromDiagram,
   useSaveDiagramPosition,
   useUpdateObject,
 } from '../../hooks/use-api'
@@ -101,6 +102,7 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
   const { data: diagramObjects = [] } = useDiagramObjects(diagramId)
   const createConnection = useCreateConnection(draftId)
   const deleteConnection = useDeleteConnection()
+  const removeObjectFromDiagram = useRemoveObjectFromDiagram()
   const saveDiagramPosition = useSaveDiagramPosition()
   const {
     selectNode,
@@ -657,6 +659,30 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     [deleteConnection],
   )
 
+  /**
+   * Backspace/Delete on selected nodes. ReactFlow's built-in key handler
+   * optimistically strips the node from its internal store, but without
+   * a handler here the server is never notified — meaning the row lives
+   * on in the `objects` + `diagram-objects` caches. Any subsequent cache
+   * re-read (refetch, WS event, filter toggle) would then re-hydrate the
+   * node onto the canvas — the "node comes back after mouse move" bug.
+   *
+   * Calling `useRemoveObjectFromDiagram` removes the junction row (but
+   * keeps the object in the workspace pool so it can be re-added later —
+   * matches the common diagramming-tool mental model). The mutation's
+   * `onMutate` patches the cache and stamps a tombstone so a late WS
+   * echo from another user's in-flight update doesn't resurrect it.
+   */
+  const onNodesDelete = useCallback(
+    (nodes: Node[]) => {
+      if (!diagramId) return
+      for (const node of nodes) {
+        removeObjectFromDiagram.mutate({ diagramId, objectId: node.id })
+      }
+    },
+    [diagramId, removeObjectFromDiagram],
+  )
+
   return (
     <>
       {commentComposeType && (
@@ -747,6 +773,7 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
       onNodeDragStop={onNodeDragStop}
       onConnect={onConnect}
       onSelectionChange={onSelectionChange}
+      onNodesDelete={onNodesDelete}
       onEdgesDelete={onEdgesDelete}
       onPaneClick={onPaneClick}
       onMouseMove={onMouseMove}
