@@ -10,23 +10,242 @@ import {
   useUpdateDiagram,
   type Diagram,
 } from '../hooks/use-diagrams'
-import { useConnections, useObjects } from '../hooks/use-api'
+import { useConnections, useObjects, useGlobalActivity } from '../hooks/use-api'
+import { useAuthStore } from '../stores/auth-store'
+import {
+  Avatar,
+  Button,
+  SectionLabel,
+  StatusPill,
+  type PillVariant,
+} from '../components/ui'
+
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 const DIAGRAM_TYPE_LABELS: Record<string, string> = {
-  system_landscape: 'L1 — System Landscape',
-  system_context: 'L1 — System Context',
-  container: 'L2 — Container',
-  component: 'L3 — Component',
-  custom: 'Custom',
+  system_landscape: 'L1 · SYSTEM',
+  system_context:   'L1 · CONTEXT',
+  container:        'L2 · CONTAINER',
+  component:        'L3 · COMPONENT',
+  custom:           'CUSTOM',
 }
 
-const DIAGRAM_TYPE_ICONS: Record<string, string> = {
-  system_landscape: '🌐',
-  system_context: '◉',
-  container: '▦',
-  component: '◧',
-  custom: '✦',
+const DIAGRAM_TYPE_LEVEL: Record<string, number> = {
+  system_landscape: 1,
+  system_context:   1,
+  container:        2,
+  component:        3,
+  custom:           0,
 }
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function formatDate(date: Date): string {
+  return date.toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  }).replace(',', ' ·')
+}
+
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  const days = Math.floor(hrs / 24)
+  return `${days}d ago`
+}
+
+function greeting(): string {
+  const h = new Date().getHours()
+  if (h < 12) return 'Good morning'
+  if (h < 17) return 'Good afternoon'
+  return 'Good evening'
+}
+
+/** Returns count of diagrams created within the last 7 days */
+function thisWeekCount(items: { created_at: string }[]): number {
+  const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000
+  return items.filter((i) => new Date(i.created_at).getTime() > cutoff).length
+}
+
+/** Get first name from email-derived display name */
+function firstNameFromEmail(email: string): string {
+  const local = email.split('@')[0]
+  const parts = local.split(/[._\-+]/)
+  const first = parts[0] ?? local
+  return first.charAt(0).toUpperCase() + first.slice(1)
+}
+
+/** Decode display name from JWT access token — same strategy as AppSidebar */
+function useDisplayName(): string {
+  const accessToken = useAuthStore((s) => s.accessToken)
+  return useMemo(() => {
+    if (!accessToken) return 'You'
+    try {
+      const payload = JSON.parse(atob(accessToken.split('.')[1]))
+      const email =
+        (payload.email as string | undefined) ??
+        (payload.sub as string | undefined) ??
+        ''
+      return firstNameFromEmail(email)
+    } catch {
+      return 'You'
+    }
+  }, [accessToken])
+}
+
+// ─── SVG thumbnails per diagram type ──────────────────────────────────────────
+
+function DiagramThumbnail({ type }: { type: string }) {
+  if (type === 'system_landscape' || type === 'system_context') {
+    return (
+      <svg width="100%" height="100%" viewBox="0 0 300 140" className="absolute inset-0">
+        <circle cx="50" cy="70" r="12" fill="none" stroke="#c084fc" strokeWidth="1.5" />
+        <rect x="100" y="55" width="50" height="30" rx="4" fill="#16161a" stroke="#FF6B35" strokeWidth="1.5" />
+        <rect x="180" y="55" width="50" height="30" rx="4" fill="#16161a" stroke="#FF6B35" strokeWidth="1.5" />
+        <rect x="260" y="55" width="30" height="30" rx="4" fill="#16161a" stroke="#FF6B35" strokeWidth="1.5" />
+        <path d="M62 70 Q80 70 100 70" stroke="#52525b" strokeWidth="1" fill="none" />
+        <path d="M150 70 L180 70" stroke="#52525b" strokeWidth="1" fill="none" />
+        <path d="M230 70 L260 70" stroke="#52525b" strokeWidth="1" fill="none" />
+      </svg>
+    )
+  }
+  if (type === 'container') {
+    return (
+      <svg width="100%" height="100%" viewBox="0 0 300 140" className="absolute inset-0">
+        <rect x="40" y="30" width="80" height="30" rx="4" fill="#16161a" stroke="#60a5fa" strokeWidth="1.5" />
+        <rect x="40" y="80" width="80" height="30" rx="4" fill="#16161a" stroke="#60a5fa" strokeWidth="1.5" />
+        <rect x="180" y="55" width="80" height="30" rx="4" fill="#16161a" stroke="#4ade80" strokeWidth="1.5" />
+        <path d="M120 45 Q150 45 180 65" stroke="#52525b" strokeWidth="1" fill="none" />
+        <path d="M120 95 Q150 95 180 75" stroke="#52525b" strokeWidth="1" fill="none" />
+      </svg>
+    )
+  }
+  if (type === 'component') {
+    return (
+      <svg width="100%" height="100%" viewBox="0 0 300 140" className="absolute inset-0">
+        <rect x="30" y="40" width="60" height="20" rx="3" fill="#16161a" stroke="#FF6B35" strokeWidth="1.2" />
+        <rect x="30" y="70" width="60" height="20" rx="3" fill="#16161a" stroke="#FF6B35" strokeWidth="1.2" />
+        <rect x="120" y="25" width="60" height="20" rx="3" fill="#16161a" stroke="#FF6B35" strokeWidth="1.2" />
+        <rect x="120" y="55" width="60" height="20" rx="3" fill="#16161a" stroke="#FF6B35" strokeWidth="1.2" />
+        <rect x="120" y="85" width="60" height="20" rx="3" fill="#16161a" stroke="#FF6B35" strokeWidth="1.2" />
+        <rect x="210" y="55" width="60" height="20" rx="3" fill="#16161a" stroke="#4ade80" strokeWidth="1.2" />
+        <path d="M90 50 L120 35" stroke="#52525b" strokeWidth="0.8" fill="none" />
+        <path d="M90 80 L120 65" stroke="#52525b" strokeWidth="0.8" fill="none" />
+        <path d="M180 65 L210 65" stroke="#52525b" strokeWidth="0.8" fill="none" />
+      </svg>
+    )
+  }
+  // custom / fallback
+  return (
+    <svg width="100%" height="100%" viewBox="0 0 300 140" className="absolute inset-0">
+      <rect x="60" y="45" width="70" height="50" rx="4" fill="#16161a" stroke="#FF6B35" strokeWidth="1.5" />
+      <rect x="170" y="45" width="70" height="50" rx="4" fill="#16161a" stroke="#52525b" strokeWidth="1.5" />
+      <path d="M130 70 L170 70" stroke="#52525b" strokeWidth="1" fill="none" />
+    </svg>
+  )
+}
+
+// ─── PreviewCard ───────────────────────────────────────────────────────────────
+
+type DiagramStatusVariant = 'draft' | 'review' | 'done' | 'processing' | 'input'
+
+function diagramStatusVariant(diagram: Diagram): DiagramStatusVariant {
+  if (diagram.draft_id) return 'draft'
+  return 'done'
+}
+
+function diagramStatusLabel(diagram: Diagram): string {
+  if (diagram.draft_id) return 'DRAFT'
+  return 'LIVE'
+}
+
+function PreviewCard({
+  diagram,
+  onClick,
+  onDelete,
+  onPinToggle,
+}: {
+  diagram: Diagram
+  onClick: () => void
+  onDelete: () => void
+  onPinToggle: () => void
+}) {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const level = DIAGRAM_TYPE_LEVEL[diagram.type] ?? 0
+  const levelStr = level > 0 ? `LVL ${level}` : 'LVL —'
+  const typeStr = DIAGRAM_TYPE_LABELS[diagram.type] ?? diagram.type.toUpperCase()
+  const ago = timeAgo(diagram.updated_at)
+  const variant = diagramStatusVariant(diagram)
+  const label = diagramStatusLabel(diagram)
+
+  return (
+    <div
+      onClick={onClick}
+      className="group relative bg-surface border border-border-base rounded-lg overflow-hidden cursor-pointer transition-all duration-150 hover:border-border-hi hover:-translate-y-0.5 hover:shadow-card-hover"
+    >
+      {/* Thumbnail */}
+      <div className="h-[140px] canvas-bg relative flex items-center justify-center overflow-hidden">
+        <DiagramThumbnail type={diagram.type} />
+      </div>
+
+      {/* Footer */}
+      <div className="p-4 border-t border-border-base">
+        <div className="flex items-center justify-between mb-2 gap-2">
+          <div className="text-[14px] font-medium text-text-base truncate min-w-0">
+            {diagram.name}
+          </div>
+          <StatusPill status={variant}>{label}</StatusPill>
+        </div>
+        <div className="flex items-center gap-1.5 font-mono text-[10.5px] text-text-3">
+          <span>{levelStr}</span>
+          <span>·</span>
+          <span>{typeStr}</span>
+          <span>·</span>
+          <span>{ago}</span>
+        </div>
+      </div>
+
+      {/* 3-dot menu — visible on group hover */}
+      <div
+        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          onClick={() => setMenuOpen((v) => !v)}
+          className="w-6 h-6 rounded bg-surface/80 backdrop-blur flex items-center justify-center text-text-3 hover:text-text-base border border-border-base hover:border-border-hi"
+          title="Options"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+            <circle cx="12" cy="5" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="19" r="1.5" />
+          </svg>
+        </button>
+        {menuOpen && (
+          <div className="absolute right-0 top-7 z-10 bg-panel border border-border-base rounded-lg shadow-popup py-1 min-w-[120px]">
+            <button
+              onClick={() => { setMenuOpen(false); onPinToggle() }}
+              className="w-full text-left px-3 py-1.5 text-[12px] text-text-2 hover:bg-surface-hi hover:text-text-base"
+            >
+              {diagram.pinned ? 'Unpin' : 'Pin to overview'}
+            </button>
+            <button
+              onClick={() => { setMenuOpen(false); onDelete() }}
+              className="w-full text-left px-3 py-1.5 text-[12px] text-accent-pink hover:bg-surface-hi"
+            >
+              Delete
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── OverviewPage ──────────────────────────────────────────────────────────────
 
 export function OverviewPage() {
   const { data: diagrams = [] } = useDiagrams()
@@ -36,6 +255,11 @@ export function OverviewPage() {
   const deleteDiagram = useDeleteDiagram()
   const updateDiagram = useUpdateDiagram()
   const navigate = useNavigate()
+  const firstName = useDisplayName()
+
+  // TODO(redesign): wire real activity feed — useGlobalActivity returns backend log
+  const { data: activityLog = [] } = useGlobalActivity({ limit: 5 })
+
   const [showCreate, setShowCreate] = useState(false)
   const [newName, setNewName] = useState('')
   const [newType, setNewType] = useState('system_landscape')
@@ -67,235 +291,378 @@ export function OverviewPage() {
     )
   }
 
-  const pinned = useMemo(() => diagrams.filter((d) => d.pinned), [diagrams])
   const recent = useMemo(
     () =>
       [...diagrams]
         .sort(
-          (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
+          (a, b) =>
+            new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
         )
         .slice(0, 6),
     [diagrams],
   )
 
-  // Health checks reuse data already fetched — cheap, no extra roundtrip.
-  const orphanObjects = useMemo(
-    () =>
-      objects.filter(
-        (o) =>
-          !connections.some((c) => c.source_id === o.id || c.target_id === o.id),
-      ).length,
-    [objects, connections],
-  )
-  const missingDescriptions = useMemo(
-    () => objects.filter((o) => !o.description).length,
-    [objects],
-  )
+  const drafts = useMemo(() => diagrams.filter((d) => d.draft_id), [diagrams])
+
+  // "This week" deltas — diagrams created in the last 7 days
+  const diagramsThisWeek = useMemo(() => thisWeekCount(diagrams), [diagrams])
+
+  // Computed date string e.g. "Wednesday · April 23"
+  const formattedDate = useMemo(() => formatDate(new Date()), [])
+
+  // TODO(redesign): sharedToday — no hook exists for "diagrams shared by teammates since yesterday"
+  // Placeholder subtext uses drafts count only.
+  const subheadText = useMemo(() => {
+    const draftCount = drafts.length
+    if (draftCount === 0) {
+      return 'No drafts pending. Everything looks good.'
+    }
+    return (
+      <>
+        You have{' '}
+        <span className="font-mono text-[13px] text-text-base">{draftCount} draft{draftCount !== 1 ? 's' : ''}</span>{' '}
+        waiting for review.
+      </>
+    )
+  }, [drafts.length])
+
+  // Activity items derived from activityLog; fall back to synthetic entries
+  // TODO(redesign): wire real user names from activity log — ActivityLogEntry only has user_id, no display name
+  const activityItems = useMemo(() => {
+    if (activityLog.length > 0) {
+      return activityLog.slice(0, 4).map((entry) => {
+        const diagramName =
+          entry.target_type === 'diagram'
+            ? (diagrams.find((d) => d.id === entry.target_id)?.name ?? entry.target_id.slice(0, 8))
+            : null
+        const objectOrDiagram = diagramName ?? `${entry.target_type} ${entry.target_id.slice(0, 6)}`
+        const actionLabel =
+          entry.action === 'created' ? 'created' : entry.action === 'deleted' ? 'deleted' : 'edited'
+        const pillVariant: PillVariant =
+          entry.action === 'created'
+            ? 'done'
+            : entry.action === 'updated'
+            ? 'processing'
+            : 'input'
+        const pillText =
+          entry.action === 'created' ? 'NEW' : entry.action === 'updated' ? 'MOD' : 'DEL'
+        return {
+          id: entry.id,
+          initials: '?',
+          gradient: 'blue-purple' as const,
+          text: (
+            <>
+              <span className="text-text-2">{actionLabel} </span>
+              <span className="font-mono text-coral">{objectOrDiagram}</span>
+            </>
+          ),
+          time: timeAgo(entry.created_at),
+          pillVariant,
+          pillText,
+        }
+      })
+    }
+    // Fallback: synthetic entries from recent diagrams
+    return recent.slice(0, 2).map((d, i) => ({
+      id: d.id,
+      initials: firstName.slice(0, 2).toUpperCase(),
+      gradient: 'coral-amber' as const,
+      text: (
+        <>
+          <span className="text-text-2">created diagram </span>
+          <span className="font-mono text-coral">{d.name}</span>
+        </>
+      ),
+      time: timeAgo(d.created_at),
+      pillVariant: 'done' as const,
+      pillText: i === 0 ? 'NEW' : 'NEW',
+    }))
+  }, [activityLog, diagrams, recent, firstName])
 
   return (
     <div className="flex h-screen bg-bg text-text-base">
       <AppSidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <PageToolbar
-          breadcrumb={['alex / personal', 'Overview']}
+          breadcrumb={['Overview']}
           actions={
             <>
               <SearchButton onClick={toggleSearch} />
               <button
                 onClick={() => setShowCreate(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-coral border border-coral text-bg text-[12.5px] font-medium hover:bg-coral/90 transition-colors"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-coral border border-coral text-bg text-[12.5px] font-medium hover:bg-coral-2 hover:border-coral-2 transition-colors"
               >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14"/></svg>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
                 New diagram
               </button>
             </>
           }
         />
+
+        {/* Main scrollable content */}
         <div className="flex-1 overflow-y-auto p-8">
 
-        {showCreate && (
-          <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4 mb-6 max-w-lg">
-            <div className="text-sm font-medium mb-3">New diagram</div>
-            <input
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              placeholder="Diagram name…"
-              autoFocus
-              onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
-              className="w-full bg-neutral-800 border border-neutral-700 rounded px-3 py-1.5 text-sm outline-none mb-2"
-            />
-            <select
-              value={newType}
-              onChange={(e) => setNewType(e.target.value)}
-              className="w-full bg-neutral-800 border border-neutral-700 rounded px-3 py-1.5 text-sm outline-none mb-3"
+          {/* Create modal */}
+          {showCreate && (
+            <div className="bg-panel border border-border-base rounded-xl shadow-window p-5 mb-8 max-w-lg">
+              <div className="text-[13px] font-medium mb-4 text-text-base">New diagram</div>
+              <input
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="Diagram name…"
+                autoFocus
+                onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
+                className="w-full bg-surface border border-border-base rounded-lg px-3 py-2 text-[13px] text-text-base placeholder:text-text-4 outline-none focus:border-border-hi mb-2.5"
+              />
+              <select
+                value={newType}
+                onChange={(e) => setNewType(e.target.value)}
+                className="w-full bg-surface border border-border-base rounded-lg px-3 py-2 text-[13px] text-text-base outline-none focus:border-border-hi mb-4"
+              >
+                <option value="system_landscape">L1 — System Landscape</option>
+                <option value="system_context">L1 — System Context</option>
+                <option value="container">L2 — Container</option>
+                <option value="component">L3 — Component</option>
+                <option value="custom">Custom</option>
+              </select>
+              <div className="flex gap-2">
+                <Button
+                  variant="primary"
+                  onClick={handleCreate}
+                  disabled={createDiagram.isPending}
+                >
+                  Create
+                </Button>
+                <Button
+                  variant="default"
+                  onClick={() => { setShowCreate(false); setNewName('') }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* ── Hero row ── */}
+          <div className="flex items-end justify-between mb-10">
+            <div>
+              <SectionLabel className="mb-3">{formattedDate}</SectionLabel>
+              <h1 className="text-[32px] leading-tight tracking-tight font-semibold">
+                {greeting()}, {firstName}{' '}
+                <span className="font-serif italic text-coral">—</span>
+              </h1>
+              <p className="text-[14px] text-text-2 mt-2 max-w-lg">
+                {subheadText}
+              </p>
+            </div>
+            {/* TODO(redesign): workspace presence count — no global presence hook exposed outside DiagramSocket.
+                Show pill only when we have real data. Hidden for now. */}
+          </div>
+
+          {/* ── Stats grid ── */}
+          <div className="grid grid-cols-4 gap-3 mb-10">
+            {/* Total diagrams */}
+            <div className="bg-surface border border-border-base rounded-lg p-5 hover:border-border-hi hover:bg-surface-hi hover:-translate-y-px transition-all duration-150 cursor-default">
+              <SectionLabel>Total diagrams</SectionLabel>
+              <div className="flex items-baseline gap-2 mt-2">
+                <div className="text-[28px] font-semibold tracking-tight text-text-base">
+                  {diagrams.length}
+                </div>
+                {diagramsThisWeek > 0 && (
+                  <div className="font-mono text-[11px] text-accent-green">
+                    +{diagramsThisWeek} this week
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Model objects */}
+            <div className="bg-surface border border-border-base rounded-lg p-5 hover:border-border-hi hover:bg-surface-hi hover:-translate-y-px transition-all duration-150 cursor-default">
+              <SectionLabel>Model objects</SectionLabel>
+              <div className="flex items-baseline gap-2 mt-2">
+                <div className="text-[28px] font-semibold tracking-tight text-text-base">
+                  {objects.length}
+                </div>
+                <div className="font-mono text-[11px] text-text-3">objects</div>
+              </div>
+            </div>
+
+            {/* Connections */}
+            <div className="bg-surface border border-border-base rounded-lg p-5 hover:border-border-hi hover:bg-surface-hi hover:-translate-y-px transition-all duration-150 cursor-default">
+              <SectionLabel>Connections</SectionLabel>
+              <div className="flex items-baseline gap-2 mt-2">
+                <div className="text-[28px] font-semibold tracking-tight text-text-base">
+                  {connections.length}
+                </div>
+                <div className="font-mono text-[11px] text-text-3">traced</div>
+              </div>
+            </div>
+
+            {/* Drafts awaiting — pink accented */}
+            <div
+              className="rounded-lg p-5 hover:-translate-y-px transition-all duration-150 cursor-default"
+              style={{
+                border: '1px solid rgba(244,114,182,0.25)',
+                background:
+                  'linear-gradient(to bottom right, rgba(244,114,182,0.05), transparent)',
+              }}
             >
-              {Object.entries(DIAGRAM_TYPE_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>{label}</option>
-              ))}
-            </select>
-            <div className="flex gap-2">
-              <button
-                onClick={handleCreate}
-                className="text-sm bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 rounded"
-              >
-                Create
-              </button>
-              <button
-                onClick={() => { setShowCreate(false); setNewName('') }}
-                className="text-sm text-neutral-400 border border-neutral-700 px-3 py-1 rounded"
-              >
-                Cancel
-              </button>
+              <SectionLabel className="[&>span]:text-accent-pink">
+                Drafts awaiting
+              </SectionLabel>
+              <div className="flex items-baseline gap-2 mt-2">
+                <div
+                  className="text-[28px] font-semibold tracking-tight"
+                  style={{ color: 'var(--color-accent-pink)' }}
+                >
+                  {drafts.length}
+                </div>
+                <div className="font-mono text-[11px] text-text-2">
+                  {drafts.length === 0 ? 'none pending' : 'needs input'}
+                </div>
+              </div>
             </div>
           </div>
-        )}
 
-        {/* Pinned */}
-        <Section title="📌 Pinned">
-          {pinned.length === 0 ? (
-            <EmptyRow hint="Pin a diagram from the Diagrams page to have it show up here." />
-          ) : (
-            <Grid>
-              {pinned.map((d) => (
-                <DiagramCard
-                  key={d.id}
-                  diagram={d}
-                  onClick={() => navigate(`/diagram/${d.id}`)}
-                  onPinToggle={() =>
-                    updateDiagram.mutate({ id: d.id, pinned: !d.pinned })
-                  }
-                  onDelete={() => {
-                    if (confirm(`Delete diagram "${d.name}"?`)) deleteDiagram.mutate(d.id)
-                  }}
-                />
-              ))}
-            </Grid>
-          )}
-        </Section>
+          {/* ── Recent diagrams ── */}
+          <div className="mb-10">
+            <div className="flex items-end justify-between mb-4">
+              <div>
+                <SectionLabel className="mb-1">Recent / last edited</SectionLabel>
+                <div className="text-[15px] font-medium text-text-base">
+                  Continue where you left off
+                </div>
+              </div>
+              <button
+                onClick={() => navigate('/diagrams')}
+                className="font-mono text-[11px] text-text-3 hover:text-coral transition-colors"
+              >
+                view all →
+              </button>
+            </div>
 
-        {/* Recent */}
-        <Section title="⏱ Recent">
-          {recent.length === 0 ? (
-            <EmptyRow hint="No diagrams yet. Click + Create diagram to start." />
-          ) : (
-            <Grid>
-              {recent.map((d) => (
-                <DiagramCard
-                  key={d.id}
-                  diagram={d}
-                  onClick={() => navigate(`/diagram/${d.id}`)}
-                  onPinToggle={() =>
-                    updateDiagram.mutate({ id: d.id, pinned: !d.pinned })
-                  }
-                  onDelete={() => {
-                    if (confirm(`Delete diagram "${d.name}"?`)) deleteDiagram.mutate(d.id)
-                  }}
-                />
-              ))}
-            </Grid>
-          )}
-        </Section>
-
-        {/* Health */}
-        <Section title="🩺 Health check">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 max-w-3xl">
-            <Stat value={objects.length} label="Objects" />
-            <Stat value={connections.length} label="Connections" />
-            <Stat value={missingDescriptions} label="Missing descriptions" warn={missingDescriptions > 0} />
-            <Stat value={orphanObjects} label="Orphan objects" warn={orphanObjects > 0} />
+            {recent.length === 0 ? (
+              <div className="text-[12px] text-text-3 italic border border-dashed border-border-base rounded-lg p-6">
+                No diagrams yet. Click "New diagram" to start.
+              </div>
+            ) : (
+              <div className="grid grid-cols-3 gap-4">
+                {recent.slice(0, 3).map((d) => (
+                  <PreviewCard
+                    key={d.id}
+                    diagram={d}
+                    onClick={() => navigate(`/diagram/${d.id}`)}
+                    onDelete={() => {
+                      if (confirm(`Delete diagram "${d.name}"?`))
+                        deleteDiagram.mutate(d.id)
+                    }}
+                    onPinToggle={() =>
+                      updateDiagram.mutate({ id: d.id, pinned: !d.pinned })
+                    }
+                  />
+                ))}
+              </div>
+            )}
           </div>
-        </Section>
+
+          {/* ── Activity feed + Quick start ── */}
+          <div className="grid grid-cols-3 gap-6">
+            {/* Activity feed (col-span-2) */}
+            <div className="col-span-2">
+              <SectionLabel className="mb-3">Activity stream</SectionLabel>
+              {activityItems.length === 0 ? (
+                <div className="py-6 text-[12px] text-text-3 italic">
+                  No activity yet.
+                </div>
+              ) : (
+                <div>
+                  {activityItems.map((item, idx) => (
+                    <div
+                      key={item.id}
+                      className={`flex items-start gap-3 py-3 ${idx < activityItems.length - 1 ? 'border-b border-border-base' : ''}`}
+                    >
+                      <Avatar initials={item.initials} gradient={item.gradient} size="sm" />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[13px]">
+                          <span className="font-medium text-text-base">You </span>
+                          {item.text}
+                        </div>
+                        <div className="font-mono text-[10.5px] text-text-3 mt-1">
+                          {item.time}
+                        </div>
+                      </div>
+                      <StatusPill status={item.pillVariant}>
+                        {item.pillText}
+                      </StatusPill>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Quick start (col-span-1) */}
+            <div>
+              <SectionLabel className="mb-3">Quick start</SectionLabel>
+              <div className="space-y-2">
+                {/* Primary — coral accented */}
+                <button
+                  onClick={() => setShowCreate(true)}
+                  className="w-full text-left p-4 rounded-lg border border-border-base bg-surface hover:border-coral hover:bg-coral-glow transition-all duration-150 group"
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FF6B35" strokeWidth="2">
+                      <path d="M12 5v14M5 12h14" />
+                    </svg>
+                    <div className="text-[13px] font-medium text-text-base">New diagram</div>
+                  </div>
+                  <div className="font-mono text-[10.5px] text-text-3 group-hover:text-text-2 transition-colors">
+                    Start blank or from template
+                  </div>
+                </button>
+
+                {/* Import from C4 */}
+                <button
+                  className="w-full text-left p-4 rounded-lg border border-border-base bg-surface hover:border-border-hi transition-all duration-150"
+                  title="Import from C4 — coming soon"
+                  disabled
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-text-3">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4m4-5 5-5 5 5m-5-5v12" />
+                    </svg>
+                    <div className="text-[13px] font-medium text-text-2">Import from C4</div>
+                  </div>
+                  <div className="font-mono text-[10.5px] text-text-3">
+                    PlantUML / Structurizr / JSON
+                  </div>
+                </button>
+
+                {/* Invite teammates */}
+                <button
+                  onClick={() => navigate('/members')}
+                  className="w-full text-left p-4 rounded-lg border border-border-base bg-surface hover:border-border-hi transition-all duration-150"
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-text-3">
+                      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                      <circle cx="9" cy="7" r="4" />
+                      <path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+                    </svg>
+                    <div className="text-[13px] font-medium text-text-2">Invite teammates</div>
+                  </div>
+                  <div className="font-mono text-[10.5px] text-text-3">
+                    Collaborate in real-time
+                  </div>
+                </button>
+              </div>
+            </div>
+          </div>
+
         </div>
       </div>
       <SearchModal open={searchOpen} onClose={toggleSearch} />
-    </div>
-  )
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="mb-8">
-      <div className="text-sm font-medium text-neutral-300 mb-3">{title}</div>
-      {children}
-    </div>
-  )
-}
-
-function Grid({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3">
-      {children}
-    </div>
-  )
-}
-
-function EmptyRow({ hint }: { hint: string }) {
-  return (
-    <div className="text-xs text-neutral-500 italic border border-dashed border-neutral-800 rounded-lg p-4">
-      {hint}
-    </div>
-  )
-}
-
-function Stat({ value, label, warn }: { value: number; label: string; warn?: boolean }) {
-  return (
-    <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-3">
-      <div
-        className="text-2xl font-semibold"
-        style={{ color: warn ? '#f59e0b' : '#e5e5e5' }}
-      >
-        {value}
-      </div>
-      <div className="text-[11px] text-neutral-500">{label}</div>
-    </div>
-  )
-}
-
-function DiagramCard({
-  diagram,
-  onClick,
-  onPinToggle,
-  onDelete,
-}: {
-  diagram: Diagram
-  onClick: () => void
-  onPinToggle: () => void
-  onDelete: () => void
-}) {
-  return (
-    <div
-      onClick={onClick}
-      className="bg-neutral-900 border border-neutral-800 hover:border-neutral-700 rounded-lg p-3 cursor-pointer"
-    >
-      <div
-        className="h-20 rounded mb-2 flex items-center justify-center text-3xl opacity-30"
-        style={{ background: '#0a0a0a' }}
-      >
-        {DIAGRAM_TYPE_ICONS[diagram.type] || '▦'}
-      </div>
-      <div className="flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <div className="text-sm font-medium text-neutral-100 truncate">
-            {diagram.name}
-          </div>
-          <div className="text-[10px] text-neutral-500">
-            {DIAGRAM_TYPE_LABELS[diagram.type] || diagram.type}
-          </div>
-        </div>
-        <button
-          onClick={(e) => { e.stopPropagation(); onPinToggle() }}
-          title={diagram.pinned ? 'Unpin' : 'Pin to Overview'}
-          className={diagram.pinned ? 'text-yellow-400' : 'text-neutral-600 hover:text-neutral-300'}
-        >
-          {diagram.pinned ? '📌' : '📍'}
-        </button>
-      </div>
-      <button
-        onClick={(e) => { e.stopPropagation(); onDelete() }}
-        className="mt-2 text-[10px] text-neutral-600 hover:text-red-400"
-      >
-        Delete
-      </button>
     </div>
   )
 }
