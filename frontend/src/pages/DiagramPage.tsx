@@ -4,7 +4,7 @@ import { ReactFlowProvider } from '@xyflow/react'
 import { ArchFlowCanvas } from '../components/canvas/ArchFlowCanvas'
 import { DiagramAccessModal } from '../components/diagram/DiagramAccessModal'
 import { CreateDraftModal } from '../components/drafts/CreateDraftModal'
-import { AddObjectToolbar } from '../components/toolbar/AddObjectToolbar'
+import { AddObjectFAB } from '../components/canvas/AddObjectFAB'
 import { FilterToolbar } from '../components/toolbar/FilterToolbar'
 import { FlowPlaybackBar } from '../components/toolbar/FlowPlaybackBar'
 import { FlowsPanel } from '../components/toolbar/FlowsPanel'
@@ -451,7 +451,10 @@ export function DiagramPage() {
                 : undefined,
             }}
           >
-            <AddObjectToolbar diagramId={diagramId} />
+            <AddObjectFAB
+                diagramId={diagramId}
+                className="absolute left-4 top-1/2 -translate-y-1/2 z-30"
+              />
             <div className="absolute inset-0">
               <ArchFlowCanvas diagramId={diagramId} />
             </div>

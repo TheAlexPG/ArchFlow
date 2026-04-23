@@ -397,3 +397,104 @@ select {
   from { opacity: 0; transform: translateY(4px); }
   to   { opacity: 1; transform: none; }
 }
+
+/* ─── Task 012: Add Object FAB + Popup component classes ──────────────────── */
+
+/*
+ * .add-popup — container that slides in from the left with blur.
+ * transform-origin left center ensures the scale(0.92) anchor is at the FAB.
+ */
+.add-popup {
+  animation: popup-in 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transform-origin: left center;
+}
+
+/* Sections inside the popup animate in with a stagger */
+.add-popup .popup-section {
+  animation: item-stagger 0.3s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+/* Each object-pool row */
+.add-popup .popup-item {
+  animation: item-stagger 0.3s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+/* Object row: flex row, hover surface + shift */
+.obj-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid transparent;
+  transition: background 0.12s ease, border-color 0.12s ease, transform 0.12s ease;
+}
+.obj-row:hover:not(:disabled) {
+  background: var(--color-surface);
+  border-color: var(--color-border-base);
+  transform: translateX(2px);
+}
+.obj-row:hover:not(:disabled) .obj-add-hint {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* 28x28 type-icon container inside each obj-row */
+.obj-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid var(--color-border-base);
+  background: var(--color-surface);
+}
+
+/* Hover-reveal "↵ add" hint */
+.obj-add-hint {
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: all 0.15s ease;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  color: var(--color-coral);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+/* Create-type button grid cell */
+.create-type-btn {
+  padding: 10px;
+  border: 1px solid var(--color-border-base);
+  background: var(--color-surface);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+}
+.create-type-btn:hover {
+  border-color: var(--color-coral);
+  background: var(--color-coral-glow);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px -4px rgba(255, 107, 53, 0.25);
+}
+.create-type-btn:hover .create-type-icon {
+  color: var(--color-coral);
+  transform: scale(1.1);
+}
+
+/* Icon wrapper inside each create-type button */
+.create-type-icon {
+  transition: all 0.2s ease;
+  color: var(--color-text-2);
+}
