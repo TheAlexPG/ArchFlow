@@ -4,6 +4,7 @@ import {
   markObjectDeleted,
 } from './use-realtime'
 import { useWorkspaceStore } from '../stores/workspace-store'
+import { useAuthStore } from '../stores/auth-store'
 import type {
   ApiKey,
   ApiKeyCreate,
@@ -44,6 +45,28 @@ import type {
   ObjectUpdate,
 } from '../types/model'
 import { api } from '../lib/api-client'
+
+// ─── Current user ─────────────────────────────────────────
+
+export interface MeResponse {
+  id: string
+  email: string
+  name: string
+  created_at: string
+}
+
+export function useMe() {
+  const isAuthenticated = useAuthStore((s) => !!s.accessToken)
+  return useQuery({
+    queryKey: ['me'],
+    queryFn: async () => {
+      const { data } = await api.get<MeResponse>('/auth/me')
+      return data
+    },
+    staleTime: 2 * 60 * 1000,
+    enabled: isAuthenticated,
+  })
+}
 
 // ─── Objects ─────────────────────────────────────────────
 

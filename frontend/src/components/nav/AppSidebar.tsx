@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { useAuthStore } from '../../stores/auth-store'
-import { useDrafts, useMyInvites } from '../../hooks/use-api'
+import { useDrafts, useMe, useMyInvites } from '../../hooks/use-api'
 import { NotificationsBell } from './NotificationsBell'
 import { WorkspaceSwitcher } from './WorkspaceSwitcher'
 import { Avatar } from '../ui/Avatar'
@@ -165,12 +165,21 @@ function NavRow({
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function getInitials(email: string): string {
-  const parts = email.split('@')[0].split(/[._\-+]/)
+function getInitialsFromName(name: string): string {
+  const words = name.trim().split(/\s+/)
+  if (words.length >= 2) {
+    return (words[0][0] + words[1][0]).toUpperCase()
+  }
+  return name.slice(0, 2).toUpperCase()
+}
+
+function getInitialsFromEmail(email: string): string {
+  const local = email.split('@')[0]
+  const parts = local.split(/[._\-+]/)
   if (parts.length >= 2) {
     return (parts[0][0] + parts[1][0]).toUpperCase()
   }
-  return email.slice(0, 2).toUpperCase()
+  return local.slice(0, 2).toUpperCase()
 }
 
 // ─── AppSidebar ──────────────────────────────────────────────────────────────
@@ -181,26 +190,18 @@ function getInitials(email: string): string {
  * in-canvas navigation and does not render this.
  */
 export function AppSidebar() {
-  const { logout, accessToken } = useAuthStore()
+  const { logout } = useAuthStore()
   const { data: invites = [] } = useMyInvites()
   const pendingInviteCount = invites.length
 
-  // TODO(redesign): replace with useCurrentUser() once a /me endpoint hook
-  // is added. For now derive display info from the JWT access token payload.
-  const email = (() => {
-    if (!accessToken) return ''
-    try {
-      const payload = JSON.parse(atob(accessToken.split('.')[1]))
-      return (payload.email as string | undefined) ?? (payload.sub as string | undefined) ?? ''
-    } catch {
-      return ''
-    }
-  })()
-  const initials = email ? getInitials(email) : '?'
-  const displayName = email ? email.split('@')[0] : 'User'
+  const { data: me, isLoading: meLoading } = useMe()
 
-  // TODO(redesign): use useDrafts() count for a "NEW" badge once confirmed
-  // not to cause layout jank on first load.
+  const initials = me
+    ? (me.name ? getInitialsFromName(me.name) : getInitialsFromEmail(me.email))
+    : null
+  const displayName = me ? (me.name || me.email.split('@')[0]) : null
+  const email = me?.email ?? null
+
   const { data: drafts = [] } = useDrafts()
   const openDraftCount = drafts.filter((d) => d.status === 'open').length
 
@@ -274,10 +275,23 @@ export function AppSidebar() {
 
       {/* ── Account block ──────────────────────────────────────────────── */}
       <div className="border-t border-border-base p-3 flex items-center gap-3">
-        <Avatar initials={initials} gradient="coral-amber" size="sm" />
+        {meLoading || !initials ? (
+          <div className="w-7 h-7 rounded-full bg-surface animate-pulse flex-shrink-0" />
+        ) : (
+          <Avatar initials={initials} gradient="coral-amber" size="sm" />
+        )}
         <div className="flex-1 min-w-0">
-          <div className="text-[12.5px] text-text-base truncate">{displayName}</div>
-          <div className="font-mono text-[10px] text-text-3 truncate">{email}</div>
+          {meLoading || !displayName ? (
+            <>
+              <div className="h-3 w-24 rounded bg-surface animate-pulse mb-1" />
+              <div className="h-2.5 w-32 rounded bg-surface animate-pulse" />
+            </>
+          ) : (
+            <>
+              <div className="text-[12.5px] text-text-base truncate">{displayName}</div>
+              <div className="font-mono text-[10px] text-text-3 truncate">{email}</div>
+            </>
+          )}
         </div>
         <button
           onClick={logout}
