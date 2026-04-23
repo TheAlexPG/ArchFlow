@@ -59,12 +59,13 @@ function connectionToEdge(conn: Connection): Edge {
     conn.direction === 'undirected' ? undefined : arrow
   const markerStart =
     conn.direction === 'bidirectional' ? arrow : undefined
-  // Embed direction in the id so React Flow treats a direction change as a
-  // new edge (unmount + remount). Without this, React Flow's internal edge
-  // diffing merges by id and `markerStart: undefined` does NOT clear a
-  // previously-set markerStart — the stale arrow lingers until page reload.
+  // Embed direction + endpoints in the id so React Flow treats any change
+  // as a new edge (unmount + remount). Without this, React Flow merges by
+  // id: `markerStart: undefined` does NOT clear a previously-set markerStart,
+  // and after a flip source/target may stay visually attached to the old
+  // endpoints because React Flow doesn't re-route existing edges.
   return {
-    id: `${conn.id}:${conn.direction}`,
+    id: `${conn.id}:${conn.direction}:${conn.source_id}:${conn.target_id}`,
     source: conn.source_id,
     target: conn.target_id,
     sourceHandle: conn.source_handle,
