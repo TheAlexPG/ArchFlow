@@ -83,6 +83,14 @@ async def update_connection(
     return conn
 
 
+async def flip_connection(db: AsyncSession, conn: Connection) -> Connection:
+    conn.source_id, conn.target_id = conn.target_id, conn.source_id
+    conn.source_handle, conn.target_handle = conn.target_handle, conn.source_handle
+    await db.flush()
+    await db.refresh(conn)
+    return conn
+
+
 async def delete_connection(db: AsyncSession, conn: Connection) -> None:
     await db.delete(conn)
     await db.flush()
