@@ -69,6 +69,7 @@ function connectionToEdge(conn: Connection): Edge {
       protocol: conn.protocol,
       shape: conn.shape,
       labelSize: conn.label_size,
+      direction: conn.direction,
     },
   }
 }

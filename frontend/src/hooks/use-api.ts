@@ -326,7 +326,27 @@ export function useUpdateConnection() {
       const { data: result } = await api.put<Connection>(`/connections/${id}`, data)
       return result
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['connections'] }),
+    onSuccess: (updated) => {
+      // Write the updated connection into the individual-item cache immediately
+      // so the sidebar reflects changes (direction, shape, etc.) without
+      // waiting for the full list refetch.
+      qc.setQueryData(['connections', updated.id], updated)
+      // Patch the list cache so the canvas edge re-renders in the same tick
+      // (avoids the round-trip delay that leaves the arrow visually stale).
+      qc.setQueriesData<Connection[] | undefined>(
+        { queryKey: ['connections'] },
+        (prev) => {
+          if (!prev || !Array.isArray(prev)) return prev
+          const idx = prev.findIndex((c) => c.id === updated.id)
+          if (idx === -1) return [...prev, updated]
+          const next = [...prev]
+          next[idx] = updated
+          return next
+        },
+      )
+      // Still invalidate so any stale queries (e.g. draft-scoped lists) refetch.
+      void qc.invalidateQueries({ queryKey: ['connections'] })
+    },
   })
 }
 
