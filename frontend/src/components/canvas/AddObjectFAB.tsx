@@ -449,10 +449,14 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
           style={{
             position: 'fixed',
             left: popupLeft,
-            top: '50vh',
-            transform: 'translateY(-50%)',
+            // Fill the canvas area vertically: top ~ just below the 48px
+            // top-bar + a little breathing room; bottom ~ just above the
+            // bottom tags-bar. Popup auto-stretches so the object pool gets
+            // maximum height while Create / Annotation sections stay pinned
+            // to the bottom of the popup via flex layout.
+            top: 72,
+            bottom: 72,
             width: 340,
-            maxHeight: 'min(640px, calc(100vh - 40px))',
             background: 'var(--color-panel)',
             border: '1px solid var(--color-border-base)',
             borderRadius: 12,
@@ -496,10 +500,11 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
             </div>
           </div>
 
-          {/* ── Scrollable pool section ── */}
+          {/* ── Scrollable pool section — grows to fill available height,
+              Create + Annotation sections below stay pinned. ── */}
           <div
-            className="flex-shrink-0 px-2 pt-2 pb-1"
-            style={{ maxHeight: 280, overflowY: 'auto' }}
+            className="flex-1 min-h-0 px-2 pt-2 pb-1"
+            style={{ overflowY: 'auto' }}
           >
             <div
               className="popup-section px-1 pt-1 pb-2"
