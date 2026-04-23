@@ -62,6 +62,7 @@ async def log_created(
     target_type: ActivityTargetType,
     obj: Any,
     user_id: uuid.UUID | None = None,
+    workspace_id: uuid.UUID | None = None,
 ) -> ActivityLog:
     entry = ActivityLog(
         target_type=target_type,
@@ -69,6 +70,7 @@ async def log_created(
         action=ActivityAction.CREATED,
         changes=_snapshot(obj),
         user_id=user_id,
+        workspace_id=workspace_id,
     )
     db.add(entry)
     await db.flush()
@@ -82,6 +84,7 @@ async def log_updated(
     before: dict,
     after: dict,
     user_id: uuid.UUID | None = None,
+    workspace_id: uuid.UUID | None = None,
 ) -> ActivityLog | None:
     """Log an update only if there were actual changes."""
     changes = diff_snapshots(before, after)
@@ -93,6 +96,7 @@ async def log_updated(
         action=ActivityAction.UPDATED,
         changes=changes,
         user_id=user_id,
+        workspace_id=workspace_id,
     )
     db.add(entry)
     await db.flush()
@@ -104,6 +108,7 @@ async def log_deleted(
     target_type: ActivityTargetType,
     obj: Any,
     user_id: uuid.UUID | None = None,
+    workspace_id: uuid.UUID | None = None,
 ) -> ActivityLog:
     entry = ActivityLog(
         target_type=target_type,
@@ -111,6 +116,7 @@ async def log_deleted(
         action=ActivityAction.DELETED,
         changes=_snapshot(obj),
         user_id=user_id,
+        workspace_id=workspace_id,
     )
     db.add(entry)
     await db.flush()

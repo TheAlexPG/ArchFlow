@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { AppSidebar } from '../components/nav/AppSidebar'
+import { PageToolbar } from '../components/nav/PageToolbar'
 import {
   useInviteMember,
   useRemoveMember,
@@ -54,9 +55,11 @@ export function MembersPage() {
   }
 
   return (
-    <div className="flex h-screen bg-neutral-950 text-neutral-200">
+    <div className="flex h-screen bg-bg text-text-base">
       <AppSidebar />
-      <div className="flex-1 overflow-y-auto p-8">
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <PageToolbar breadcrumb={['alex / personal', 'Members']} />
+        <div className="flex-1 overflow-y-auto p-8">
         <h1 className="text-xl font-semibold mb-6">Workspace members</h1>
 
         <section className="max-w-3xl mb-8 bg-neutral-900 border border-neutral-800 rounded-lg p-4">
@@ -221,6 +224,7 @@ export function MembersPage() {
               ))}
             </tbody>
           </table>
+        </div>
         </div>
       </div>
     </div>

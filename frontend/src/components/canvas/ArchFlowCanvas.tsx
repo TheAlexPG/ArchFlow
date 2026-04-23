@@ -24,6 +24,7 @@ import {
   useDiagramObjects,
   useFlows,
   useObjects,
+  useRemoveObjectFromDiagram,
   useSaveDiagramPosition,
   useUpdateObject,
 } from '../../hooks/use-api'
@@ -40,7 +41,6 @@ import { extractFilterValue, overlayStyleFor, type FilterDim } from './overlay-u
 import { detectParentGroup, findSpatialGroupMembers, nodeToRect } from './group-utils'
 import { useDiagramSocket } from '../../hooks/use-realtime'
 import { CursorsOverlay, RemoteSelectionsOverlay } from './CursorsOverlay'
-import { PresenceRoster } from './PresenceRoster'
 
 const nodeTypes: NodeTypes = {
   c4: C4Node as unknown as NodeTypes['c4'],
@@ -102,6 +102,7 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
   const { data: diagramObjects = [] } = useDiagramObjects(diagramId)
   const createConnection = useCreateConnection(draftId)
   const deleteConnection = useDeleteConnection()
+  const removeObjectFromDiagram = useRemoveObjectFromDiagram()
   const saveDiagramPosition = useSaveDiagramPosition()
   const {
     selectNode,
@@ -115,6 +116,8 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     activeBranch,
     commentComposeType,
     setCommentComposeType,
+    setRemoteNodeEditors,
+    setPresenceUsers,
   } = useCanvasStore()
   const filterDim = activeFilter as FilterDim
 
@@ -156,6 +159,28 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
   const { cursors, selections, presence, sendCursor, sendSelection } = useDiagramSocket(
     diagramId ?? null,
   )
+
+  // Mirror presence + per-node selection out to the canvas store so
+  //   (a) the page-level top bar can render the overlapping avatar stack
+  //       without owning its own WS subscription, and
+  //   (b) individual node components can show an `● editing` indicator
+  //       without plumbing `selections` through React Flow node data.
+  useEffect(() => {
+    setPresenceUsers(presence)
+  }, [presence, setPresenceUsers])
+
+  useEffect(() => {
+    // Invert selections (user_id -> nodeIds) into nodeId -> userNames so
+    // each node can cheaply read its own slice via a zustand selector.
+    const map: Record<string, string[]> = {}
+    for (const { ids, user_name } of Object.values(selections)) {
+      for (const nodeId of ids) {
+        if (!map[nodeId]) map[nodeId] = []
+        map[nodeId].push(user_name)
+      }
+    }
+    setRemoteNodeEditors(map)
+  }, [selections, setRemoteNodeEditors])
 
   const onMouseMove = useCallback(
     (event: React.MouseEvent) => {
@@ -634,6 +659,30 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     [deleteConnection],
   )
 
+  /**
+   * Backspace/Delete on selected nodes. ReactFlow's built-in key handler
+   * optimistically strips the node from its internal store, but without
+   * a handler here the server is never notified — meaning the row lives
+   * on in the `objects` + `diagram-objects` caches. Any subsequent cache
+   * re-read (refetch, WS event, filter toggle) would then re-hydrate the
+   * node onto the canvas — the "node comes back after mouse move" bug.
+   *
+   * Calling `useRemoveObjectFromDiagram` removes the junction row (but
+   * keeps the object in the workspace pool so it can be re-added later —
+   * matches the common diagramming-tool mental model). The mutation's
+   * `onMutate` patches the cache and stamps a tombstone so a late WS
+   * echo from another user's in-flight update doesn't resurrect it.
+   */
+  const onNodesDelete = useCallback(
+    (nodes: Node[]) => {
+      if (!diagramId) return
+      for (const node of nodes) {
+        removeObjectFromDiagram.mutate({ diagramId, objectId: node.id })
+      }
+    },
+    [diagramId, removeObjectFromDiagram],
+  )
+
   return (
     <>
       {commentComposeType && (
@@ -724,6 +773,7 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
       onNodeDragStop={onNodeDragStop}
       onConnect={onConnect}
       onSelectionChange={onSelectionChange}
+      onNodesDelete={onNodesDelete}
       onEdgesDelete={onEdgesDelete}
       onPaneClick={onPaneClick}
       onMouseMove={onMouseMove}
@@ -745,6 +795,14 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
        */
       onlyRenderVisibleElements
       fitView
+      /*
+       * Cap auto-zoom at 1× so fitView never scales a small diagram up past
+       * native resolution — a fractional scale like 1.23 pushes React Flow's
+       * viewport transform onto fractional pixels and the whole canvas
+       * rasterises soft / blurry. Diagrams with few nodes now render crisp
+       * at 1:1 with generous surrounding padding instead.
+       */
+      fitViewOptions={{ maxZoom: 1, padding: 0.2 }}
       snapToGrid
       snapGrid={[10, 10]}
       defaultEdgeOptions={{
@@ -758,15 +816,37 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     >
       <Background color="#333" gap={10} size={1} />
       <Controls />
-      <MiniMap
-        nodeColor="#3b82f6"
-        maskColor="rgba(0, 0, 0, 0.7)"
-        style={{ background: '#171717', border: '1px solid #333' }}
-      />
+      {/* Minimap — wrapped so we can absolutely-position the MINIMAP label */}
+      <div className="relative">
+        <div className="absolute -top-6 right-0 font-mono text-[10px] uppercase tracking-[0.08em] text-text-3 pointer-events-none select-none">
+          MINIMAP
+        </div>
+        <MiniMap
+          pannable
+          zoomable
+          nodeColor={(node) => {
+            const obj = (node.data as { object?: { type?: string } })?.object
+            switch (obj?.type) {
+              case 'actor':       return '#c084fc' // accent-purple
+              case 'system':      return '#c084fc' // accent-purple
+              case 'app':         return '#FF6B35' // coral (container)
+              case 'store':       return '#FF6B35' // coral (container)
+              case 'component':   return '#60a5fa' // accent-blue
+              case 'group':       return '#4ade80' // accent-green
+              case 'external_system': return '#fbbf24' // accent-amber
+              default:            return '#52525b' // text-4 fallback
+            }
+          }}
+          nodeBorderRadius={3}
+          maskColor="rgba(10, 10, 11, 0.7)"
+          maskStrokeColor="var(--color-coral)"
+          maskStrokeWidth={1.5}
+          style={{ width: 200, height: 120 }}
+        />
+      </div>
       {diagramId && <CanvasComments diagramId={diagramId} />}
       <CursorsOverlay cursors={cursors} />
       <RemoteSelectionsOverlay selections={selections} />
-      <PresenceRoster users={presence} />
     </ReactFlow>
     </>
   )

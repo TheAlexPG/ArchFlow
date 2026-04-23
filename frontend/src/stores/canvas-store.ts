@@ -26,6 +26,16 @@ interface CanvasState {
   // When set, the next click on empty canvas drops a comment pin of this
   // type at the click position. Cleared after placing one, or on ESC.
   commentComposeType: 'question' | 'inaccuracy' | 'idea' | 'note' | null
+  // Per-node live-edit presence: map node_id -> list of remote user names
+  // currently selecting/editing that node. Populated by ArchFlowCanvas from
+  // the realtime `selections` payload and consumed by individual node
+  // components so they can render an `● editing` indicator.
+  remoteNodeEditors: Record<string, string[]>
+  // Flat list of users currently connected to the active diagram room.
+  // Mirrored out of useDiagramSocket(...).presence by ArchFlowCanvas so the
+  // page-level top bar (which doesn't own the socket) can render the
+  // overlapping avatar stack without duplicating the WS connection.
+  presenceUsers: { user_id: string; user_name: string }[]
 
   selectNode: (id: string | null) => void
   selectEdge: (id: string | null) => void
@@ -41,6 +51,8 @@ interface CanvasState {
   setFlowStep: (idx: number) => void
   setFlowBranch: (branch: string | null) => void
   setCommentComposeType: (t: 'question' | 'inaccuracy' | 'idea' | 'note' | null) => void
+  setRemoteNodeEditors: (map: Record<string, string[]>) => void
+  setPresenceUsers: (users: { user_id: string; user_name: string }[]) => void
 }
 
 export const useCanvasStore = create<CanvasState>((set) => ({
@@ -57,6 +69,8 @@ export const useCanvasStore = create<CanvasState>((set) => ({
   playingStepIdx: 0,
   activeBranch: null,
   commentComposeType: null,
+  remoteNodeEditors: {},
+  presenceUsers: [],
 
   selectNode: (id) =>
     set({ selectedNodeId: id, selectedEdgeId: null, sidebarOpen: id !== null }),
@@ -80,4 +94,6 @@ export const useCanvasStore = create<CanvasState>((set) => ({
   setFlowBranch: (branch) =>
     set({ activeBranch: branch, playingStepIdx: 0 }),
   setCommentComposeType: (t) => set({ commentComposeType: t }),
+  setRemoteNodeEditors: (map) => set({ remoteNodeEditors: map }),
+  setPresenceUsers: (users) => set({ presenceUsers: users }),
 }))

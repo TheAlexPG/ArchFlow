@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useCreateDiagram } from '../../hooks/use-diagrams'
 import type { ModelObject } from '../../types/model'
 import { Modal } from '../common/Modal'
+import { Button } from '../ui/Button'
 
 // Object types that can have child diagrams.
 const DRILLABLE_TYPES = new Set(['system', 'app', 'store'])
@@ -82,53 +83,28 @@ export function CreateChildDiagramModal({
       width={360}
       footer={
         <>
-          <button
-            onClick={onClose}
-            disabled={creating}
-            style={{
-              background: 'transparent',
-              border: '1px solid #333',
-              borderRadius: 6,
-              color: '#a3a3a3',
-              cursor: 'pointer',
-              fontSize: 13,
-              padding: '6px 14px',
-              opacity: creating ? 0.5 : 1,
-            }}
-          >
+          <Button variant="ghost" onClick={onClose} disabled={creating}>
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="primary"
             onClick={handleCreate}
             disabled={creating || !name.trim()}
-            style={{
-              background: '#2563eb',
-              border: '1px solid #1d4ed8',
-              borderRadius: 6,
-              color: 'white',
-              cursor: 'pointer',
-              fontSize: 13,
-              padding: '6px 14px',
-              opacity: creating || !name.trim() ? 0.5 : 1,
-            }}
           >
-            {creating ? 'Creating...' : 'Create'}
-          </button>
+            {creating ? 'Creating…' : 'Create'}
+          </Button>
         </>
       }
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {/* Level badge — appears right under the modal title, above the input */}
-        <div
-          style={{
-            fontSize: 10,
-            color: '#525252',
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-            marginBottom: 4,
-          }}
-        >
-          {levelLabel(object.type)} &middot; scoped to {object.name}
+      <div className="space-y-3">
+        {/* Level + scope pill */}
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-[10px] uppercase tracking-[0.06em] text-text-3 bg-surface border border-border-base rounded px-2 py-0.5">
+            {levelLabel(object.type)}
+          </span>
+          <span className="font-mono text-[10.5px] text-text-3">
+            scoped to <span className="text-text-2">{object.name}</span>
+          </span>
         </div>
 
         <input
@@ -138,18 +114,8 @@ export function CreateChildDiagramModal({
             if (e.key === 'Enter') handleCreate()
           }}
           autoFocus
-          placeholder="Enter diagram name..."
-          style={{
-            background: '#0a0a0a',
-            border: '1px solid #333',
-            borderRadius: 6,
-            color: '#e5e5e5',
-            fontSize: 13,
-            padding: '8px 10px',
-            outline: 'none',
-            width: '100%',
-            boxSizing: 'border-box',
-          }}
+          placeholder="Enter diagram name…"
+          className="w-full bg-surface border border-border-base rounded-md px-3 py-2 text-[13px] text-text-base outline-none focus:border-border-hi placeholder:text-text-4 transition-colors"
         />
       </div>
     </Modal>

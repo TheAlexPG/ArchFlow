@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { AppSidebar } from '../components/nav/AppSidebar'
+import { PageToolbar } from '../components/nav/PageToolbar'
 import { useGlobalActivity, type ActivityLogEntry } from '../hooks/use-api'
 
 type TargetFilter = 'all' | 'object' | 'connection' | 'diagram'
@@ -18,9 +19,11 @@ export function ActivityPage() {
   })
 
   return (
-    <div className="flex h-screen bg-neutral-950 text-neutral-200">
+    <div className="flex h-screen bg-bg text-text-base">
       <AppSidebar />
-      <div className="flex-1 overflow-y-auto p-8">
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <PageToolbar breadcrumb={['alex / personal', 'Activity']} />
+        <div className="flex-1 overflow-y-auto p-8">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-xl font-semibold">Activity</h1>
           <div className="flex gap-1">
@@ -48,6 +51,7 @@ export function ActivityPage() {
           {entries.map((e) => (
             <Row key={e.id} entry={e} />
           ))}
+        </div>
         </div>
       </div>
     </div>

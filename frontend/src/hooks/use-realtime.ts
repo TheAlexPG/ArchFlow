@@ -39,6 +39,55 @@ function wsUrl(path: string, token: string): string {
   return `${proto}//${location.host}${path}?token=${encodeURIComponent(token)}`
 }
 
+// ── Deletion tombstones ──────────────────────────────────────────────────────
+//
+// Race scenario this guards:
+//   1. User B moved a node → server publishes `diagram_object.updated`.
+//   2. User A deletes the same object at nearly the same time → server
+//      publishes `diagram_object.removed` + `object.deleted`.
+//   3. Due to network/event-ordering, `diagram_object.updated` can arrive at
+//      a third client AFTER `diagram_object.removed`. The naive cache merge
+//      would then re-insert the row and the node "resurrects" on the canvas.
+//
+// Same story for the local user's own Backspace delete: the optimistic
+// cache patch removes the row, but a late WS echo (or a refetch started
+// before the DELETE was committed server-side) could re-insert it.
+//
+// `markDiagramObjectRemoved` and `markObjectDeleted` stamp an id-keyed
+// tombstone with a short TTL. The WS patchers below check the tombstone
+// before inserting / merging, and drop stale re-inserts within the window.
+const TOMBSTONE_TTL_MS = 5_000
+
+const diagramObjectTombstones = new Map<string, number>() // `${diagramId}:${objectId}` → expiresAt
+const objectTombstones = new Map<string, number>() // objectId → expiresAt
+
+function isTombstoned(map: Map<string, number>, key: string): boolean {
+  const exp = map.get(key)
+  if (exp === undefined) return false
+  if (exp < Date.now()) {
+    map.delete(key)
+    return false
+  }
+  return true
+}
+
+/** Mark a diagram_object row as just-removed; subsequent WS merges that
+ *  try to re-insert the same (diagramId, objectId) pair within the TTL
+ *  window are treated as stale and ignored. */
+export function markDiagramObjectRemoved(diagramId: string, objectId: string): void {
+  diagramObjectTombstones.set(
+    `${diagramId}:${objectId}`,
+    Date.now() + TOMBSTONE_TTL_MS,
+  )
+}
+
+/** Mark an object as just-deleted; subsequent WS `object.updated` or
+ *  `diagram_object.added|updated` payloads for the same object id are
+ *  ignored inside the TTL window. */
+export function markObjectDeleted(objectId: string): void {
+  objectTombstones.set(objectId, Date.now() + TOMBSTONE_TTL_MS)
+}
+
 /** Merge or insert an entity into a (possibly undefined) id-keyed list.
  *  Used by useWorkspaceSocket to patch TanStack cache on object/connection/
  *  diagram events without hitting the network.
@@ -178,9 +227,20 @@ export function useDiagramSocket(diagramId: string | null): DiagramSocketResult 
           type === 'diagram_object.added' ||
           type === 'diagram_object.updated'
         ) {
-          const row = msg.diagram_object as { id: string } | undefined
+          const row = msg.diagram_object as
+            | { id: string; object_id: string }
+            | undefined
           const dId = msg.diagram_id as string | undefined
-          if (dId && row) {
+          // Drop stale merges that would resurrect a row we just removed
+          // locally (see tombstone comment block at module top).
+          if (
+            dId &&
+            row &&
+            (isTombstoned(diagramObjectTombstones, `${dId}:${row.object_id}`) ||
+              isTombstoned(objectTombstones, row.object_id))
+          ) {
+            // swallow
+          } else if (dId && row) {
             queryClient.setQueriesData(
               { queryKey: ['diagram-objects', dId] },
               (prev: unknown) =>
@@ -195,6 +255,7 @@ export function useDiagramSocket(diagramId: string | null): DiagramSocketResult 
           const dId = msg.diagram_id as string | undefined
           const objectId = msg.object_id as string | undefined
           if (dId && objectId) {
+            markDiagramObjectRemoved(dId, objectId)
             queryClient.setQueriesData(
               { queryKey: ['diagram-objects', dId] },
               (prev: unknown) =>
@@ -210,7 +271,9 @@ export function useDiagramSocket(diagramId: string | null): DiagramSocketResult 
           }
         } else if (type === 'object.updated') {
           const obj = msg.object as { id: string } | undefined
-          if (obj) {
+          if (obj && isTombstoned(objectTombstones, obj.id)) {
+            // swallow stale update for an object we just deleted locally
+          } else if (obj) {
             queryClient.setQueriesData(
               { queryKey: ['objects'] },
               (prev: unknown) => mergeEntity(prev as never, obj),
@@ -222,6 +285,7 @@ export function useDiagramSocket(diagramId: string | null): DiagramSocketResult 
         } else if (type === 'object.deleted') {
           const id = msg.id as string | undefined
           if (id) {
+            markObjectDeleted(id)
             queryClient.setQueriesData(
               { queryKey: ['objects'] },
               (prev: unknown) =>
@@ -439,7 +503,9 @@ export function useWorkspaceSocket(): void {
         // (deletes, or events that pre-date this optimization).
         if (type === 'object.created' || type === 'object.updated') {
           const obj = msg.object as { id: string } | undefined
-          if (obj) {
+          if (obj && isTombstoned(objectTombstones, obj.id)) {
+            // swallow stale create/update for a just-deleted object
+          } else if (obj) {
             queryClient.setQueriesData(
               { queryKey: ['objects'] },
               (prev: unknown) => mergeEntity(prev as never, obj),
@@ -451,6 +517,7 @@ export function useWorkspaceSocket(): void {
         } else if (type === 'object.deleted') {
           const id = msg.id as string | undefined
           if (id) {
+            markObjectDeleted(id)
             queryClient.setQueriesData(
               { queryKey: ['objects'] },
               (prev: unknown) =>
@@ -486,8 +553,20 @@ export function useWorkspaceSocket(): void {
           type === 'diagram_object.updated'
         ) {
           const diagramId = msg.diagram_id as string | undefined
-          const row = msg.diagram_object as { id: string } | undefined
-          if (diagramId && row) {
+          const row = msg.diagram_object as
+            | { id: string; object_id: string }
+            | undefined
+          if (
+            diagramId &&
+            row &&
+            (isTombstoned(
+              diagramObjectTombstones,
+              `${diagramId}:${row.object_id}`,
+            ) ||
+              isTombstoned(objectTombstones, row.object_id))
+          ) {
+            // swallow stale re-insert
+          } else if (diagramId && row) {
             queryClient.setQueriesData(
               { queryKey: ['diagram-objects', diagramId] },
               (prev: unknown) => mergeEntity(prev as never, row),
@@ -501,6 +580,7 @@ export function useWorkspaceSocket(): void {
           const diagramId = msg.diagram_id as string | undefined
           const objectId = msg.object_id as string | undefined
           if (diagramId && objectId) {
+            markDiagramObjectRemoved(diagramId, objectId)
             queryClient.setQueriesData(
               { queryKey: ['diagram-objects', diagramId] },
               (prev: unknown) =>

@@ -1,4 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  markDiagramObjectRemoved,
+  markObjectDeleted,
+} from './use-realtime'
+import { useWorkspaceStore } from '../stores/workspace-store'
+import { useAuthStore } from '../stores/auth-store'
 import type {
   ApiKey,
   ApiKeyCreate,
@@ -39,6 +45,28 @@ import type {
   ObjectUpdate,
 } from '../types/model'
 import { api } from '../lib/api-client'
+
+// ─── Current user ─────────────────────────────────────────
+
+export interface MeResponse {
+  id: string
+  email: string
+  name: string
+  created_at: string
+}
+
+export function useMe() {
+  const isAuthenticated = useAuthStore((s) => !!s.accessToken)
+  return useQuery({
+    queryKey: ['me'],
+    queryFn: async () => {
+      const { data } = await api.get<MeResponse>('/auth/me')
+      return data
+    },
+    staleTime: 2 * 60 * 1000,
+    enabled: isAuthenticated,
+  })
+}
 
 // ─── Objects ─────────────────────────────────────────────
 
@@ -102,8 +130,13 @@ export function useGlobalActivity(params: {
   limit?: number
   offset?: number
 }) {
+  const workspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
+  // Include workspaceId in the query key so React Query treats each workspace
+  // as a separate cache entry.  WorkspaceCacheReset in App.tsx calls
+  // removeQueries() on switch — this is belt-and-suspenders to ensure stale
+  // cross-workspace events are never served from a warmed cache slot.
   return useQuery({
-    queryKey: ['activity', params],
+    queryKey: ['activity', workspaceId, params],
     queryFn: async () => {
       const { data } = await api.get<ActivityLogEntry[]>('/activity', {
         params: {
@@ -147,7 +180,22 @@ export function useDeleteObject() {
     mutationFn: async (id: string) => {
       await api.delete(`/objects/${id}`)
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['objects'] }),
+    onMutate: async (id) => {
+      await qc.cancelQueries({ queryKey: ['objects'] })
+      // Tombstone blocks WS `object.updated` / `diagram_object.added|updated`
+      // echoes that might otherwise resurrect the object in the cache.
+      markObjectDeleted(id)
+      qc.setQueriesData<ModelObject[] | undefined>(
+        { queryKey: ['objects'] },
+        (prev) =>
+          Array.isArray(prev) ? prev.filter((o) => o.id !== id) : prev,
+      )
+      qc.removeQueries({ queryKey: ['objects', id] })
+    },
+    onSuccess: (_, id) => {
+      markObjectDeleted(id)
+      qc.invalidateQueries({ queryKey: ['objects'] })
+    },
   })
 }
 
@@ -292,7 +340,23 @@ export function useRemoveObjectFromDiagram() {
     mutationFn: async ({ diagramId, objectId }: { diagramId: string; objectId: string }) => {
       await api.delete(`/diagrams/${diagramId}/objects/${objectId}`)
     },
+    onMutate: async ({ diagramId, objectId }) => {
+      // Cancel in-flight refetches so their stale payload can't clobber
+      // our optimistic removal.
+      await qc.cancelQueries({ queryKey: ['diagram-objects', diagramId] })
+      // Stamp a tombstone BEFORE patching the cache — if a WS event for
+      // the same row is already queued in the microtask stack, it will
+      // see the tombstone and decline to re-insert.
+      markDiagramObjectRemoved(diagramId, objectId)
+      qc.setQueriesData<DiagramObjectData[] | undefined>(
+        { queryKey: ['diagram-objects', diagramId] },
+        (prev) => (prev ? prev.filter((r) => r.object_id !== objectId) : prev),
+      )
+    },
     onSuccess: (_, vars) => {
+      // Refresh tombstone so it outlives the server round-trip + any
+      // late-arriving WS echoes.
+      markDiagramObjectRemoved(vars.diagramId, vars.objectId)
       qc.invalidateQueries({ queryKey: ['diagram-objects', vars.diagramId] })
     },
   })

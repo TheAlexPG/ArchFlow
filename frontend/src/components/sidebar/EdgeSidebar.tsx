@@ -9,23 +9,31 @@ import {
 import { useDiagram } from '../../hooks/use-diagrams'
 import { useCanvasStore } from '../../stores/canvas-store'
 import type { ConnectionDirection, EdgeShape } from '../../types/model'
+import { Pill, SectionLabel } from '../ui'
+import { cn } from '../../utils/cn'
+
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 const SHAPES: { value: EdgeShape; label: string; icon: string }[] = [
-  { value: 'curved', label: 'Curved', icon: '∿' },
-  { value: 'straight', label: 'Straight', icon: '─' },
-  { value: 'step', label: 'Step', icon: '⌐' },
+  { value: 'curved',     label: 'Curved', icon: '∿' },
+  { value: 'straight',   label: 'Straight', icon: '─' },
+  { value: 'step',       label: 'Step', icon: '⌐' },
   { value: 'smoothstep', label: 'Smooth', icon: '⌒' },
 ]
 
 const DIRECTIONS: { value: ConnectionDirection; label: string; icon: string }[] = [
   { value: 'unidirectional', label: 'Outgoing', icon: '→' },
-  { value: 'bidirectional', label: 'Bidirectional', icon: '⇄' },
-  { value: 'undirected', label: 'Undirected', icon: '—' },
+  { value: 'bidirectional',  label: 'Bidirect', icon: '⇄' },
+  { value: 'undirected',     label: 'Undirected', icon: '—' },
 ]
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface EdgeSidebarProps {
   diagramId?: string
 }
+
+// ─── Main component ───────────────────────────────────────────────────────────
 
 export function EdgeSidebar({ diagramId }: EdgeSidebarProps) {
   const { selectedEdgeId, selectEdge } = useCanvasStore()
@@ -76,61 +84,78 @@ export function EdgeSidebar({ diagramId }: EdgeSidebarProps) {
     }
   }
 
+  // Slider gradient fill
+  const sliderPct = ((conn.label_size - 8) / (20 - 8)) * 100
+  const sliderBg = `linear-gradient(to right, #FF6B35 0%, #FF6B35 ${sliderPct}%, #26262c ${sliderPct}%, #26262c 100%)`
+
   return (
-    <div className="w-80 bg-neutral-900 border-l border-neutral-800 flex flex-col h-full overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-800">
-        <div className="flex-1 min-w-0">
-          <div className="text-xs text-neutral-500">Connection</div>
-          <div className="text-sm font-medium text-neutral-200 truncate">
-            {label || 'Untitled'}
+    <div className="w-80 bg-panel border-l border-border-base flex flex-col h-full overflow-hidden">
+
+      {/* ── Header ── */}
+      <div className="px-4 py-3 border-b border-border-base">
+        {/* Top row: label + SELECTED pill + close */}
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-text-3">Connection</span>
+            <Pill variant="draft" className="text-[9.5px] py-[2px]">SELECTED</Pill>
           </div>
+          <button
+            onClick={() => selectEdge(null)}
+            className="text-text-4 hover:text-text-2 text-lg leading-none transition-colors ml-2"
+            aria-label="Close connection inspector"
+          >
+            ×
+          </button>
         </div>
-        <button
-          onClick={() => selectEdge(null)}
-          className="text-neutral-500 hover:text-neutral-300 text-lg ml-2"
-        >
-          ×
-        </button>
+
+        {/* Connection display label */}
+        <div className="text-[15px] font-semibold text-text-base truncate">
+          {label || 'Untitled'}
+        </div>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      {/* ── Body ── */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-5">
+
         {/* Sender */}
-        <Field label="Sender">
-          <span className="text-sm text-neutral-300">{source?.name || '—'}</span>
-        </Field>
+        <div>
+          <SectionLabel className="mb-1">Sender</SectionLabel>
+          <span className="text-[13px] text-text-base">{source?.name || '—'}</span>
+        </div>
 
         {/* Receiver */}
-        <Field label="Receiver">
-          <span className="text-sm text-neutral-300">{target?.name || '—'}</span>
-        </Field>
+        <div>
+          <SectionLabel className="mb-1">Receiver</SectionLabel>
+          <span className="text-[13px] text-text-base">{target?.name || '—'}</span>
+        </div>
 
         {/* Direction */}
-        <Field label="Direction">
-          <div className="flex gap-1">
+        <div>
+          <SectionLabel className="mb-1.5">Direction</SectionLabel>
+          <div className="inline-flex gap-1 p-[2px] bg-surface border border-border-base rounded-md w-full">
             {DIRECTIONS.map((d) => (
               <button
                 key={d.value}
                 onClick={() => handleUpdate({ direction: d.value })}
-                className={`flex-1 px-2 py-1 rounded text-xs border transition-colors ${
+                className={cn(
+                  'flex-1 flex flex-col items-center px-2 py-1 rounded text-[11px] transition-colors',
                   conn.direction === d.value
-                    ? 'bg-neutral-700 border-neutral-600 text-neutral-100'
-                    : 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-neutral-200'
-                }`}
+                    ? 'bg-coral text-bg font-medium'
+                    : 'text-text-3 hover:text-text-2',
+                )}
               >
-                <span className="text-base">{d.icon}</span>
-                <div className="text-[10px] mt-0.5">{d.label}</div>
+                <span className="text-base leading-tight">{d.icon}</span>
+                <span className="text-[9.5px] mt-0.5 leading-none">{d.label}</span>
               </button>
             ))}
           </div>
-        </Field>
+        </div>
 
-        {/* Swap sender / receiver — only meaningful for a one-way arrow. */}
+        {/* Swap sender / receiver — only for unidirectional */}
         {conn.direction === 'unidirectional' && (
           <button
             onClick={handleFlip}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded text-xs bg-neutral-800 border border-neutral-700 text-neutral-300 hover:text-neutral-100 hover:border-neutral-500 transition-colors"
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md text-[12px] font-mono bg-surface border border-border-base text-text-2 hover:text-text-base hover:border-border-hi transition-colors"
           >
             <span className="text-base">⇄</span>
             <span>Swap sender / receiver</span>
@@ -138,38 +163,44 @@ export function EdgeSidebar({ diagramId }: EdgeSidebarProps) {
         )}
 
         {/* Shape */}
-        <Field label="Shape">
-          <div className="flex gap-1">
+        <div>
+          <SectionLabel className="mb-1.5">Shape</SectionLabel>
+          <div className="inline-flex gap-1 p-[2px] bg-surface border border-border-base rounded-md w-full">
             {SHAPES.map((s) => (
               <button
                 key={s.value}
                 onClick={() => handleUpdate({ shape: s.value })}
-                className={`flex-1 px-2 py-1 rounded text-xs border transition-colors ${
+                className={cn(
+                  'flex-1 flex flex-col items-center px-2 py-1 rounded text-[11px] transition-colors',
                   conn.shape === s.value
-                    ? 'bg-neutral-700 border-neutral-600 text-neutral-100'
-                    : 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-neutral-200'
-                }`}
+                    ? 'bg-coral text-bg font-medium'
+                    : 'text-text-3 hover:text-text-2',
+                )}
               >
-                <span className="text-base">{s.icon}</span>
-                <div className="text-[10px] mt-0.5">{s.label}</div>
+                <span className="text-base leading-tight">{s.icon}</span>
+                <span className="text-[9.5px] mt-0.5 leading-none">{s.label}</span>
               </button>
             ))}
           </div>
-        </Field>
+        </div>
 
         {/* Label */}
-        <Field label="Label">
+        <div>
+          <SectionLabel className="mb-1.5">Label</SectionLabel>
           <textarea
             value={label}
             onChange={(e) => handleLabelChange(e.target.value)}
             rows={2}
-            className="bg-neutral-800 text-neutral-200 text-xs rounded px-2 py-1.5 w-full border border-neutral-700 resize-none"
+            className="w-full bg-surface border border-border-base rounded-md px-2.5 py-2 text-[12.5px] text-text-2 min-h-[56px] resize-none placeholder:text-text-4 focus:outline-none focus:border-border-hi transition-colors"
             placeholder="Edge label..."
           />
-        </Field>
+        </div>
 
         {/* Label size */}
-        <Field label={`Label size: ${conn.label_size.toFixed(0)}px`}>
+        <div>
+          <SectionLabel className="mb-1.5">
+            Label size: {conn.label_size.toFixed(0)}px
+          </SectionLabel>
           <div className="relative w-full">
             <input
               type="range"
@@ -178,51 +209,50 @@ export function EdgeSidebar({ diagramId }: EdgeSidebarProps) {
               step={1}
               value={conn.label_size}
               onChange={(e) => handleUpdate({ label_size: parseFloat(e.target.value) })}
-              style={{
-                // filled-track trick: gradient from accent to track bg
-                background: `linear-gradient(to right, #f97316 0%, #f97316 ${((conn.label_size - 8) / (20 - 8)) * 100}%, #404040 ${((conn.label_size - 8) / (20 - 8)) * 100}%, #404040 100%)`,
-              }}
+              style={{ background: sliderBg }}
               className={[
                 'w-full h-1.5 rounded-full appearance-none cursor-pointer outline-none',
-                'focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 focus-visible:ring-offset-neutral-900',
-                // Runnable-track – webkit: transparent so the input's gradient shows through
+                'focus-visible:ring-2 focus-visible:ring-coral/40 focus-visible:ring-offset-2 focus-visible:ring-offset-panel',
+                // Runnable-track – webkit
                 '[&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:rounded-full',
                 '[&::-webkit-slider-runnable-track]:bg-transparent',
-                // Runnable-track – moz: transparent so the input's gradient shows through
+                // Runnable-track – moz
                 '[&::-moz-range-track]:h-1.5 [&::-moz-range-track]:rounded-full',
                 '[&::-moz-range-track]:bg-transparent',
                 // Thumb – webkit
                 '[&::-webkit-slider-thumb]:appearance-none',
-                '[&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4',
-                '[&::-webkit-slider-thumb]:-mt-[5px]',
+                '[&::-webkit-slider-thumb]:w-[14px] [&::-webkit-slider-thumb]:h-[14px]',
+                '[&::-webkit-slider-thumb]:-mt-[4px]',
                 '[&::-webkit-slider-thumb]:rounded-full',
-                '[&::-webkit-slider-thumb]:bg-orange-500',
-                '[&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-neutral-900',
-                '[&::-webkit-slider-thumb]:shadow-[0_0_0_1px_rgba(249,115,22,0.4),0_2px_6px_rgba(0,0,0,0.5)]',
+                '[&::-webkit-slider-thumb]:bg-coral',
+                '[&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-panel',
+                '[&::-webkit-slider-thumb]:shadow-[0_0_0_2px_rgba(255,107,53,0.35),0_2px_6px_rgba(0,0,0,0.5)]',
                 '[&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-110',
                 // Thumb – moz
-                '[&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4',
+                '[&::-moz-range-thumb]:w-[14px] [&::-moz-range-thumb]:h-[14px]',
                 '[&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2',
-                '[&::-moz-range-thumb]:bg-orange-500 [&::-moz-range-thumb]:border-neutral-900',
+                '[&::-moz-range-thumb]:bg-coral [&::-moz-range-thumb]:border-panel',
                 '[&::-moz-range-thumb]:cursor-pointer',
               ].join(' ')}
             />
           </div>
-        </Field>
+        </div>
 
         {/* Protocol */}
-        <Field label="Protocol">
+        <div>
+          <SectionLabel className="mb-1.5">Protocol</SectionLabel>
           <input
             value={protocol}
             onChange={(e) => setProtocol(e.target.value)}
             onBlur={() => handleUpdate({ protocol: protocol || null })}
             placeholder="REST, gRPC, WebSocket..."
-            className="bg-neutral-800 text-neutral-200 text-sm rounded px-2 py-1 w-full border border-neutral-700"
+            className="w-full bg-surface border border-border-base rounded-md px-2.5 py-1.5 text-[13px] font-mono text-text-2 placeholder:text-text-4 focus:outline-none focus:border-border-hi transition-colors"
           />
-        </Field>
+        </div>
 
         {/* Via (pass-through objects) */}
-        <Field label="Via (pass-through)">
+        <div>
+          <SectionLabel className="mb-1.5">Via (pass-through)</SectionLabel>
           <ViaSelector
             selected={conn.via_object_ids || []}
             sourceId={conn.source_id}
@@ -230,12 +260,15 @@ export function EdgeSidebar({ diagramId }: EdgeSidebarProps) {
             allObjects={objects}
             onChange={(ids) => handleUpdate({ via_object_ids: ids })}
           />
-        </Field>
+        </div>
 
-        {/* Delete */}
+      </div>
+
+      {/* ── Delete footer ── */}
+      <div className="p-4 border-t border-border-base">
         <button
           onClick={handleDelete}
-          className="w-full mt-4 px-3 py-2 rounded text-sm text-red-400 border border-red-900/50 hover:bg-red-900/20 transition-colors"
+          className="w-full px-3 py-2 rounded-md text-[12.5px] font-mono border border-accent-pink/40 text-accent-pink hover:bg-accent-pink-glow transition-colors"
         >
           Delete connection
         </button>
@@ -244,14 +277,7 @@ export function EdgeSidebar({ diagramId }: EdgeSidebarProps) {
   )
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <div className="text-xs text-neutral-500 mb-1">{label}</div>
-      {children}
-    </div>
-  )
-}
+// ─── ViaSelector ──────────────────────────────────────────────────────────────
 
 function ViaSelector({
   selected,
@@ -277,32 +303,45 @@ function ViaSelector({
 
   return (
     <div>
-      <div className="flex flex-wrap gap-1 mb-1">
-        {selectedObjects.map((obj) => (
-          <span
-            key={obj.id}
-            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-300 text-xs border border-neutral-700"
-          >
-            {obj.name}
-            <button
-              onClick={() => onChange(selected.filter((id) => id !== obj.id))}
-              className="text-neutral-500 hover:text-neutral-300"
+      {/* Selected chips */}
+      {selectedObjects.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          {selectedObjects.map((obj) => (
+            <span
+              key={obj.id}
+              className="inline-flex items-center gap-1 px-2 py-[3px] border border-border-hi rounded-md font-mono text-[10.5px] text-text-base bg-surface"
             >
-              ×
-            </button>
-          </span>
-        ))}
-      </div>
+              {obj.name}
+              <button
+                onClick={() => onChange(selected.filter((id) => id !== obj.id))}
+                className="text-text-4 hover:text-text-2 leading-none transition-colors"
+                aria-label={`Remove ${obj.name}`}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Picker toggle */}
       <button
         onClick={() => setShowPicker(!showPicker)}
-        className="text-xs text-blue-400 hover:text-blue-300"
+        className={cn(
+          'inline-flex items-center gap-1.5 px-2.5 py-1 border rounded-md font-mono text-[10.5px] transition-colors',
+          showPicker
+            ? 'border-border-hi text-text-2 bg-surface-hi'
+            : 'border-dashed border-border-hi text-text-3 hover:border-coral hover:text-coral',
+        )}
       >
         {showPicker ? 'Cancel' : '+ Select objects'}
       </button>
+
+      {/* Picker dropdown */}
       {showPicker && (
-        <div className="mt-1 max-h-32 overflow-y-auto bg-neutral-800 border border-neutral-700 rounded">
+        <div className="mt-2 bg-panel border border-border-base rounded-md shadow-popup p-2 max-h-48 overflow-auto">
           {available.length === 0 ? (
-            <div className="text-xs text-neutral-600 p-2">No available objects</div>
+            <div className="text-[11.5px] text-text-4 p-1">No available objects</div>
           ) : (
             available.map((obj) => (
               <button
@@ -311,7 +350,7 @@ function ViaSelector({
                   onChange([...selected, obj.id])
                   setShowPicker(false)
                 }}
-                className="block w-full text-left text-xs px-2 py-1 text-neutral-300 hover:bg-neutral-700"
+                className="block w-full text-left text-[12px] px-2 py-1.5 rounded text-text-2 hover:bg-surface-hi hover:text-text-base transition-colors"
               >
                 {obj.name}
               </button>
@@ -322,4 +361,3 @@ function ViaSelector({
     </div>
   )
 }
-

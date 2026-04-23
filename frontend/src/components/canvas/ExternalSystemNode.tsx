@@ -1,22 +1,29 @@
-import { Handle, Position, type NodeProps } from '@xyflow/react'
+import { Handle, Position, useNodeId, type NodeProps } from '@xyflow/react'
+import { useCanvasStore } from '../../stores/canvas-store'
+import { Pill, PillDot } from '../ui'
 import type { C4NodeData } from './C4Node'
 import { STATUS_COLORS, stripHtml } from './node-utils'
 
 export function ExternalSystemNode({ data, selected }: NodeProps) {
   const obj = (data as C4NodeData).object
   const statusColor = STATUS_COLORS[obj.status]
+  const nodeId = useNodeId()
+  const remoteEditors = useCanvasStore(
+    (s) => (nodeId ? s.remoteNodeEditors[nodeId] : undefined),
+  )
+
+  const metaParts = obj.technology && obj.technology.length > 0 ? obj.technology : []
 
   return (
     <div
-      style={{
-        position: 'relative',
-        minWidth: 160,
-        maxWidth: 240,
-        padding: '12px 16px',
-        borderRadius: 20,
-        background: '#1f2937',
-        border: `2px dashed ${selected ? '#3b82f6' : '#6b7280'}`,
-      }}
+      className={[
+        'relative min-w-[160px] max-w-[240px] px-4 py-3 bg-surface',
+        'rounded-2xl border',
+        'transition-all duration-150 ease-[ease]',
+        selected
+          ? 'border-coral border-solid shadow-node-selected'
+          : 'border-dashed border-text-3 hover:border-border-hi',
+      ].join(' ')}
     >
       <Handle type="source" position={Position.Top} id="top" className="archflow-handle !bg-neutral-500 !w-2 !h-2" />
       <Handle type="source" position={Position.Bottom} id="bottom" className="archflow-handle !bg-neutral-500 !w-2 !h-2" />
@@ -25,45 +32,42 @@ export function ExternalSystemNode({ data, selected }: NodeProps) {
 
       {/* Status */}
       <div
-        style={{
-          position: 'absolute', top: -6, right: -6, width: 12, height: 12,
-          borderRadius: '50%', backgroundColor: statusColor,
-          border: '2px solid #0a0a0a',
-        }}
+        className="absolute -top-1.5 -right-1.5 w-3 h-3 rounded-full border-2 border-bg"
+        style={{ backgroundColor: statusColor }}
         title={obj.status}
       />
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontSize: 16, opacity: 0.6 }}>☁</span>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: '#e5e5e5' }}>
-            {obj.name}
-          </div>
-          <div style={{ fontSize: 10, color: '#737373' }}>External System</div>
-        </div>
+      <div className="flex items-center justify-between mb-1.5 gap-2">
+        <Pill variant="neutral" className="!py-[2px] !px-[6px] !text-[9.5px]">
+          <PillDot color="var(--color-text-3)" />
+          EXTERNAL
+        </Pill>
+        <span className="text-base shrink-0 opacity-50 leading-none">☁</span>
+      </div>
+
+      <div className="text-[14px] font-semibold tracking-tight text-text-base truncate">
+        {obj.name}
       </div>
 
       {obj.description && stripHtml(obj.description) && (
         <div
-          className="node-desc-html"
-          style={{ fontSize: 11, color: '#737373', marginTop: 6 }}
+          className="node-desc-html text-[11px] text-text-2 mt-0.5 leading-relaxed"
           dangerouslySetInnerHTML={{ __html: obj.description }}
         />
       )}
 
-      {obj.technology && obj.technology.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8 }}>
-          {obj.technology.map((tech) => (
+      {(metaParts.length > 0 || (remoteEditors && remoteEditors.length > 0)) && (
+        <div className="flex items-center justify-between gap-2 mt-2 font-mono text-[10px] text-text-3">
+          <span className="truncate">{metaParts.join(' · ')}</span>
+          {remoteEditors && remoteEditors.length > 0 && (
             <span
-              key={tech}
-              style={{
-                fontSize: 10, padding: '1px 6px', borderRadius: 3,
-                background: '#262626', color: '#a3a3a3',
-              }}
+              className="flex items-center gap-1 text-coral shrink-0"
+              title={`${remoteEditors.join(', ')} editing`}
             >
-              {tech}
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-coral" />
+              editing
             </span>
-          ))}
+          )}
         </div>
       )}
     </div>

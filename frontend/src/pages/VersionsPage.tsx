@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AppSidebar } from '../components/nav/AppSidebar'
+import { PageToolbar } from '../components/nav/PageToolbar'
 import {
   useCompareVersions,
   useCreateManualSnapshot,
@@ -139,9 +140,11 @@ export function VersionsPage() {
   }
 
   return (
-    <div className="flex h-screen bg-neutral-950 text-neutral-200">
+    <div className="flex h-screen bg-bg text-text-base">
       <AppSidebar />
-      <div className="flex-1 overflow-y-auto p-8">
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <PageToolbar breadcrumb={['alex / personal', 'Versions']} />
+        <div className="flex-1 overflow-y-auto p-8">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-xl font-semibold">Versions</h1>
           <button
@@ -263,6 +266,7 @@ export function VersionsPage() {
             {compare.data && <SummaryCard summary={compare.data.summary} />}
           </div>
         </section>
+        </div>
       </div>
     </div>
   )

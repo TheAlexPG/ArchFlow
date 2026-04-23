@@ -1,5 +1,6 @@
 import { useWorkspaceStore } from '../stores/workspace-store'
 import { AppSidebar } from '../components/nav/AppSidebar'
+import { PageToolbar } from '../components/nav/PageToolbar'
 import {
   useAcceptMyInvite,
   useDeclineMyInvite,
@@ -13,9 +14,11 @@ export function MyInvitesPage() {
   const setCurrentWorkspaceId = useWorkspaceStore((s) => s.setCurrentWorkspaceId)
 
   return (
-    <div className="flex h-screen bg-neutral-950 text-neutral-200">
+    <div className="flex h-screen bg-bg text-text-base">
       <AppSidebar />
-      <div className="flex-1 overflow-y-auto p-8">
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <PageToolbar breadcrumb={['alex / personal', 'Invites']} />
+        <div className="flex-1 overflow-y-auto p-8">
         <h1 className="text-xl font-semibold mb-2">Invitations</h1>
         <p className="text-xs text-neutral-500 mb-6">
           Workspaces you've been invited to. Accept to join, decline to dismiss.
@@ -69,6 +72,7 @@ export function MyInvitesPage() {
               </div>
             </div>
           ))}
+        </div>
         </div>
       </div>
     </div>
