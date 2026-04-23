@@ -1,7 +1,7 @@
 """Add undirected value to connection_direction enum.
 
 Revision ID: f1a2b3c4d5e6
-Revises: e5d9e94e25ff
+Revises: d7a3c8b91e02
 Create Date: 2026-04-23 00:00:00.000000
 """
 
@@ -10,7 +10,7 @@ from collections.abc import Sequence
 from alembic import op
 
 revision: str = "f1a2b3c4d5e6"
-down_revision: str | Sequence[str] | None = "e5d9e94e25ff"
+down_revision: str | Sequence[str] | None = "d7a3c8b91e02"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
