@@ -6,20 +6,25 @@ import { Modal } from '../common/Modal'
 import { Button } from '../ui/Button'
 
 // Object types that can have child diagrams.
-const DRILLABLE_TYPES = new Set(['system', 'app', 'store'])
+// system → L2 Container, app/store → L3 Component, component → L4 Code.
+const DRILLABLE_TYPES = new Set(['system', 'app', 'store', 'component'])
 
-function childDiagramType(objectType: string): 'container' | 'component' {
-  return objectType === 'system' ? 'container' : 'component'
+function childDiagramType(objectType: string): 'container' | 'component' | 'custom' {
+  if (objectType === 'system') return 'container'
+  if (objectType === 'component') return 'custom'
+  return 'component'
 }
 
 function defaultChildDiagramName(objectName: string, objectType: string): string {
-  return objectType === 'system'
-    ? `${objectName} · Containers`
-    : `${objectName} · Components`
+  if (objectType === 'system') return `${objectName} · Containers`
+  if (objectType === 'component') return `${objectName} · Code`
+  return `${objectName} · Components`
 }
 
 function levelLabel(objectType: string): string {
-  return objectType === 'system' ? 'L2 · Container' : 'L3 · Component'
+  if (objectType === 'system') return 'L2 · Container'
+  if (objectType === 'component') return 'L4 · Code'
+  return 'L3 · Component'
 }
 
 export { DRILLABLE_TYPES, childDiagramType, defaultChildDiagramName }
