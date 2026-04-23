@@ -57,8 +57,12 @@ export function NewObjectModal({
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="primary" disabled={!trimmed} onClick={handleSubmit}>
-            Create
+          <Button
+            variant="primary"
+            disabled={!trimmed}
+            onClick={handleSubmit}
+          >
+            {isDuplicate ? 'Create anyway' : 'Create'}
           </Button>
         </>
       }
@@ -80,13 +84,27 @@ export function NewObjectModal({
         </div>
 
         {isDuplicate && (
-          <div className="flex items-center gap-1.5 text-[11.5px] text-accent-amber font-mono">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <div
+            role="alert"
+            className="flex items-start gap-1.5 text-[11.5px] text-accent-amber font-mono leading-snug"
+          >
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              className="mt-0.5 flex-shrink-0"
+            >
               <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
               <line x1="12" y1="9" x2="12" y2="13" />
               <line x1="12" y1="17" x2="12.01" y2="17" />
             </svg>
-            Name already exists — are you sure?
+            <span>
+              An object named &ldquo;{trimmed}&rdquo; already exists in this
+              workspace. Continue anyway?
+            </span>
           </div>
         )}
       </div>
