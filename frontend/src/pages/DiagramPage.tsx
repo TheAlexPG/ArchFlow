@@ -451,7 +451,7 @@ export function DiagramPage() {
                 : undefined,
             }}
           >
-            <div className="absolute left-4 top-1/2 -translate-y-1/2 z-30">
+            <div className="absolute left-4 top-28 z-30">
               <AddObjectFAB diagramId={diagramId} />
             </div>
             <div className="absolute inset-0">

@@ -314,6 +314,9 @@ interface RowMenuProps {
   onRename?: () => void
 }
 
+// Approximate width of the submenu (px) — used for flip-direction calculation
+const SUBMENU_WIDTH = 168
+
 function RowMenu({
   packs,
   currentPackId,
@@ -326,6 +329,8 @@ function RowMenu({
   const [open, setOpen] = useState(false)
   const [moveFolderOpen, setMoveFolderOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  // Flip state: true = submenu opens to the LEFT of the primary menu
+  const [subMenuLeft, setSubMenuLeft] = useState(false)
 
   // Close on outside click
   useEffect(() => {
@@ -338,6 +343,18 @@ function RowMenu({
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  // Calculate submenu flip direction whenever the primary menu opens
+  useEffect(() => {
+    if (!open) return
+    // Defer one tick so the menu has been rendered and getBoundingClientRect is valid
+    const id = requestAnimationFrame(() => {
+      if (!ref.current) return
+      const rect = ref.current.getBoundingClientRect()
+      setSubMenuLeft(rect.right + SUBMENU_WIDTH > window.innerWidth - 8)
+    })
+    return () => cancelAnimationFrame(id)
   }, [open])
 
   return (
@@ -367,7 +384,12 @@ function RowMenu({
             </button>
 
             {moveFolderOpen && (
-              <div className="absolute left-full top-0 ml-1 z-30 bg-panel border border-border-base rounded-md shadow-lg min-w-[160px] py-1">
+              <div
+                className={cn(
+                  'absolute top-0 ml-1 z-30 bg-panel border border-border-base rounded-md shadow-lg min-w-[160px] py-1',
+                  subMenuLeft ? 'right-full mr-1 ml-0' : 'left-full',
+                )}
+              >
                 <button
                   className={cn(
                     'w-full text-left px-3 py-1.5 text-[12px] hover:bg-surface transition-colors flex items-center gap-2',
