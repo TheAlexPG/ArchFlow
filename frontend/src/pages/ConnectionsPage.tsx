@@ -1,14 +1,19 @@
 import { useMemo, useState } from 'react'
 import { AppSidebar } from '../components/nav/AppSidebar'
 import { PageToolbar } from '../components/nav/PageToolbar'
-import { useConnections, useObjects } from '../hooks/use-api'
+import { useConnections, useObjects, useTechnologies } from '../hooks/use-api'
+import { useWorkspaceStore } from '../stores/workspace-store'
+import { TechBadge } from '../components/tech'
 
 export function ConnectionsPage() {
   const { data: connections = [], isLoading } = useConnections()
   const { data: objects = [] } = useObjects()
+  const workspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
+  const { data: catalog = [] } = useTechnologies(workspaceId)
   const [search, setSearch] = useState('')
 
   const objectMap = useMemo(() => new Map(objects.map((o) => [o.id, o])), [objects])
+  const catalogMap = useMemo(() => new Map(catalog.map((t) => [t.id, t])), [catalog])
 
   const rows = useMemo(() => {
     return connections.map((c) => ({
@@ -16,10 +21,10 @@ export function ConnectionsPage() {
       source: objectMap.get(c.source_id)?.name || '—',
       target: objectMap.get(c.target_id)?.name || '—',
       label: c.label,
-      protocol_id: c.protocol_id,
+      protocol: c.protocol_id ? catalogMap.get(c.protocol_id) : undefined,
       direction: c.direction,
     }))
-  }, [connections, objectMap])
+  }, [connections, objectMap, catalogMap])
 
   const filtered = useMemo(() => {
     if (!search) return rows
@@ -29,7 +34,8 @@ export function ConnectionsPage() {
         r.source.toLowerCase().includes(q) ||
         r.target.toLowerCase().includes(q) ||
         r.label?.toLowerCase().includes(q) ||
-        r.protocol_id?.toLowerCase().includes(q),
+        r.protocol?.name.toLowerCase().includes(q) ||
+        r.protocol?.slug.toLowerCase().includes(q),
     )
   }, [rows, search])
 
@@ -76,7 +82,13 @@ export function ConnectionsPage() {
                     {r.direction === 'bidirectional' ? '⇄ bidirectional' : '→ outgoing'}
                   </td>
                   <td className="px-4 py-2 text-neutral-400 text-xs">{r.label || '—'}</td>
-                  <td className="px-4 py-2 text-neutral-400 text-xs">{r.protocol_id || '—'}</td>
+                  <td className="px-4 py-2 text-xs">
+                    {r.protocol ? (
+                      <TechBadge technology={r.protocol} />
+                    ) : (
+                      <span className="text-neutral-600">—</span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

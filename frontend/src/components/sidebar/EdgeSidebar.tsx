@@ -10,6 +10,7 @@ import { useDiagram } from '../../hooks/use-diagrams'
 import { useCanvasStore } from '../../stores/canvas-store'
 import type { ConnectionDirection, EdgeShape } from '../../types/model'
 import { Pill, SectionLabel } from '../ui'
+import { TechnologyPicker } from '../tech'
 import { cn } from '../../utils/cn'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -46,15 +47,11 @@ export function EdgeSidebar({ diagramId }: EdgeSidebarProps) {
   const deleteConn = useDeleteConnection()
 
   const [label, setLabel] = useState('')
-  const [protocol, setProtocol] = useState('')
   const labelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     if (conn) {
       setLabel(conn.label || '')
-      // TODO(tech-catalog): swap this free-text input for TechnologyPicker
-      // (M7). For now the input shows the raw protocol UUID if any.
-      setProtocol(conn.protocol_id || '')
     }
   }, [conn])
 
@@ -240,15 +237,19 @@ export function EdgeSidebar({ diagramId }: EdgeSidebarProps) {
           </div>
         </div>
 
-        {/* Protocol */}
+        {/* Protocol — picks from the technology catalog (category=protocol by
+            default, but users can widen scope inside the picker if they
+            want something like Kafka tagged 'tool'). */}
         <div>
           <SectionLabel className="mb-1.5">Protocol</SectionLabel>
-          <input
-            value={protocol}
-            onChange={(e) => setProtocol(e.target.value)}
-            onBlur={() => handleUpdate({ protocol_id: protocol || null })}
-            placeholder="REST, gRPC, WebSocket..."
-            className="w-full bg-surface border border-border-base rounded-md px-2.5 py-1.5 text-[13px] font-mono text-text-2 placeholder:text-text-4 focus:outline-none focus:border-border-hi transition-colors"
+          <TechnologyPicker
+            mode={{
+              multi: false,
+              value: conn.protocol_id ?? null,
+              onChange: (id) => handleUpdate({ protocol_id: id }),
+            }}
+            restrictCategory="protocol"
+            placeholder="HTTP, gRPC, Kafka…"
           />
         </div>
 

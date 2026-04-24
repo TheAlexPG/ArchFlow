@@ -1,6 +1,9 @@
 import { Handle, Position, useNodeId, type NodeProps } from '@xyflow/react'
 import { useCanvasStore } from '../../stores/canvas-store'
+import { useWorkspaceStore } from '../../stores/workspace-store'
+import { useTechnologies } from '../../hooks/use-api'
 import { Pill, PillDot } from '../ui'
+import { TechIcon } from '../tech'
 import type { C4NodeData } from './C4Node'
 import { STATUS_COLORS, stripHtml } from './node-utils'
 
@@ -11,10 +14,12 @@ export function ExternalSystemNode({ data, selected }: NodeProps) {
   const remoteEditors = useCanvasStore(
     (s) => (nodeId ? s.remoteNodeEditors[nodeId] : undefined),
   )
+  const workspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
+  const { data: catalog = [] } = useTechnologies(workspaceId)
 
-  // TODO(tech-catalog): resolve technology_ids → display names/icons via
-  // the catalog (M7). For now the row shows raw UUIDs if any.
-  const metaParts = obj.technology_ids && obj.technology_ids.length > 0 ? obj.technology_ids : []
+  const technologies = (obj.technology_ids ?? [])
+    .map((id) => catalog.find((t) => t.id === id))
+    .filter((t): t is NonNullable<typeof t> => Boolean(t))
 
   return (
     <div
@@ -31,6 +36,16 @@ export function ExternalSystemNode({ data, selected }: NodeProps) {
       <Handle type="source" position={Position.Bottom} id="bottom" className="archflow-handle !bg-neutral-500 !w-2 !h-2" />
       <Handle type="source" position={Position.Left} id="left" className="archflow-handle !bg-neutral-500 !w-2 !h-2" />
       <Handle type="source" position={Position.Right} id="right" className="archflow-handle !bg-neutral-500 !w-2 !h-2" />
+
+      {/* Primary-technology badge — top-left corner (matches C4Node). */}
+      {technologies[0] && (
+        <div
+          className="absolute -top-2 -left-2 w-6 h-6 rounded-md border-2 border-bg bg-panel flex items-center justify-center shadow-sm"
+          title={technologies[0].name}
+        >
+          <TechIcon technology={technologies[0]} size={14} />
+        </div>
+      )}
 
       {/* Status */}
       <div
@@ -58,9 +73,16 @@ export function ExternalSystemNode({ data, selected }: NodeProps) {
         />
       )}
 
-      {(metaParts.length > 0 || (remoteEditors && remoteEditors.length > 0)) && (
+      {(technologies.length > 0 || (remoteEditors && remoteEditors.length > 0)) && (
         <div className="flex items-center justify-between gap-2 mt-2 font-mono text-[10px] text-text-3">
-          <span className="truncate">{metaParts.join(' · ')}</span>
+          <span className="flex items-center gap-1 min-w-0">
+            {technologies.slice(0, 4).map((t) => (
+              <TechIcon key={t.id} technology={t} size={12} />
+            ))}
+            <span className="truncate">
+              {technologies.map((t) => t.name).join(' · ')}
+            </span>
+          </span>
           {remoteEditors && remoteEditors.length > 0 && (
             <span
               className="flex items-center gap-1 text-coral shrink-0"

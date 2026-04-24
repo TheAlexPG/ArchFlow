@@ -6,6 +6,9 @@ import {
   getStraightPath,
   type EdgeProps,
 } from '@xyflow/react'
+import { useTechnologies } from '../../hooks/use-api'
+import { useWorkspaceStore } from '../../stores/workspace-store'
+import { TechIcon } from '../tech'
 
 export function C4Edge({
   id,
@@ -48,10 +51,13 @@ export function C4Edge({
   }
 
   const label = (data as Record<string, unknown>)?.label as string | undefined
-  // TODO(tech-catalog): resolve protocol_id → Technology.name via the
-  // catalog so the label renders a human string (M7). For now shows the
-  // raw UUID if present.
-  const protocol = (data as Record<string, unknown>)?.protocol_id as string | undefined
+  const protocolId = (data as Record<string, unknown>)?.protocol_id as
+    | string
+    | undefined
+    | null
+  const workspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
+  const { data: catalog = [] } = useTechnologies(workspaceId)
+  const protocol = protocolId ? catalog.find((t) => t.id === protocolId) : null
   const flowStep = (data as Record<string, unknown>)?.flowStep as number | null | undefined
   const flowCurrent = (data as Record<string, unknown>)?.flowCurrent as boolean | undefined
 
@@ -98,7 +104,12 @@ export function C4Edge({
           >
             {label}
             {label && protocol && <br />}
-            {protocol && <span className="text-text-3">[{protocol}]</span>}
+            {protocol && (
+              <span className="inline-flex items-center gap-1 text-text-3 align-middle">
+                <TechIcon technology={protocol} size={Math.round(labelSize)} />
+                {protocol.name}
+              </span>
+            )}
           </div>
         </EdgeLabelRenderer>
       )}

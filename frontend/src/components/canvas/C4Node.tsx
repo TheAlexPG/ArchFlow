@@ -2,10 +2,12 @@ import { Handle, NodeResizer, Position, useNodeId, type NodeProps } from '@xyflo
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import type { ModelObject } from '../../types/model'
-import { useSaveDiagramSize } from '../../hooks/use-api'
+import { useSaveDiagramSize, useTechnologies } from '../../hooks/use-api'
 import { useDiagrams } from '../../hooks/use-diagrams'
 import { useCanvasStore } from '../../stores/canvas-store'
+import { useWorkspaceStore } from '../../stores/workspace-store'
 import { Pill, PillDot } from '../ui'
+import { TechIcon } from '../tech'
 import {
   CreateChildDiagramModal,
   DRILLABLE_TYPES,
@@ -109,9 +111,13 @@ export function C4Node({ data, selected }: NodeProps) {
 
   const typeDotColor = TYPE_DOT_COLOR[obj.type] ?? 'var(--color-text-3)'
   const typeLabel = TYPE_PILL_LABEL[obj.type] ?? obj.type.toUpperCase()
-  // TODO(tech-catalog): resolve technology_ids → display names/icons via
-  // the catalog (M7). For now the row shows raw UUIDs if any.
-  const metaParts = obj.technology_ids && obj.technology_ids.length > 0 ? obj.technology_ids : []
+  const workspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
+  // React Query dedupes across every node, so rendering N nodes triggers a
+  // single network round-trip for the catalog; staleTime keeps it in cache.
+  const { data: catalog = [] } = useTechnologies(workspaceId)
+  const technologies = (obj.technology_ids ?? [])
+    .map((id) => catalog.find((t) => t.id === id))
+    .filter((t): t is NonNullable<typeof t> => Boolean(t))
 
   return (
     <div
@@ -157,6 +163,18 @@ export function C4Node({ data, selected }: NodeProps) {
       <Handle type="source" position={Position.Bottom} id="bottom" className="archflow-handle !bg-neutral-500 !w-2 !h-2" />
       <Handle type="source" position={Position.Left} id="left" className="archflow-handle !bg-neutral-500 !w-2 !h-2" />
       <Handle type="source" position={Position.Right} id="right" className="archflow-handle !bg-neutral-500 !w-2 !h-2" />
+
+      {/* Primary-technology badge — top-left corner. Uses the first entry
+          in technology_ids as the "identity" tech (what the thing IS) so a
+          Kafka broker, a Postgres DB, etc. reads at a glance even zoomed out. */}
+      {technologies[0] && (
+        <div
+          className="absolute -top-2 -left-2 w-6 h-6 rounded-md border-2 border-bg bg-panel flex items-center justify-center shadow-sm"
+          title={technologies[0].name}
+        >
+          <TechIcon technology={technologies[0]} size={14} />
+        </div>
+      )}
 
       {/* Status indicator — top-right */}
       <div
@@ -235,10 +253,19 @@ export function C4Node({ data, selected }: NodeProps) {
         />
       )}
 
-      {/* Metadata row — tech stack joined with · and optional editing indicator */}
-      {(metaParts.length > 0 || (remoteEditors && remoteEditors.length > 0)) && (
+      {/* Metadata row — row of tech icons + name strip, plus optional
+          editing indicator. First 4 icons are shown; overflow is folded
+          into "+N" to keep the node compact at zoom-out. */}
+      {(technologies.length > 0 || (remoteEditors && remoteEditors.length > 0)) && (
         <div className="flex items-center justify-between gap-2 mt-2 font-mono text-[10px] text-text-3">
-          <span className="truncate">{metaParts.join(' · ')}</span>
+          <span className="flex items-center gap-1 min-w-0">
+            {technologies.slice(0, 4).map((t) => (
+              <TechIcon key={t.id} technology={t} size={12} />
+            ))}
+            <span className="truncate">
+              {technologies.map((t) => t.name).join(' · ')}
+            </span>
+          </span>
           {remoteEditors && remoteEditors.length > 0 && (
             <span
               className="flex items-center gap-1 text-coral shrink-0"

@@ -20,6 +20,9 @@ import {
   DRILLABLE_TYPES,
 } from '../drafts/CreateChildDiagramModal'
 import { Avatar, AvatarStack, Pill, SectionLabel } from '../ui'
+import { TechnologyPicker, TechBadge } from '../tech'
+import { useTechnologies } from '../../hooks/use-api'
+import { useWorkspaceStore } from '../../stores/workspace-store'
 import { cn } from '../../utils/cn'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -245,14 +248,15 @@ export function ObjectSidebar({
             </div>
 
             {/* Technology stack */}
-            {/* TODO(tech-catalog): swap TechEditor (free text) for
-                TechnologyPicker (M7) — backend stores catalog UUIDs, so
-                until the picker lands this shows raw ids. */}
             <div>
               <SectionLabel className="mb-1.5">Technology stack</SectionLabel>
-              <TechEditor
-                tags={obj.technology_ids || []}
-                onChange={(tags) => handleFieldChange('technology_ids', tags)}
+              <TechnologyPicker
+                mode={{
+                  multi: true,
+                  value: obj.technology_ids || [],
+                  onChange: (ids) => handleFieldChange('technology_ids', ids),
+                }}
+                placeholder="Add technology…"
               />
             </div>
 
@@ -324,67 +328,6 @@ export function ObjectSidebar({
           </span>
         </div>
       </div>
-    </div>
-  )
-}
-
-// ─── Tech Editor ──────────────────────────────────────────────────────────────
-
-function TechEditor({
-  tags,
-  onChange,
-}: {
-  tags: string[]
-  onChange: (tags: string[]) => void
-}) {
-  const [adding, setAdding] = useState(false)
-  const [input, setInput] = useState('')
-
-  const handleAdd = () => {
-    const v = input.trim()
-    if (v && !tags.includes(v)) onChange([...tags, v])
-    setInput('')
-    setAdding(false)
-  }
-
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {tags.map((tag) => (
-        <span
-          key={tag}
-          className="group inline-flex items-center gap-1 px-2 py-[3px] border border-border-hi rounded-md font-mono text-[10.5px] text-text-base bg-surface"
-        >
-          {tag}
-          <button
-            onClick={() => onChange(tags.filter((t) => t !== tag))}
-            className="text-text-4 hover:text-text-2 opacity-0 group-hover:opacity-100 transition-opacity leading-none"
-            aria-label={`Remove ${tag}`}
-          >
-            ×
-          </button>
-        </span>
-      ))}
-      {adding ? (
-        <input
-          autoFocus
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') handleAdd()
-            if (e.key === 'Escape') { setAdding(false); setInput('') }
-          }}
-          onBlur={handleAdd}
-          className="inline-flex px-2 py-[3px] bg-surface border border-coral/50 rounded-md font-mono text-[10.5px] text-text-base outline-none w-24"
-          placeholder="tech..."
-        />
-      ) : (
-        <button
-          onClick={() => setAdding(true)}
-          className="inline-flex items-center gap-1 px-2 py-[3px] border border-dashed border-border-hi rounded-md font-mono text-[10.5px] text-text-3 hover:border-coral hover:text-coral transition-colors cursor-pointer"
-        >
-          + Add
-        </button>
-      )}
     </div>
   )
 }
@@ -468,6 +411,8 @@ function ConnectionsList({
   const { data: connections = [] } = useConnections()
   const { data: objects = [] } = useObjects()
   const { selectEdge } = useCanvasStore()
+  const workspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
+  const { data: catalog = [] } = useTechnologies(workspaceId)
 
   const related = connections.filter(
     (c) => c.source_id === objectId || c.target_id === objectId,
@@ -475,6 +420,8 @@ function ConnectionsList({
   if (related.length === 0) return null
 
   const getName = (id: string) => objects.find((o) => o.id === id)?.name ?? 'Unknown'
+  const getProtocol = (id: string | null) =>
+    id ? catalog.find((t) => t.id === id) : undefined
 
   return (
     <div>
@@ -516,12 +463,12 @@ function ConnectionsList({
                 {getName(otherId)}
               </span>
 
-              {/* TODO(tech-catalog): resolve c.protocol_id → catalog name (M7). */}
-              {c.protocol_id && (
-                <span className={cn('font-mono text-[10.5px] flex-shrink-0', isSelected ? 'text-coral' : 'text-text-3')}>
-                  {c.protocol_id}
-                </span>
-              )}
+              {(() => {
+                const proto = getProtocol(c.protocol_id)
+                return proto ? (
+                  <TechBadge technology={proto} iconOnly className="!border-transparent !bg-transparent !px-0" />
+                ) : null
+              })()}
 
               {!c.protocol_id && c.label && (
                 <span className={cn('font-mono text-[10.5px] flex-shrink-0 truncate max-w-[70px]', isSelected ? 'text-coral' : 'text-text-3')}>

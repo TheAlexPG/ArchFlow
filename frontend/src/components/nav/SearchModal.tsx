@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useObjects } from '../../hooks/use-api'
+import { useObjects, useTechnologies } from '../../hooks/use-api'
 import { useDiagrams } from '../../hooks/use-diagrams'
+import { useWorkspaceStore } from '../../stores/workspace-store'
 import { TYPE_ICONS } from '../canvas/node-utils'
+import { TechIcon } from '../tech'
 import type { ObjectType } from '../../types/model'
 
 interface SearchModalProps {
@@ -16,6 +18,9 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
   const navigate = useNavigate()
   const { data: objects = [] } = useObjects()
   const { data: diagrams = [] } = useDiagrams()
+  const workspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
+  const { data: catalog = [] } = useTechnologies(workspaceId)
+  const catalogMap = useMemo(() => new Map(catalog.map((t) => [t.id, t])), [catalog])
 
   useEffect(() => {
     if (open) {
@@ -40,13 +45,23 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
   if (!open) return null
 
   const q = query.toLowerCase()
+  const matchesTech = (ids: string[] | null | undefined) => {
+    if (!ids || ids.length === 0) return false
+    for (const id of ids) {
+      const t = catalogMap.get(id)
+      if (!t) continue
+      if (t.name.toLowerCase().includes(q)) return true
+      if (t.slug.toLowerCase().includes(q)) return true
+      if (t.aliases?.some((a) => a.toLowerCase().includes(q))) return true
+    }
+    return false
+  }
   const filteredObjects = q
     ? objects.filter(
         (o) =>
           o.name.toLowerCase().includes(q) ||
           o.description?.toLowerCase().includes(q) ||
-          // TODO(tech-catalog): match by resolved catalog name/aliases (M7).
-          o.technology_ids?.some((t) => t.toLowerCase().includes(q)),
+          matchesTech(o.technology_ids),
       )
     : []
   const filteredDiagrams = q
@@ -121,12 +136,19 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
                 >
                   <span style={{ opacity: 0.5 }}>{TYPE_ICONS[o.type as ObjectType]}</span>
                   {o.name}
-                  {/* TODO(tech-catalog): render TechBadge row (M7). */}
-                  {o.technology_ids && o.technology_ids.length > 0 && (
-                    <span style={{ fontSize: 10, color: '#525252' }}>
-                      {o.technology_ids.join(', ')}
-                    </span>
-                  )}
+                  {(() => {
+                    const techs = (o.technology_ids ?? [])
+                      .map((id) => catalogMap.get(id))
+                      .filter((t): t is NonNullable<typeof t> => Boolean(t))
+                    if (techs.length === 0) return null
+                    return (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: 4 }}>
+                        {techs.slice(0, 3).map((t) => (
+                          <TechIcon key={t.id} technology={t} size={12} />
+                        ))}
+                      </span>
+                    )
+                  })()}
                 </div>
               ))}
             </div>
