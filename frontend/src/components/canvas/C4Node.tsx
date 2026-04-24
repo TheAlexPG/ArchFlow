@@ -253,18 +253,23 @@ export function C4Node({ data, selected }: NodeProps) {
         />
       )}
 
-      {/* Metadata row — row of tech icons + name strip, plus optional
-          editing indicator. First 4 icons are shown; overflow is folded
-          into "+N" to keep the node compact at zoom-out. */}
+      {/* Metadata row — icon-only strip (names live in the sidebar and on
+          hover tooltips). First 6 icons render; anything more is folded
+          into a "+N" badge to keep the node compact at zoom-out. */}
       {(technologies.length > 0 || (remoteEditors && remoteEditors.length > 0)) && (
         <div className="flex items-center justify-between gap-2 mt-2 font-mono text-[10px] text-text-3">
-          <span className="flex items-center gap-1 min-w-0">
-            {technologies.slice(0, 4).map((t) => (
-              <TechIcon key={t.id} technology={t} size={12} />
+          <span className="flex items-center gap-1 min-w-0 flex-wrap">
+            {technologies.slice(0, 6).map((t) => (
+              <TechIcon key={t.id} technology={t} size={14} />
             ))}
-            <span className="truncate">
-              {technologies.map((t) => t.name).join(' · ')}
-            </span>
+            {technologies.length > 6 && (
+              <span
+                className="text-text-3"
+                title={technologies.slice(6).map((t) => t.name).join(', ')}
+              >
+                +{technologies.length - 6}
+              </span>
+            )}
           </span>
           {remoteEditors && remoteEditors.length > 0 && (
             <span

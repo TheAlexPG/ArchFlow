@@ -29,6 +29,7 @@ export function TechIcon({
   const name = technology?.iconify_name || iconifyName || FALLBACK
   const color = technology?.color ?? undefined
 
+  const label = technology?.name
   return (
     <span
       className={cn(
@@ -41,7 +42,8 @@ export function TechIcon({
         height: glow ? size + 6 : size,
         background: glow && color ? `${color}1f` : undefined,
       }}
-      aria-hidden="true"
+      title={label}
+      aria-label={label}
     >
       <Icon icon={name} width={size} height={size} />
     </span>

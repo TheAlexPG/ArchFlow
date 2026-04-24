@@ -155,6 +155,8 @@
   {"slug": "tcp", "name": "TCP", "iconify_name": "mdi:lan-connect", "category": "protocol", "color": "#455A64", "aliases": []},
   {"slug": "udp", "name": "UDP", "iconify_name": "mdi:lan", "category": "protocol", "color": "#607D8B", "aliases": []},
   {"slug": "webrtc", "name": "WebRTC", "iconify_name": "logos:webrtc", "category": "protocol", "color": "#333333", "aliases": []},
+  {"slug": "mcp", "name": "MCP", "iconify_name": "mdi:message-processing-outline", "category": "protocol", "color": "#D97757", "aliases": ["model-context-protocol", "model context protocol"]},
+  {"slug": "a2a", "name": "A2A", "iconify_name": "mdi:account-switch-outline", "category": "protocol", "color": "#6366F1", "aliases": ["agent-to-agent", "agent to agent"]},
 
   {"slug": "electron", "name": "Electron", "iconify_name": "logos:electron", "category": "framework", "color": "#47848F", "aliases": []},
   {"slug": "reactnative", "name": "React Native", "iconify_name": "logos:react", "category": "framework", "color": "#61DAFB", "aliases": []},
