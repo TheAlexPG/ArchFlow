@@ -75,7 +75,7 @@ function connectionToEdge(conn: Connection): Edge {
     markerStart,
     data: {
       label: conn.label,
-      protocol_id: conn.protocol_id,
+      protocol_ids: conn.protocol_ids,
       shape: conn.shape,
       labelSize: conn.label_size,
       direction: conn.direction,
@@ -358,7 +358,7 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     const connKey = filtered
       .map(
         (c) =>
-          `${c.id}:${c.source_id}:${c.target_id}:${c.shape}:${c.label_size}:${c.direction}:${c.label ?? ''}:${c.protocol_id ?? ''}:${c.source_handle ?? ''}:${c.target_handle ?? ''}`,
+          `${c.id}:${c.source_id}:${c.target_id}:${c.shape}:${c.label_size}:${c.direction}:${c.label ?? ''}:${(c.protocol_ids ?? []).join(',')}:${c.source_handle ?? ''}:${c.target_handle ?? ''}`,
       )
       .join(',')
 

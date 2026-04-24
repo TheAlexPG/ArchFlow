@@ -40,7 +40,7 @@ CONNECTION_FIELDS = (
     "target_id",
     "label",
     "direction",
-    "protocol_id",
+    "protocol_ids",
     "tags",
 )
 

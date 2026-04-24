@@ -420,8 +420,10 @@ function ConnectionsList({
   if (related.length === 0) return null
 
   const getName = (id: string) => objects.find((o) => o.id === id)?.name ?? 'Unknown'
-  const getProtocol = (id: string | null) =>
-    id ? catalog.find((t) => t.id === id) : undefined
+  const getProtocols = (ids: string[] | null | undefined) =>
+    (ids ?? [])
+      .map((id) => catalog.find((t) => t.id === id))
+      .filter((t): t is NonNullable<typeof t> => Boolean(t))
 
   return (
     <div>
@@ -464,13 +466,28 @@ function ConnectionsList({
               </span>
 
               {(() => {
-                const proto = getProtocol(c.protocol_id)
-                return proto ? (
-                  <TechBadge technology={proto} iconOnly className="!border-transparent !bg-transparent !px-0" />
-                ) : null
+                const protos = getProtocols(c.protocol_ids)
+                if (protos.length === 0) return null
+                return (
+                  <span className="flex items-center gap-[2px] flex-shrink-0">
+                    {protos.slice(0, 3).map((p) => (
+                      <TechBadge
+                        key={p.id}
+                        technology={p}
+                        iconOnly
+                        className="!border-transparent !bg-transparent !px-0"
+                      />
+                    ))}
+                    {protos.length > 3 && (
+                      <span className="font-mono text-[9.5px] text-text-3 ml-0.5">
+                        +{protos.length - 3}
+                      </span>
+                    )}
+                  </span>
+                )
               })()}
 
-              {!c.protocol_id && c.label && (
+              {(!c.protocol_ids || c.protocol_ids.length === 0) && c.label && (
                 <span className={cn('font-mono text-[10.5px] flex-shrink-0 truncate max-w-[70px]', isSelected ? 'text-coral' : 'text-text-3')}>
                   {c.label}
                 </span>

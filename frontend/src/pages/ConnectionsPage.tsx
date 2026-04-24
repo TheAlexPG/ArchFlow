@@ -21,7 +21,9 @@ export function ConnectionsPage() {
       source: objectMap.get(c.source_id)?.name || '—',
       target: objectMap.get(c.target_id)?.name || '—',
       label: c.label,
-      protocol: c.protocol_id ? catalogMap.get(c.protocol_id) : undefined,
+      protocols: (c.protocol_ids ?? [])
+        .map((id) => catalogMap.get(id))
+        .filter((t): t is NonNullable<typeof t> => Boolean(t)),
       direction: c.direction,
     }))
   }, [connections, objectMap, catalogMap])
@@ -34,8 +36,11 @@ export function ConnectionsPage() {
         r.source.toLowerCase().includes(q) ||
         r.target.toLowerCase().includes(q) ||
         r.label?.toLowerCase().includes(q) ||
-        r.protocol?.name.toLowerCase().includes(q) ||
-        r.protocol?.slug.toLowerCase().includes(q),
+        r.protocols.some(
+          (p) =>
+            p.name.toLowerCase().includes(q) ||
+            p.slug.toLowerCase().includes(q),
+        ),
     )
   }, [rows, search])
 
@@ -70,7 +75,7 @@ export function ConnectionsPage() {
                 <th className="text-left px-4 py-2 font-medium">Target</th>
                 <th className="text-left px-4 py-2 font-medium">Direction</th>
                 <th className="text-left px-4 py-2 font-medium">Label</th>
-                <th className="text-left px-4 py-2 font-medium">Protocol</th>
+                <th className="text-left px-4 py-2 font-medium">Protocols</th>
               </tr>
             </thead>
             <tbody>
@@ -83,10 +88,19 @@ export function ConnectionsPage() {
                   </td>
                   <td className="px-4 py-2 text-neutral-400 text-xs">{r.label || '—'}</td>
                   <td className="px-4 py-2 text-xs">
-                    {r.protocol ? (
-                      <TechBadge technology={r.protocol} />
-                    ) : (
+                    {r.protocols.length === 0 ? (
                       <span className="text-neutral-600">—</span>
+                    ) : (
+                      <div className="flex flex-wrap gap-1">
+                        {r.protocols.slice(0, 4).map((p) => (
+                          <TechBadge key={p.id} technology={p} />
+                        ))}
+                        {r.protocols.length > 4 && (
+                          <span className="text-neutral-600">
+                            +{r.protocols.length - 4}
+                          </span>
+                        )}
+                      </div>
                     )}
                   </td>
                 </tr>

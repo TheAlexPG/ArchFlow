@@ -46,7 +46,7 @@ export interface Connection {
   source_id: string
   target_id: string
   label: string | null
-  protocol_id: string | null
+  protocol_ids: string[] | null
   direction: ConnectionDirection
   tags: string[] | null
   source_handle: string | null
@@ -60,7 +60,7 @@ export interface Connection {
 
 export interface ConnectionUpdate {
   label?: string | null
-  protocol_id?: string | null
+  protocol_ids?: string[] | null
   direction?: ConnectionDirection
   tags?: string[] | null
   shape?: EdgeShape
@@ -178,7 +178,7 @@ export interface ConnectionCreate {
   source_id: string
   target_id: string
   label?: string | null
-  protocol_id?: string | null
+  protocol_ids?: string[] | null
   direction?: ConnectionDirection
   tags?: string[] | null
   source_handle?: string | null

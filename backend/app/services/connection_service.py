@@ -9,24 +9,29 @@ from app.models.technology import Technology
 from app.schemas.connection import ConnectionCreate, ConnectionUpdate
 
 
-async def _validate_protocol_id(
+async def _validate_protocol_ids(
     db: AsyncSession,
     workspace_id: uuid.UUID | None,
-    protocol_id: uuid.UUID | None,
+    protocol_ids: list[uuid.UUID] | None,
 ) -> None:
-    if protocol_id is None:
+    if not protocol_ids:
         return
     result = await db.execute(
         select(Technology.id).where(
-            Technology.id == protocol_id,
+            Technology.id.in_(protocol_ids),
             or_(
                 Technology.workspace_id.is_(None),
                 Technology.workspace_id == workspace_id,
             ),
         )
     )
-    if result.first() is None:
-        raise ValueError(f"Unknown or cross-workspace protocol_id: {protocol_id}")
+    found = {row[0] for row in result.all()}
+    missing = set(protocol_ids) - found
+    if missing:
+        raise ValueError(
+            "Unknown or cross-workspace protocol_ids: "
+            f"{sorted(str(m) for m in missing)}"
+        )
 
 
 async def _source_workspace_id(
@@ -84,13 +89,13 @@ async def create_connection(
     db: AsyncSession, data: ConnectionCreate, draft_id: uuid.UUID | None = None
 ) -> Connection:
     ws_id = await _source_workspace_id(db, data.source_id)
-    await _validate_protocol_id(db, ws_id, data.protocol_id)
+    await _validate_protocol_ids(db, ws_id, data.protocol_ids)
 
     conn = Connection(
         source_id=data.source_id,
         target_id=data.target_id,
         label=data.label,
-        protocol_id=data.protocol_id,
+        protocol_ids=data.protocol_ids,
         direction=data.direction,
         tags=data.tags,
         source_handle=data.source_handle,
@@ -109,9 +114,9 @@ async def create_connection(
 async def update_connection(
     db: AsyncSession, conn: Connection, data: ConnectionUpdate
 ) -> Connection:
-    if "protocol_id" in data.model_fields_set:
+    if "protocol_ids" in data.model_fields_set:
         ws_id = await _source_workspace_id(db, conn.source_id)
-        await _validate_protocol_id(db, ws_id, data.protocol_id)
+        await _validate_protocol_ids(db, ws_id, data.protocol_ids)
 
     update_data = data.model_dump(exclude_unset=True)
     for field, value in update_data.items():

@@ -237,19 +237,20 @@ export function EdgeSidebar({ diagramId }: EdgeSidebarProps) {
           </div>
         </div>
 
-        {/* Protocol — picks from the technology catalog (category=protocol by
-            default, but users can widen scope inside the picker if they
-            want something like Kafka tagged 'tool'). */}
+        {/* Protocols — multi-select because real edges often carry more
+            than one (HTTP over TLS, gRPC over HTTP/2, Kafka over TCP…).
+            Default filter is `category=protocol` but the picker can widen
+            scope when a tool-tagged row (Envoy, Traefik) is needed. */}
         <div>
-          <SectionLabel className="mb-1.5">Protocol</SectionLabel>
+          <SectionLabel className="mb-1.5">Protocols</SectionLabel>
           <TechnologyPicker
             mode={{
-              multi: false,
-              value: conn.protocol_id ?? null,
-              onChange: (id) => handleUpdate({ protocol_id: id }),
+              multi: true,
+              value: conn.protocol_ids ?? [],
+              onChange: (ids) => handleUpdate({ protocol_ids: ids }),
             }}
             restrictCategory="protocol"
-            placeholder="HTTP, gRPC, Kafka…"
+            placeholder="Search HTTP, gRPC, Kafka…"
           />
         </div>
 

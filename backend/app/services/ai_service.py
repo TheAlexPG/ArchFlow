@@ -42,7 +42,7 @@ async def _build_context(
         return {
             "direction": side,
             "label": c.label,
-            "protocol_id": str(c.protocol_id) if c.protocol_id else None,
+            "protocol_ids": [str(p) for p in (c.protocol_ids or [])],
             "other": {
                 "name": other.name,
                 "type": other.type.value if hasattr(other.type, "value") else str(other.type),

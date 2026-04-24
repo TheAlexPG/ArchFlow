@@ -174,7 +174,43 @@ export function useUpdateObject() {
       const { data: result } = await api.put<ModelObject>(`/objects/${id}`, data)
       return result
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['objects'] }),
+    // Optimistic update — the sidebar pickers (tech, status, tags, …) feed
+    // straight into this mutation, so waiting for a full network round-trip
+    // before showing the result makes the UI feel broken (the user clicks
+    // an entry in TechnologyPicker and "nothing happens"). Patch both the
+    // individual-object cache and every list cache in-place so downstream
+    // consumers see the change in the same tick.
+    onMutate: async (vars) => {
+      const { id, ...patch } = vars
+      await qc.cancelQueries({ queryKey: ['objects'] })
+      const prevItem = qc.getQueryData<ModelObject>(['objects', id])
+      if (prevItem) {
+        qc.setQueryData<ModelObject>(['objects', id], { ...prevItem, ...patch } as ModelObject)
+      }
+      qc.setQueriesData<ModelObject[] | undefined>(
+        { queryKey: ['objects'] },
+        (rows) =>
+          Array.isArray(rows)
+            ? rows.map((r) => (r.id === id ? ({ ...r, ...patch } as ModelObject) : r))
+            : rows,
+      )
+      return { prevItem }
+    },
+    onError: (_err, vars, context) => {
+      if (context?.prevItem) qc.setQueryData(['objects', vars.id], context.prevItem)
+      // Full invalidate on error to recover any list drift.
+      qc.invalidateQueries({ queryKey: ['objects'] })
+    },
+    onSuccess: (updated) => {
+      qc.setQueryData(['objects', updated.id], updated)
+      qc.setQueriesData<ModelObject[] | undefined>(
+        { queryKey: ['objects'] },
+        (rows) =>
+          Array.isArray(rows)
+            ? rows.map((r) => (r.id === updated.id ? updated : r))
+            : rows,
+      )
+    },
   })
 }
 
@@ -393,6 +429,33 @@ export function useUpdateConnection() {
     mutationFn: async ({ id, ...data }: ConnectionUpdate & { id: string }) => {
       const { data: result } = await api.put<Connection>(`/connections/${id}`, data)
       return result
+    },
+    // Optimistic patch: mirrors the shape of useUpdateObject so adding a
+    // protocol in EdgeSidebar feels instant (sidebar shows the new badge
+    // the same tick). onError rolls back from the captured snapshot.
+    onMutate: async (vars) => {
+      const { id, ...patch } = vars
+      await qc.cancelQueries({ queryKey: ['connections'] })
+      const prevItem = qc.getQueryData<Connection>(['connections', id])
+      if (prevItem) {
+        qc.setQueryData<Connection>(['connections', id], {
+          ...prevItem,
+          ...patch,
+        } as Connection)
+      }
+      qc.setQueriesData<Connection[] | undefined>(
+        { queryKey: ['connections'] },
+        (rows) =>
+          Array.isArray(rows)
+            ? rows.map((r) => (r.id === id ? ({ ...r, ...patch } as Connection) : r))
+            : rows,
+      )
+      return { prevItem }
+    },
+    onError: (_err, vars, context) => {
+      if (context?.prevItem)
+        qc.setQueryData(['connections', vars.id], context.prevItem)
+      qc.invalidateQueries({ queryKey: ['connections'] })
     },
     onSuccess: (updated) => {
       // Write the updated connection into the individual-item cache so the

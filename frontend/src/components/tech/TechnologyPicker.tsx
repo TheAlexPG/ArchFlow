@@ -13,9 +13,8 @@ export type PickerMode =
   | { multi: false; value: string | null; onChange: (id: string | null) => void }
 
 export interface TechnologyPickerProps {
-  /** Single- or multi-select, distinguished at the type level. */
   mode: PickerMode
-  /** Restrict results to a single category (e.g. `protocol` for edge pickers). */
+  /** Restrict results to a single category (e.g. `protocol`). */
   restrictCategory?: TechCategory
   placeholder?: string
   className?: string
@@ -47,14 +46,20 @@ const CATEGORY_LABEL: Record<TechCategory, string> = {
 
 /**
  * Combobox for picking one or many technologies from the catalog.
- * The anchor renders selected items as `<TechBadge>`s (multi) or a single row
- * with icon + name (single). Click opens a portal dropdown with fuzzy search
- * and category sections. "+ Create custom" opens the CustomTechModal.
+ *
+ * Multi mode always renders selected badges above a dedicated
+ * "+ Add another technology" trigger, so the "you can pick several"
+ * affordance is visually obvious. Single mode shows the current pick (or
+ * a prompt) in the same spot.
+ *
+ * The popup stops propagation on its own `mousedown` so the outside-close
+ * listener doesn't fire before the child buttons' `click` resolves — a
+ * prior version got that wrong and clicks silently did nothing.
  */
 export function TechnologyPicker({
   mode,
   restrictCategory,
-  placeholder = 'Add technology…',
+  placeholder,
   className,
   allowCreateCustom = true,
 }: TechnologyPickerProps) {
@@ -65,15 +70,18 @@ export function TechnologyPicker({
 
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
+  const [activeIdx, setActiveIdx] = useState(0)
   const [modalOpen, setModalOpen] = useState(false)
   const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null)
   const anchorRef = useRef<HTMLDivElement | null>(null)
+  const popupRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
 
-  const selectedIds = useMemo(
-    () => (mode.multi ? mode.value : mode.value ? [mode.value] : []),
-    [mode],
-  )
+  const selectedIds = mode.multi
+    ? mode.value
+    : mode.value
+      ? [mode.value]
+      : []
   const selectedTech = useMemo(
     () =>
       selectedIds
@@ -82,8 +90,6 @@ export function TechnologyPicker({
     [selectedIds, catalog],
   )
 
-  // Repositioning: recompute the anchor rect whenever we open + on scroll /
-  // resize while open. Keeps the dropdown glued to its input.
   useEffect(() => {
     if (!open) return
     const update = () => {
@@ -98,39 +104,44 @@ export function TechnologyPicker({
     }
   }, [open])
 
-  // Click-outside closes the popup.
   useEffect(() => {
     if (!open) return
+    // Ref-based — each picker identifies its own popup, so multiple pickers
+    // on the page don't race on `document.getElementById`.
     const onDown = (e: MouseEvent) => {
       const target = e.target as Node
       if (anchorRef.current?.contains(target)) return
-      const popup = document.getElementById('tech-picker-popup')
-      if (popup?.contains(target)) return
+      if (popupRef.current?.contains(target)) return
       setOpen(false)
     }
     window.addEventListener('mousedown', onDown)
     return () => window.removeEventListener('mousedown', onDown)
   }, [open])
 
-  // Focus the search input on open so typing feels instant.
   useEffect(() => {
     if (open) requestAnimationFrame(() => inputRef.current?.focus())
   }, [open])
 
-  const filtered = useMemo(() => {
+  useEffect(() => {
+    setActiveIdx(0)
+  }, [query, open])
+
+  const flatVisible = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return catalog
-    return catalog.filter((t) => {
-      if (t.name.toLowerCase().includes(q)) return true
-      if (t.slug.toLowerCase().includes(q)) return true
-      return t.aliases?.some((a) => a.toLowerCase().includes(q)) ?? false
-    })
-  }, [catalog, query])
+    const hide = new Set(mode.multi ? selectedIds : [])
+    return catalog
+      .filter((t) => !hide.has(t.id))
+      .filter((t) => {
+        if (!q) return true
+        if (t.name.toLowerCase().includes(q)) return true
+        if (t.slug.toLowerCase().includes(q)) return true
+        return t.aliases?.some((a) => a.toLowerCase().includes(q)) ?? false
+      })
+  }, [catalog, query, selectedIds, mode.multi])
 
   const grouped = useMemo(() => {
     const map = new Map<TechCategory, Technology[]>()
-    for (const t of filtered) {
-      if (selectedIds.includes(t.id) && mode.multi) continue
+    for (const t of flatVisible) {
       const arr = map.get(t.category) ?? []
       arr.push(t)
       map.set(t.category, arr)
@@ -139,15 +150,14 @@ export function TechnologyPicker({
       category: c,
       items: (map.get(c) ?? []).sort((a, b) => a.name.localeCompare(b.name)),
     })).filter((g) => g.items.length > 0)
-  }, [filtered, selectedIds, mode.multi])
+  }, [flatVisible])
 
   const handlePick = (tech: Technology) => {
     if (mode.multi) {
-      if (selectedIds.includes(tech.id)) return
+      if (mode.value.includes(tech.id)) return
       mode.onChange([...mode.value, tech.id])
       setQuery('')
-      // Stay open for further multi-picks.
-      inputRef.current?.focus()
+      requestAnimationFrame(() => inputRef.current?.focus())
     } else {
       mode.onChange(tech.id)
       setOpen(false)
@@ -167,8 +177,33 @@ export function TechnologyPicker({
     handlePick(tech)
   }
 
-  // Popup coordinates. Prefer to open below the anchor; flip above when not
-  // enough room. Width mirrors the anchor so it feels attached.
+  const handleKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      setOpen(false)
+      return
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      const pick = flatVisible[activeIdx] ?? flatVisible[0]
+      if (pick) handlePick(pick)
+      return
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setActiveIdx((i) => Math.min(i + 1, flatVisible.length - 1))
+      return
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setActiveIdx((i) => Math.max(i - 1, 0))
+      return
+    }
+    if (e.key === 'Backspace' && !query && mode.multi && selectedTech.length) {
+      handleRemove(selectedTech[selectedTech.length - 1].id)
+    }
+  }
+
   const popupStyle = useMemo((): React.CSSProperties | undefined => {
     if (!anchorRect) return undefined
     const maxHeight = 360
@@ -188,85 +223,105 @@ export function TechnologyPicker({
     }
   }, [anchorRect])
 
+  const effectivePlaceholder =
+    placeholder ?? (mode.multi ? 'Search technology…' : 'Pick a technology…')
+
+  const triggerLabel = mode.multi
+    ? selectedTech.length > 0
+      ? 'Add another technology'
+      : 'Add technology'
+    : selectedTech[0]
+      ? 'Change technology'
+      : 'Pick a technology'
+
   return (
-    <div className={cn('relative', className)}>
-      <div
-        ref={anchorRef}
-        onClick={() => setOpen((v) => !v)}
-        className={cn(
-          'min-h-[34px] w-full rounded-md border bg-surface',
-          'flex flex-wrap items-center gap-[5px] px-2 py-[5px]',
-          'cursor-text transition-colors',
-          open ? 'border-coral' : 'border-border-base hover:border-border-hi',
-        )}
-      >
-        {mode.multi
-          ? selectedTech.map((t) => (
-              <TechBadge
-                key={t.id}
-                technology={t}
-                onRemove={() => handleRemove(t.id)}
-              />
-            ))
-          : selectedTech[0] && (
-              <span className="inline-flex items-center gap-[6px] font-mono text-[11px] text-text-base">
-                <TechIcon technology={selectedTech[0]} size={14} />
-                {selectedTech[0].name}
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    handleRemove(selectedTech[0].id)
-                  }}
-                  className="text-text-4 hover:text-text-base ml-1"
-                >
-                  ×
-                </button>
-              </span>
-            )}
-        {(!mode.multi ? !selectedTech[0] : true) && (
-          <input
-            className={cn(
-              'flex-1 bg-transparent outline-none',
-              'font-mono text-[11.5px] text-text-base placeholder:text-text-4',
-              'min-w-[80px]',
-            )}
-            placeholder={selectedTech.length ? '' : placeholder}
-            value={open ? query : ''}
-            onFocus={() => setOpen(true)}
-            onChange={(e) => {
-              setOpen(true)
-              setQuery(e.target.value)
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') setOpen(false)
-              if (e.key === 'Backspace' && !query && mode.multi && selectedTech.length) {
-                handleRemove(selectedTech[selectedTech.length - 1].id)
-              }
-            }}
-            ref={(el) => {
-              if (el) inputRef.current = el
-            }}
+    <div className={cn('flex flex-col gap-2', className)}>
+      {/* Selected badges — always above the trigger in multi mode so the
+          "you can stack several" affordance is visible before the user
+          even opens the dropdown. */}
+      {mode.multi && selectedTech.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {selectedTech.map((t) => (
+            <TechBadge
+              key={t.id}
+              technology={t}
+              size="md"
+              onRemove={() => handleRemove(t.id)}
+            />
+          ))}
+        </div>
+      )}
+
+      {!mode.multi && selectedTech[0] && (
+        <div className="flex items-center">
+          <TechBadge
+            technology={selectedTech[0]}
+            size="md"
+            onRemove={() => handleRemove(selectedTech[0].id)}
           />
-        )}
+        </div>
+      )}
+
+      {/* Trigger button — explicit "click to add" instead of a free-text
+          input, so the affordance matches what the popup actually does. */}
+      <div ref={anchorRef}>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className={cn(
+            'w-full flex items-center gap-2 px-2.5 py-[7px]',
+            'rounded-md border bg-surface',
+            'font-mono text-[11.5px] leading-none text-left transition-colors',
+            open
+              ? 'border-coral text-text-base'
+              : 'border-dashed border-border-hi text-text-3 hover:border-coral hover:text-text-base',
+          )}
+        >
+          <span className="text-[14px] leading-none">+</span>
+          <span>{triggerLabel}</span>
+        </button>
       </div>
 
       {open &&
         anchorRect &&
         createPortal(
           <div
-            id="tech-picker-popup"
+            ref={popupRef}
             style={popupStyle}
             className={cn(
               'bg-panel border border-border-base rounded-md shadow-popup',
               'flex flex-col overflow-hidden',
               'animate-[popup-in_0.22s_cubic-bezier(0.16,1,0.3,1)_forwards]',
             )}
+            // Stop the outside-close listener from firing off a bubbled
+            // mousedown before child button clicks resolve.
+            onMouseDown={(e) => e.stopPropagation()}
           >
+            <div className="p-2 border-b border-border-base">
+              <input
+                ref={inputRef}
+                className={cn(
+                  'w-full bg-surface border border-border-base rounded px-2 py-1.5',
+                  'font-mono text-[11.5px] text-text-base placeholder:text-text-4',
+                  'outline-none focus:border-coral',
+                )}
+                placeholder={effectivePlaceholder}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={handleKey}
+              />
+              {mode.multi && selectedTech.length > 0 && (
+                <div className="mt-2 font-mono text-[9.5px] text-text-3 uppercase tracking-[0.06em]">
+                  {selectedTech.length} selected · keep picking to stack more
+                </div>
+              )}
+            </div>
+
             <div className="flex-1 overflow-y-auto">
               {grouped.length === 0 ? (
                 <div className="px-3 py-6 font-mono text-[11px] text-text-3 text-center">
-                  No matches. {allowCreateCustom ? 'Create a custom tech instead?' : null}
+                  No matches.{' '}
+                  {allowCreateCustom ? 'Create a custom tech instead?' : null}
                 </div>
               ) : (
                 grouped.map((g) => (
@@ -274,24 +329,29 @@ export function TechnologyPicker({
                     <div className="font-mono text-[9.5px] uppercase tracking-[0.08em] text-text-3 px-3 pt-2 pb-1">
                       {CATEGORY_LABEL[g.category]}
                     </div>
-                    {g.items.slice(0, 40).map((t) => (
-                      <button
-                        key={t.id}
-                        type="button"
-                        onClick={() => handlePick(t)}
-                        className={cn(
-                          'w-full text-left flex items-center gap-2 px-3 py-1.5',
-                          'hover:bg-surface-hi focus-visible:bg-surface-hi outline-none',
-                          'text-[12px] text-text-base',
-                        )}
-                      >
-                        <TechIcon technology={t} size={16} />
-                        <span className="flex-1 truncate">{t.name}</span>
-                        <span className="font-mono text-[10px] text-text-3 truncate max-w-[120px]">
-                          {t.slug}
-                        </span>
-                      </button>
-                    ))}
+                    {g.items.slice(0, 40).map((t) => {
+                      const flatIdx = flatVisible.indexOf(t)
+                      const isActive = flatIdx === activeIdx
+                      return (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onMouseEnter={() => setActiveIdx(flatIdx)}
+                          onClick={() => handlePick(t)}
+                          className={cn(
+                            'w-full text-left flex items-center gap-2 px-3 py-1.5',
+                            'outline-none text-[12px] text-text-base',
+                            isActive ? 'bg-surface-hi' : 'hover:bg-surface-hi',
+                          )}
+                        >
+                          <TechIcon technology={t} size={16} />
+                          <span className="flex-1 truncate">{t.name}</span>
+                          <span className="font-mono text-[10px] text-text-3 truncate max-w-[120px]">
+                            {t.slug}
+                          </span>
+                        </button>
+                      )
+                    })}
                   </div>
                 ))
               )}

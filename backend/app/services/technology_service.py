@@ -183,10 +183,9 @@ async def count_references(
 ) -> tuple[int, int]:
     """How many objects / connections reference this technology.
 
-    Uses raw SQL against the post-M3 schema columns (`technology_ids`,
-    `protocol_id`). Works once the M3 migrations have been applied; until
-    then delete is unreachable from the live API anyway because the feature
-    needs the full chain to be deployed together.
+    Uses raw SQL against the array columns `model_objects.technology_ids`
+    and `connections.protocol_ids`. Both are UUID[], matched with
+    `:id = ANY(...)`.
     """
     object_count = (
         await db.execute(
@@ -200,7 +199,8 @@ async def count_references(
     connection_count = (
         await db.execute(
             text(
-                "SELECT COUNT(*) FROM connections WHERE protocol_id = :id"
+                "SELECT COUNT(*) FROM connections "
+                "WHERE :id = ANY(protocol_ids)"
             ).bindparams(id=technology_id)
         )
     ).scalar_one()

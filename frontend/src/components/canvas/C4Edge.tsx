@@ -51,13 +51,14 @@ export function C4Edge({
   }
 
   const label = (data as Record<string, unknown>)?.label as string | undefined
-  const protocolId = (data as Record<string, unknown>)?.protocol_id as
-    | string
-    | undefined
-    | null
+  const protocolIds =
+    ((data as Record<string, unknown>)?.protocol_ids as string[] | undefined) ??
+    []
   const workspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
   const { data: catalog = [] } = useTechnologies(workspaceId)
-  const protocol = protocolId ? catalog.find((t) => t.id === protocolId) : null
+  const protocols = protocolIds
+    .map((id) => catalog.find((t) => t.id === id))
+    .filter((t): t is NonNullable<typeof t> => Boolean(t))
   const flowStep = (data as Record<string, unknown>)?.flowStep as number | null | undefined
   const flowCurrent = (data as Record<string, unknown>)?.flowCurrent as boolean | undefined
 
@@ -83,7 +84,7 @@ export function C4Edge({
         markerStart={markerStart}
         style={{ stroke, strokeWidth }}
       />
-      {(label || protocol) && (
+      {(label || protocols.length > 0) && (
         <EdgeLabelRenderer>
           <div
             className={[
@@ -97,17 +98,27 @@ export function C4Edge({
               transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
               fontSize: `${labelSize}px`,
               lineHeight: '1.3',
-              maxWidth: 220,
+              maxWidth: 240,
               whiteSpace: 'pre-wrap',
               textAlign: 'center',
             }}
           >
             {label}
-            {label && protocol && <br />}
-            {protocol && (
-              <span className="inline-flex items-center gap-1 text-text-3 align-middle">
-                <TechIcon technology={protocol} size={Math.round(labelSize)} />
-                {protocol.name}
+            {label && protocols.length > 0 && <br />}
+            {protocols.length > 0 && (
+              <span className="inline-flex flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5 text-text-3 align-middle">
+                {protocols.map((p, idx) => (
+                  <span
+                    key={p.id}
+                    className="inline-flex items-center gap-0.5 whitespace-nowrap"
+                  >
+                    <TechIcon technology={p} size={Math.round(labelSize)} />
+                    {p.name}
+                    {idx < protocols.length - 1 && (
+                      <span className="text-text-4 ml-0.5">·</span>
+                    )}
+                  </span>
+                ))}
               </span>
             )}
           </div>
