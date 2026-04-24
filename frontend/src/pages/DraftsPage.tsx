@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AppSidebar } from '../components/nav/AppSidebar'
+import { PageToolbar } from '../components/nav/PageToolbar'
 import { useDeleteDraft, useDrafts } from '../hooks/use-api'
 import type { Draft, DraftStatus } from '../types/model'
 
@@ -19,9 +20,11 @@ export function DraftsPage() {
   const visible = drafts.filter((d) => filter === 'all' || d.status === filter)
 
   return (
-    <div className="flex h-screen bg-neutral-950 text-neutral-200">
+    <div className="flex h-screen bg-bg text-text-base">
       <AppSidebar />
-      <div className="flex-1 overflow-y-auto p-8">
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <PageToolbar breadcrumb={['alex / personal', 'Drafts']} />
+        <div className="flex-1 overflow-y-auto p-8">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-xl font-semibold">Drafts</h1>
           <div className="flex gap-1">
@@ -73,6 +76,7 @@ export function DraftsPage() {
               }}
             />
           ))}
+        </div>
         </div>
       </div>
     </div>

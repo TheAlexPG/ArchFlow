@@ -102,7 +102,9 @@ async def create_object(
     # Only log activity for live objects; draft-scoped changes live
     # inside the draft until they're applied.
     if draft_id is None:
-        await activity_service.log_created(db, ActivityTargetType.OBJECT, obj)
+        await activity_service.log_created(
+            db, ActivityTargetType.OBJECT, obj, workspace_id=workspace_id
+        )
     return obj
 
 
@@ -124,13 +126,16 @@ async def update_object(
     await db.refresh(obj)
     after = activity_service.snapshot(obj)
     await activity_service.log_updated(
-        db, ActivityTargetType.OBJECT, obj.id, before, after
+        db, ActivityTargetType.OBJECT, obj.id, before, after,
+        workspace_id=obj.workspace_id,
     )
     return obj
 
 
 async def delete_object(db: AsyncSession, obj: ModelObject) -> None:
-    await activity_service.log_deleted(db, ActivityTargetType.OBJECT, obj)
+    await activity_service.log_deleted(
+        db, ActivityTargetType.OBJECT, obj, workspace_id=obj.workspace_id
+    )
     await db.delete(obj)
     await db.flush()
 

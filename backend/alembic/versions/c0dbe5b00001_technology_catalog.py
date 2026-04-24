@@ -1,7 +1,7 @@
 """technology_catalog: create technologies table and seed built-in entries
 
 Revision ID: c0dbe5b00001
-Revises: eb9e2003d7b9
+Revises: b2c3d4e5f7a8
 """
 import json
 from collections.abc import Sequence
@@ -13,7 +13,7 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 revision: str = "c0dbe5b00001"
-down_revision: str | Sequence[str] | None = "eb9e2003d7b9"
+down_revision: str | Sequence[str] | None = "b2c3d4e5f7a8"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

@@ -1,12 +1,88 @@
+/* ─── Task 001: IBM Plex font imports ──────────────────────────────────────── */
+@import '@fontsource-variable/ibm-plex-sans';
+@import '@fontsource/ibm-plex-mono/400.css';
+@import '@fontsource/ibm-plex-mono/500.css';
+@import '@fontsource/ibm-plex-mono/600.css';
+@import '@fontsource/ibm-plex-serif/500-italic.css';
+
 @import "tailwindcss";
 @source "../src/**/*.{ts,tsx}";
 
+/* ─── Task 002: Design-system tokens ──────────────────────────────────────── */
+@theme {
+  /* Colors — background scale */
+  --color-bg:         #0a0a0b;
+  --color-panel:      #111113;
+  --color-surface:    #16161a;
+  --color-surface-hi: #1d1d22;
+
+  /* Colors — borders
+     Using -base suffix to avoid collision with Tailwind v4's own
+     --color-border (DEFAULT border utility). Tailwind does NOT ship a
+     --color-border-base or --color-border-hi, so these are collision-free.
+  */
+  --color-border-base: #26262c;
+  --color-border-hi:   #35353d;
+
+  /* Colors — text ramp */
+  --color-text-base: #fafafa;
+  --color-text-2:    #a1a1aa;
+  --color-text-3:    #71717a;
+  --color-text-4:    #52525b;
+
+  /* Colors — brand / accent */
+  --color-coral:   #FF6B35;
+  --color-coral-2: #FF8552;
+
+  /* Colors — semantic accents (namespaced to avoid clashing with
+     Tailwind's built-in green-500 / purple-500 / etc. families) */
+  --color-accent-green:  #4ade80;
+  --color-accent-purple: #c084fc;
+  --color-accent-blue:   #60a5fa;
+  --color-accent-amber:  #fbbf24;
+  --color-accent-pink:   #f472b6;
+
+  /* Colors — glow variants (12-15 % alpha) */
+  --color-coral-glow:        rgba(255, 107, 53, 0.15);
+  --color-accent-green-glow:  rgba(74, 222, 128, 0.12);
+  --color-accent-purple-glow: rgba(192, 132, 252, 0.12);
+  --color-accent-blue-glow:   rgba(96, 165, 250, 0.12);
+  --color-accent-amber-glow:  rgba(251, 191, 36, 0.12);
+  --color-accent-pink-glow:   rgba(244, 114, 182, 0.15);
+
+  /* Fonts */
+  --font-sans:  'IBM Plex Sans Variable', system-ui, sans-serif;
+  --font-mono:  'IBM Plex Mono', ui-monospace, monospace;
+  --font-serif: 'IBM Plex Serif', serif;
+
+  /* Shadows */
+  --shadow-window:       0 40px 80px -20px rgba(0,0,0,0.6), 0 20px 40px -20px rgba(0,0,0,0.4);
+  --shadow-card-hover:   0 12px 30px -8px rgba(0,0,0,0.4);
+  --shadow-ai-bar:       0 0 0 3px rgba(244,114,182,0.05), 0 10px 40px -10px rgba(244,114,182,0.15);
+  --shadow-popup:        0 20px 40px -8px rgba(0,0,0,0.5), 0 4px 16px -4px rgba(0,0,0,0.3);
+  --shadow-coral-glow:   0 0 40px rgba(255,107,53,0.15);
+  --shadow-node-selected: 0 0 0 3px rgba(255,107,53,0.15), 0 0 40px rgba(255,107,53,0.15);
+
+  /* Animations */
+  --animate-dash:         dash 1.2s linear infinite;
+  --animate-pulse-dot:    pulse-dot 2s infinite;
+  --animate-fab-ring:     fab-ring 3s ease-in-out infinite;
+  --animate-popup-in:     popup-in 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  --animate-item-stagger: item-stagger 0.3s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  --animate-fade:         fade 0.3s ease;
+}
+
+/* ─── Base / reset ────────────────────────────────────────────────────────── */
 html, body, #root {
   height: 100%;
   margin: 0;
   padding: 0;
-  background-color: #0a0a0a;
+  /* Updated to new token value — one digit change from #0a0a0a → #0a0a0b */
+  background-color: #0a0a0b;
   color: #f5f5f5;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "ss01", "ss02", "cv11";
 }
 
 /*
@@ -46,7 +122,48 @@ select {
   flex-direction: column;
 }
 
-/* React Flow dark theme overrides */
+/* ─── Task 003: Global utilities ──────────────────────────────────────────── */
+@layer utilities {
+  /* Page background — coral + pink radial gradients over #0a0a0b */
+  .page-bg {
+    background:
+      radial-gradient(900px 500px at 20% -10%, rgba(255, 107, 53, 0.08), transparent 60%),
+      radial-gradient(700px 400px at 90% 10%,  rgba(244, 114, 182, 0.05), transparent 60%),
+      #0a0a0b;
+  }
+
+  /* Canvas background — 24px dotted grid */
+  .canvas-bg {
+    background-color: #0a0a0b;
+    background-image: radial-gradient(circle, #26262c 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+
+  /* Noise overlay — SVG fractalNoise grain at ~1.5 % alpha */
+  .noise {
+    position: relative;
+  }
+  .noise::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.015 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 1;
+  }
+}
+
+/* ─── Themed scrollbars ───────────────────────────────────────────────────── */
+::-webkit-scrollbar           { width: 10px; height: 10px; }
+::-webkit-scrollbar-track     { background: transparent; }
+::-webkit-scrollbar-thumb     {
+  background: var(--color-border-base);
+  border-radius: 5px;
+  border: 2px solid var(--color-bg);
+}
+::-webkit-scrollbar-thumb:hover { background: var(--color-border-hi); }
+
+/* ─── React Flow dark theme overrides (load-bearing — do not remove) ──────── */
 .react-flow__controls {
   background: #171717 !important;
   border: 1px solid #333 !important;
@@ -77,9 +194,22 @@ select {
 }
 
 .react-flow__minimap {
-  background: #171717 !important;
-  border: 1px solid #333 !important;
-  border-radius: 6px !important;
+  background: var(--color-panel) !important;
+  border: 1px solid var(--color-border-base) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 12px 30px -8px rgba(0, 0, 0, 0.5);
+  padding: 4px;
+}
+
+/* Darken the area outside the viewport rect */
+.react-flow__minimap-mask {
+  fill: rgba(0, 0, 0, 0.3);
+}
+
+/* Minimap node default fill — overridden per-type via nodeColor prop */
+.react-flow__minimap-node {
+  fill: var(--color-border-hi);
+  stroke: none;
 }
 
 .react-flow__attribution {
@@ -219,4 +349,158 @@ select {
 .react-flow__node-group.selectable:focus,
 .react-flow__node-group.selectable:focus-visible {
   box-shadow: none !important;
+}
+
+/* ─── Keyframe definitions ────────────────────────────────────────────────── */
+
+/* Animated SVG edge — stroke-dashoffset march */
+@keyframes dash {
+  to { stroke-dashoffset: -20; }
+}
+
+/* Presence dot pulse (renamed from `pulse` to avoid clashing with Tailwind's
+   built-in `animate-pulse` utility which also uses a `pulse` keyframe) */
+@keyframes pulse-dot {
+  0%   { box-shadow: 0 0 0 0   rgba(74, 222, 128, 0.6); }
+  70%  { box-shadow: 0 0 0 8px rgba(74, 222, 128, 0); }
+  100% { box-shadow: 0 0 0 0   rgba(74, 222, 128, 0); }
+}
+
+/* FAB breathing ring */
+@keyframes fab-ring {
+  0%,  100% { box-shadow: 0 0 0 0   rgba(255, 107, 53, 0.4), 0 8px 24px -4px rgba(0,0,0,0.6); }
+  50%        { box-shadow: 0 0 0 8px rgba(255, 107, 53, 0),   0 8px 24px -4px rgba(0,0,0,0.6); }
+}
+
+/* Add-popup slide-in with blur */
+@keyframes popup-in {
+  0%   {
+    opacity: 0;
+    transform: translateX(-8px) scale(0.92);
+    filter: blur(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+/* Add-popup item stagger */
+@keyframes item-stagger {
+  0%   { opacity: 0; transform: translateY(6px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* Screen / page fade */
+@keyframes fade {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Modal center-scale entrance */
+@keyframes modal-scale-in {
+  0%   { opacity: 0; transform: scale(0.93); filter: blur(2px); }
+  100% { opacity: 1; transform: scale(1);    filter: blur(0); }
+}
+
+/* ─── Task 012: Add Object FAB + Popup component classes ──────────────────── */
+
+/*
+ * .add-popup — container that slides in from the left with blur.
+ * transform-origin left center ensures the scale(0.92) anchor is at the FAB.
+ */
+.add-popup {
+  animation: popup-in 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transform-origin: left center;
+}
+
+/* Sections inside the popup animate in with a stagger */
+.add-popup .popup-section {
+  animation: item-stagger 0.3s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+/* Each object-pool row */
+.add-popup .popup-item {
+  animation: item-stagger 0.3s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+/* Object row: flex row, hover surface + shift */
+.obj-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid transparent;
+  transition: background 0.12s ease, border-color 0.12s ease, transform 0.12s ease;
+}
+.obj-row:hover:not(:disabled) {
+  background: var(--color-surface);
+  border-color: var(--color-border-base);
+  transform: translateX(2px);
+}
+.obj-row:hover:not(:disabled) .obj-add-hint {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* 28x28 type-icon container inside each obj-row */
+.obj-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid var(--color-border-base);
+  background: var(--color-surface);
+}
+
+/* Hover-reveal "↵ add" hint */
+.obj-add-hint {
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: all 0.15s ease;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  color: var(--color-coral);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+/* Create-type button grid cell */
+.create-type-btn {
+  padding: 10px;
+  border: 1px solid var(--color-border-base);
+  background: var(--color-surface);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+}
+.create-type-btn:hover {
+  border-color: var(--color-coral);
+  background: var(--color-coral-glow);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px -4px rgba(255, 107, 53, 0.25);
+}
+.create-type-btn:hover .create-type-icon {
+  color: var(--color-coral);
+  transform: scale(1.1);
+}
+
+/* Icon wrapper inside each create-type button */
+.create-type-icon {
+  transition: all 0.2s ease;
+  color: var(--color-text-2);
 }

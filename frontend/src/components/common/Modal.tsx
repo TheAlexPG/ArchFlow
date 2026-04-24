@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 
 interface ModalProps {
   open: boolean
@@ -22,7 +23,9 @@ export function Modal({ open, onClose, title, children, footer, width = 440 }: M
   }, [open, onClose])
 
   if (!open) return null
-  return (
+  // Portal to body so ancestor CSS `transform` (e.g. the canvas-left
+  // FAB wrapper) can't break our `position: fixed; inset: 0` centring.
+  return createPortal(
     <div
       onClick={onClose}
       style={{
@@ -90,6 +93,7 @@ export function Modal({ open, onClose, title, children, footer, width = 440 }: M
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

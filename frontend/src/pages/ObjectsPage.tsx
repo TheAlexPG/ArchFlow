@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AppSidebar } from '../components/nav/AppSidebar'
+import { PageToolbar } from '../components/nav/PageToolbar'
 import { ObjectSidebar } from '../components/sidebar/ObjectSidebar'
 import { useObjectDiagrams } from '../hooks/use-diagrams'
 import { useObjects } from '../hooks/use-api'
@@ -24,9 +25,11 @@ export function ObjectsPage() {
   }, [objects, search])
 
   return (
-    <div className="flex h-screen bg-neutral-950 text-neutral-200">
+    <div className="flex h-screen bg-bg text-text-base">
       <AppSidebar />
-      <div className="flex-1 overflow-y-auto p-8">
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <PageToolbar breadcrumb={['alex / personal', 'Model Objects']} />
+        <div className="flex-1 overflow-y-auto p-8">
         <div className="flex items-center justify-between mb-6 gap-4">
           <h1 className="text-xl font-semibold">Model Objects</h1>
           <input
@@ -63,6 +66,7 @@ export function ObjectsPage() {
               ))}
             </tbody>
           </table>
+        </div>
         </div>
       </div>
       <ObjectSidebar

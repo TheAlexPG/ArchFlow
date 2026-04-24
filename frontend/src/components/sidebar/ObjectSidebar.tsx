@@ -19,6 +19,39 @@ import {
   CreateChildDiagramModal,
   DRILLABLE_TYPES,
 } from '../drafts/CreateChildDiagramModal'
+import { Avatar, AvatarStack, Pill, SectionLabel } from '../ui'
+import { cn } from '../../utils/cn'
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function relTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  const mins = Math.floor(diff / 60_000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  const days = Math.floor(hrs / 24)
+  if (days < 30) return `${days}d ago`
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+// Deterministic tag color from string — cycles through semantic variants
+const TAG_PALETTE: Array<{ text: string; border: string; bg: string }> = [
+  { text: 'text-accent-pink',   border: 'border-accent-pink/35',   bg: 'bg-accent-pink-glow' },
+  { text: 'text-accent-amber',  border: 'border-accent-amber/30',  bg: 'bg-accent-amber-glow' },
+  { text: 'text-accent-blue',   border: 'border-accent-blue/30',   bg: 'bg-accent-blue-glow' },
+  { text: 'text-accent-green',  border: 'border-accent-green/30',  bg: 'bg-accent-green-glow' },
+  { text: 'text-accent-purple', border: 'border-accent-purple/30', bg: 'bg-accent-purple-glow' },
+]
+
+function tagColor(tag: string) {
+  let hash = 0
+  for (const c of tag) hash = (hash * 31 + c.charCodeAt(0)) | 0
+  return TAG_PALETTE[Math.abs(hash) % TAG_PALETTE.length]
+}
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface ObjectSidebarProps {
   objectId?: string | null
@@ -27,13 +60,16 @@ interface ObjectSidebarProps {
   context?: 'canvas' | 'standalone'
 }
 
+// ─── Main component ───────────────────────────────────────────────────────────
+
 export function ObjectSidebar({
   objectId,
   open,
   onClose,
   context = 'canvas',
 }: ObjectSidebarProps = {}) {
-  const { selectedNodeId, sidebarOpen, sidebarTab, setSidebarTab, toggleSidebar } = useCanvasStore()
+  const { selectedNodeId, sidebarOpen, sidebarTab, setSidebarTab, toggleSidebar, selectedEdgeId } =
+    useCanvasStore()
   const effectiveObjectId = objectId !== undefined ? objectId : selectedNodeId
   const effectiveOpen = open !== undefined ? open : sidebarOpen
   const handleClose = () => {
@@ -77,147 +113,165 @@ export function ObjectSidebar({
     updateObject.mutate({ id: obj.id, [field]: value })
   }
 
+  const typeLabel = TYPE_LABELS[obj.type] ?? obj.type
+  const levelLabel = `L${obj.c4_level ?? '?'}`
+
   return (
-    <div className="w-80 bg-neutral-900 border-l border-neutral-800 flex flex-col h-full overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-800">
+    <div className="w-80 bg-panel border-l border-border-base flex flex-col h-full overflow-hidden">
+
+      {/* ── Header ── */}
+      <div className="px-4 py-3 border-b border-border-base">
+        {/* Top row: Inspector label + SELECTED pill + close */}
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-text-3">Inspector</span>
+            <Pill variant="draft" className="text-[9.5px] py-[2px]">SELECTED</Pill>
+          </div>
+          <button
+            onClick={handleClose}
+            className="text-text-4 hover:text-text-2 text-lg leading-none transition-colors"
+            aria-label="Close inspector"
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Object name — inline editable */}
         <input
           value={editName}
           onChange={(e) => setEditName(e.target.value)}
           onBlur={handleSave}
           onKeyDown={(e) => e.key === 'Enter' && handleSave()}
-          className="bg-transparent text-neutral-100 font-semibold text-sm outline-none flex-1 mr-2"
+          className="bg-transparent text-[15px] font-semibold text-text-base outline-none w-full mb-0.5"
         />
-        <button
-          onClick={handleClose}
-          className="text-neutral-500 hover:text-neutral-300 text-lg"
-        >
-          ×
-        </button>
+        <div className="font-mono text-[10.5px] text-text-3">
+          {typeLabel} · {levelLabel}
+        </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex border-b border-neutral-800">
+      {/* ── Tabs ── */}
+      <div className="flex border-b border-border-base">
         {(['details', 'connections', 'history'] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setSidebarTab(tab)}
-            className={`flex-1 px-3 py-2 text-xs font-medium capitalize transition-colors ${
+            className={cn(
+              'flex-1 px-3 py-2 font-mono text-[10.5px] uppercase tracking-[0.05em] transition-colors',
               sidebarTab === tab
-                ? 'text-blue-400 border-b-2 border-blue-400'
-                : 'text-neutral-500 hover:text-neutral-300'
-            }`}
+                ? 'text-coral border-b-2 border-coral'
+                : 'text-text-4 hover:text-text-2',
+            )}
           >
             {tab}
           </button>
         ))}
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      {/* ── Content ── */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-5">
         {sidebarTab === 'details' && (
           <>
             {/* Type */}
-            <Field label="Type">
+            <div>
+              <SectionLabel className="mb-1.5">Type</SectionLabel>
               <select
                 value={obj.type}
                 onChange={(e) => handleFieldChange('type', e.target.value)}
-                className="bg-neutral-800 text-neutral-200 text-sm rounded px-2 py-1 w-full border border-neutral-700"
+                className="bg-surface border border-border-base text-text-2 text-[12.5px] rounded-md px-2.5 py-1.5 w-full"
               >
                 {Object.entries(TYPE_LABELS).map(([value, label]) => (
                   <option key={value} value={value}>{label}</option>
                 ))}
               </select>
-            </Field>
+            </div>
 
             {/* Scope */}
-            <Field label="Scope">
+            <div>
+              <SectionLabel className="mb-1.5">Scope</SectionLabel>
               <select
                 value={obj.scope}
                 onChange={(e) => handleFieldChange('scope', e.target.value as ObjectScope)}
-                className="bg-neutral-800 text-neutral-200 text-sm rounded px-2 py-1 w-full border border-neutral-700"
+                className="bg-surface border border-border-base text-text-2 text-[12.5px] rounded-md px-2.5 py-1.5 w-full"
               >
                 <option value="internal">Internal</option>
                 <option value="external">External</option>
               </select>
-            </Field>
+            </div>
 
             {/* Status */}
-            <Field label="Status">
+            <div>
+              <SectionLabel className="mb-1.5">Status</SectionLabel>
               <div className="flex gap-1.5">
                 {(['live', 'future', 'deprecated', 'removed'] as ObjectStatus[]).map((status) => (
                   <button
                     key={status}
                     onClick={() => handleFieldChange('status', status)}
-                    className={`flex items-center gap-1 px-2 py-1 rounded text-xs capitalize transition-colors ${
+                    className={cn(
+                      'flex items-center gap-1 px-2 py-1 rounded-md text-[11px] capitalize transition-colors',
                       obj.status === status
-                        ? 'bg-neutral-700 text-neutral-100'
-                        : 'text-neutral-500 hover:text-neutral-300'
-                    }`}
+                        ? 'bg-surface-hi text-text-base border border-border-hi'
+                        : 'text-text-4 hover:text-text-2',
+                    )}
                   >
                     <span
-                      className="w-2 h-2 rounded-full"
+                      className="w-2 h-2 rounded-full flex-shrink-0"
                       style={{ backgroundColor: STATUS_COLORS[status] }}
                     />
                     {status}
                   </button>
                 ))}
               </div>
-            </Field>
-
-            {/* C4 Level */}
-            <Field label="C4 Level">
-              <span className="text-sm text-neutral-300">{obj.c4_level}</span>
-            </Field>
+            </div>
 
             {/* Cross-references — canvas context only */}
             {!isStandalone && <CrossReferences objectId={obj.id} />}
 
             {/* Description */}
-            <Field label="Description">
-              <RichTextEditor
-                content={editDescription}
-                onChange={(html) => {
-                  setEditDescription(html)
-                  descTimerRef.current && clearTimeout(descTimerRef.current)
-                  descTimerRef.current = setTimeout(() => {
-                    updateObject.mutate({ id: obj.id, description: html || null })
-                  }, 500)
-                }}
-                placeholder="Add description..."
-              />
-            </Field>
+            <div>
+              <SectionLabel className="mb-1.5">Description</SectionLabel>
+              <div className="bg-surface border border-border-base rounded-md p-3">
+                <RichTextEditor
+                  content={editDescription}
+                  onChange={(html) => {
+                    setEditDescription(html)
+                    descTimerRef.current && clearTimeout(descTimerRef.current)
+                    descTimerRef.current = setTimeout(() => {
+                      updateObject.mutate({ id: obj.id, description: html || null })
+                    }, 500)
+                  }}
+                  placeholder="Add description..."
+                />
+              </div>
+            </div>
 
-            {/* Technology */}
-            {/* TODO(tech-catalog): swap TagEditor (free text) for
-                TechnologyPicker (M7) — the backend now stores UUIDs, so
+            {/* Technology stack */}
+            {/* TODO(tech-catalog): swap TechEditor (free text) for
+                TechnologyPicker (M7) — backend stores catalog UUIDs, so
                 until the picker lands this shows raw ids. */}
-            <Field label="Technology">
-              <TagEditor
+            <div>
+              <SectionLabel className="mb-1.5">Technology stack</SectionLabel>
+              <TechEditor
                 tags={obj.technology_ids || []}
                 onChange={(tags) => handleFieldChange('technology_ids', tags)}
-                placeholder="Add technology..."
               />
-            </Field>
+            </div>
 
             {/* Tags */}
-            <Field label="Tags">
-              <TagEditor
+            <div>
+              <SectionLabel className="mb-1.5">Tags</SectionLabel>
+              <ColoredTagEditor
                 tags={obj.tags || []}
                 onChange={(tags) => handleFieldChange('tags', tags)}
-                placeholder="Add tag..."
               />
-            </Field>
+            </div>
 
-            {/* Owner Team */}
-            <Field label="Owner Team">
-              <input
-                value={obj.owner_team || ''}
-                onChange={(e) => handleFieldChange('owner_team', e.target.value || null)}
-                className="bg-neutral-800 text-neutral-200 text-sm rounded px-2 py-1 w-full border border-neutral-700"
-                placeholder="Team name..."
-              />
-            </Field>
+            {/* Connections list with selected-edge coral glow */}
+            {!isStandalone && (
+              <ConnectionsList objectId={obj.id} selectedEdgeId={selectedEdgeId} />
+            )}
+
+            {/* Owners */}
+            <OwnersSection ownerTeam={obj.owner_team} />
 
             {/* Drill into — only for drillable types, canvas context only */}
             {!isStandalone && DRILLABLE_TYPES.has(obj.type) && (
@@ -232,7 +286,7 @@ export function ObjectSidebar({
             {/* Delete */}
             <button
               onClick={handleDelete}
-              className="w-full mt-4 px-3 py-2 rounded text-sm text-red-400 border border-red-900/50 hover:bg-red-900/20 transition-colors"
+              className="w-full mt-2 px-3 py-2 rounded-md text-[12.5px] font-mono border border-accent-pink/40 text-accent-pink hover:bg-accent-pink-glow transition-colors"
             >
               Delete object
             </button>
@@ -245,9 +299,287 @@ export function ObjectSidebar({
 
         {sidebarTab === 'history' && <HistoryTab objectId={obj.id} />}
       </div>
+
+      {/* ── Footer meta ── */}
+      <div className="border-t border-border-base p-4 space-y-1 font-mono text-[11px] text-text-3">
+        {obj.created_at && (
+          <div className="flex justify-between">
+            <span>created</span>
+            <span>{relTime(obj.created_at)}</span>
+          </div>
+        )}
+        {obj.updated_at && (
+          <div className="flex justify-between">
+            <span>last edit</span>
+            <span>{relTime(obj.updated_at)}</span>
+          </div>
+        )}
+        <div className="flex justify-between">
+          <span>version</span>
+          <span>
+            v1.0 ·{' '}
+            <span className="text-coral">
+              {obj.status === 'live' ? 'live' : 'draft'}
+            </span>
+          </span>
+        </div>
+      </div>
     </div>
   )
 }
+
+// ─── Tech Editor ──────────────────────────────────────────────────────────────
+
+function TechEditor({
+  tags,
+  onChange,
+}: {
+  tags: string[]
+  onChange: (tags: string[]) => void
+}) {
+  const [adding, setAdding] = useState(false)
+  const [input, setInput] = useState('')
+
+  const handleAdd = () => {
+    const v = input.trim()
+    if (v && !tags.includes(v)) onChange([...tags, v])
+    setInput('')
+    setAdding(false)
+  }
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {tags.map((tag) => (
+        <span
+          key={tag}
+          className="group inline-flex items-center gap-1 px-2 py-[3px] border border-border-hi rounded-md font-mono text-[10.5px] text-text-base bg-surface"
+        >
+          {tag}
+          <button
+            onClick={() => onChange(tags.filter((t) => t !== tag))}
+            className="text-text-4 hover:text-text-2 opacity-0 group-hover:opacity-100 transition-opacity leading-none"
+            aria-label={`Remove ${tag}`}
+          >
+            ×
+          </button>
+        </span>
+      ))}
+      {adding ? (
+        <input
+          autoFocus
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') handleAdd()
+            if (e.key === 'Escape') { setAdding(false); setInput('') }
+          }}
+          onBlur={handleAdd}
+          className="inline-flex px-2 py-[3px] bg-surface border border-coral/50 rounded-md font-mono text-[10.5px] text-text-base outline-none w-24"
+          placeholder="tech..."
+        />
+      ) : (
+        <button
+          onClick={() => setAdding(true)}
+          className="inline-flex items-center gap-1 px-2 py-[3px] border border-dashed border-border-hi rounded-md font-mono text-[10.5px] text-text-3 hover:border-coral hover:text-coral transition-colors cursor-pointer"
+        >
+          + Add
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ─── Colored Tag Editor ───────────────────────────────────────────────────────
+
+function ColoredTagEditor({
+  tags,
+  onChange,
+}: {
+  tags: string[]
+  onChange: (tags: string[]) => void
+}) {
+  const [adding, setAdding] = useState(false)
+  const [input, setInput] = useState('')
+
+  const handleAdd = () => {
+    const v = input.trim()
+    if (v && !tags.includes(v)) onChange([...tags, v])
+    setInput('')
+    setAdding(false)
+  }
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {tags.map((tag) => {
+        const { text, border, bg } = tagColor(tag)
+        return (
+          <span
+            key={tag}
+            className={cn(
+              'group inline-flex items-center gap-1 px-2 py-[3px] border rounded-md font-mono text-[10.5px]',
+              text, border, bg,
+            )}
+          >
+            #{tag}
+            <button
+              onClick={() => onChange(tags.filter((t) => t !== tag))}
+              className="opacity-0 group-hover:opacity-100 transition-opacity leading-none"
+              aria-label={`Remove ${tag}`}
+            >
+              ×
+            </button>
+          </span>
+        )
+      })}
+      {adding ? (
+        <input
+          autoFocus
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') handleAdd()
+            if (e.key === 'Escape') { setAdding(false); setInput('') }
+          }}
+          onBlur={handleAdd}
+          className="inline-flex px-2 py-[3px] bg-surface border border-coral/50 rounded-md font-mono text-[10.5px] text-text-base outline-none w-24"
+          placeholder="#tag"
+        />
+      ) : (
+        <button
+          onClick={() => setAdding(true)}
+          className="inline-flex items-center px-2 py-[3px] border border-dashed border-border-hi rounded-md font-mono text-[10.5px] text-text-3 hover:border-coral hover:text-coral transition-colors cursor-pointer"
+        >
+          +
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ─── Connections list (with selected-edge highlight) ─────────────────────────
+
+function ConnectionsList({
+  objectId,
+  selectedEdgeId,
+}: {
+  objectId: string
+  selectedEdgeId: string | null
+}) {
+  const { data: connections = [] } = useConnections()
+  const { data: objects = [] } = useObjects()
+  const { selectEdge } = useCanvasStore()
+
+  const related = connections.filter(
+    (c) => c.source_id === objectId || c.target_id === objectId,
+  )
+  if (related.length === 0) return null
+
+  const getName = (id: string) => objects.find((o) => o.id === id)?.name ?? 'Unknown'
+
+  return (
+    <div>
+      <SectionLabel className="mb-2" counter={related.length}>Connections</SectionLabel>
+      <div className="space-y-1.5">
+        {related.map((c) => {
+          const isOutgoing = c.source_id === objectId
+          const otherId = isOutgoing ? c.target_id : c.source_id
+          const isSelected = c.id === selectedEdgeId
+
+          return (
+            <button
+              key={c.id}
+              onClick={() => selectEdge(c.id)}
+              className={cn(
+                'w-full flex items-center gap-2 text-left text-[12px] p-2 rounded-md border transition-all',
+                isSelected
+                  ? 'bg-coral-glow border-coral shadow-[0_0_0_3px_rgba(255,107,53,0.15)]'
+                  : 'bg-surface border-border-base hover:border-border-hi',
+              )}
+            >
+              {/* Direction arrow */}
+              <svg
+                width="12" height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke={isSelected ? '#FF6B35' : '#71717a'}
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="flex-shrink-0"
+              >
+                {isOutgoing
+                  ? <path d="M5 12h14M13 5l6 7-6 7" />
+                  : <path d="M19 12H5M11 5L5 12l6 7" />}
+              </svg>
+
+              <span className={cn('flex-1 text-[12.5px] truncate', isSelected ? 'text-text-base' : 'text-text-2')}>
+                {getName(otherId)}
+              </span>
+
+              {/* TODO(tech-catalog): resolve c.protocol_id → catalog name (M7). */}
+              {c.protocol_id && (
+                <span className={cn('font-mono text-[10.5px] flex-shrink-0', isSelected ? 'text-coral' : 'text-text-3')}>
+                  {c.protocol_id}
+                </span>
+              )}
+
+              {!c.protocol_id && c.label && (
+                <span className={cn('font-mono text-[10.5px] flex-shrink-0 truncate max-w-[70px]', isSelected ? 'text-coral' : 'text-text-3')}>
+                  {c.label}
+                </span>
+              )}
+
+              {/* direction indicator */}
+              <span className={cn('font-mono text-[9.5px] flex-shrink-0', isSelected ? 'text-coral' : 'text-text-4')}>
+                {isOutgoing ? '↑' : '↓'}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ─── Owners section ───────────────────────────────────────────────────────────
+
+function OwnersSection({ ownerTeam }: { ownerTeam?: string | null }) {
+  // TODO: wire to real workspace members once members integration lands.
+  // For now render owner_team text as a single avatar if set, plus dashed add button.
+  const initials = ownerTeam
+    ? ownerTeam
+        .split(/\s+/)
+        .slice(0, 2)
+        .map((w) => w[0] ?? '')
+        .join('')
+        .toUpperCase()
+    : null
+
+  return (
+    <div>
+      <SectionLabel className="mb-2">Owners</SectionLabel>
+      <div className="flex items-center gap-2">
+        <AvatarStack>
+          {initials && (
+            <Avatar initials={initials} gradient="coral-amber" size="sm" />
+          )}
+        </AvatarStack>
+        {/* TODO: open members picker when workspace members API is ready */}
+        <button
+          onClick={() => {/* no-op — owners stub */}}
+          className="w-7 h-7 rounded-full border border-dashed border-border-hi flex items-center justify-center text-text-3 hover:border-coral hover:text-coral transition-colors"
+          aria-label="Add owner"
+        >
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── DrillIntoSection ─────────────────────────────────────────────────────────
 
 function DrillIntoSection({ obj }: { obj: ModelObject }) {
   const navigate = useNavigate()
@@ -258,41 +590,15 @@ function DrillIntoSection({ obj }: { obj: ModelObject }) {
 
   return (
     <div>
-      <div className="text-xs text-neutral-500 mb-1">Drill into</div>
-      <div
-        style={{
-          background: '#0f0f0f',
-          border: '1px solid #262626',
-          borderRadius: 6,
-          padding: '8px 10px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 6,
-        }}
-      >
-        <div
-          style={{
-            fontSize: 10,
-            color: '#525252',
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-          }}
-        >
+      <SectionLabel className="mb-1.5">Drill into</SectionLabel>
+      <div className="bg-surface border border-border-base rounded-md p-2.5 flex flex-col gap-1.5">
+        <div className="font-mono text-[10px] text-text-4 uppercase tracking-[0.05em]">
           {levelText}
         </div>
         {childDiagrams.length === 0 ? (
           <button
             onClick={() => setCreateModalOpen(true)}
-            style={{
-              background: '#1e3a5f',
-              border: '1px solid #3b82f655',
-              borderRadius: 5,
-              color: '#93c5fd',
-              cursor: 'pointer',
-              fontSize: 12,
-              padding: '6px 10px',
-              textAlign: 'left',
-            }}
+            className="bg-accent-blue-glow border border-accent-blue/25 rounded-md text-accent-blue text-[12px] px-2.5 py-1.5 text-left hover:border-accent-blue/50 transition-colors"
           >
             + Create {obj.type === 'system' ? 'container' : 'component'} diagram
           </button>
@@ -302,36 +608,14 @@ function DrillIntoSection({ obj }: { obj: ModelObject }) {
               <button
                 key={d.id}
                 onClick={() => navigate(`/diagram/${d.id}`)}
-                style={{
-                  background: 'transparent',
-                  border: '1px solid #262626',
-                  borderRadius: 5,
-                  color: '#60a5fa',
-                  cursor: 'pointer',
-                  fontSize: 12,
-                  padding: '5px 8px',
-                  textAlign: 'left',
-                  textDecoration: 'none',
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = '#1e3a5f')}
-                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                className="bg-transparent border border-border-base rounded-md text-accent-blue text-[12px] px-2.5 py-1 text-left hover:bg-accent-blue-glow hover:border-accent-blue/30 transition-colors"
               >
                 {d.name}
               </button>
             ))}
             <button
               onClick={() => setCreateModalOpen(true)}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: '#525252',
-                cursor: 'pointer',
-                fontSize: 11,
-                padding: '2px 0',
-                textAlign: 'left',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = '#a3a3a3')}
-              onMouseLeave={(e) => (e.currentTarget.style.color = '#525252')}
+              className="text-text-4 hover:text-text-2 text-[11px] text-left transition-colors"
             >
               + New child diagram
             </button>
@@ -346,6 +630,8 @@ function DrillIntoSection({ obj }: { obj: ModelObject }) {
     </div>
   )
 }
+
+// ─── CrossReferences ──────────────────────────────────────────────────────────
 
 function CrossReferences({ objectId }: { objectId: string }) {
   const { data: objects = [] } = useObjects()
@@ -365,48 +651,50 @@ function CrossReferences({ objectId }: { objectId: string }) {
   return (
     <div className="space-y-1.5">
       {parent && (
-        <div className="flex items-center justify-between text-xs">
-          <span className="text-neutral-500">Belongs to</span>
+        <div className="flex items-center justify-between text-[11.5px]">
+          <span className="text-text-3">Belongs to</span>
           <button
             onClick={() => selectNode(parent.id)}
-            className="text-blue-400 hover:text-blue-300"
+            className="text-accent-blue hover:text-accent-blue/80 transition-colors"
           >
             {parent.name}
           </button>
         </div>
       )}
-      <div className="flex items-center justify-between text-xs">
-        <span className="text-neutral-500">Contains</span>
-        <span className="text-neutral-300">{children.length} objects</span>
+      <div className="flex items-center justify-between text-[11.5px]">
+        <span className="text-text-3">Contains</span>
+        <span className="text-text-2">{children.length} objects</span>
       </div>
-      <div className="flex items-center justify-between text-xs">
-        <span className="text-neutral-500">Connections</span>
-        <span className="text-neutral-300">{connCount}</span>
+      <div className="flex items-center justify-between text-[11.5px]">
+        <span className="text-text-3">Connections</span>
+        <span className="text-text-2">{connCount}</span>
       </div>
-      <div className="flex items-center justify-between text-xs">
-        <span className="text-neutral-500">Diagrams</span>
+      <div className="flex items-start justify-between text-[11.5px]">
+        <span className="text-text-3">Diagrams</span>
         {objectDiagrams.length > 0 ? (
           <div className="flex flex-col gap-0.5 items-end">
             {objectDiagrams.slice(0, 3).map((d) => (
               <button
                 key={d.id}
                 onClick={() => navigate(`/diagram/${d.id}`)}
-                className="text-blue-400 hover:text-blue-300 truncate max-w-[160px]"
+                className="text-accent-blue hover:text-accent-blue/80 truncate max-w-[160px] transition-colors"
               >
                 {d.name}
               </button>
             ))}
             {objectDiagrams.length > 3 && (
-              <span className="text-neutral-600">+{objectDiagrams.length - 3} more</span>
+              <span className="text-text-4">+{objectDiagrams.length - 3} more</span>
             )}
           </div>
         ) : (
-          <span className="text-neutral-600">None</span>
+          <span className="text-text-4">None</span>
         )}
       </div>
     </div>
   )
 }
+
+// ─── GroupMembersSection ──────────────────────────────────────────────────────
 
 function GroupMembersSection({ groupId }: { groupId: string }) {
   const { data: children = [], isLoading } = useObjectChildren(groupId)
@@ -414,48 +702,25 @@ function GroupMembersSection({ groupId }: { groupId: string }) {
 
   return (
     <div>
-      <div className="text-xs text-neutral-500 mb-1">Members</div>
-      <div
-        style={{
-          background: '#0f0f0f',
-          border: '1px solid #262626',
-          borderRadius: 6,
-          overflow: 'hidden',
-        }}
-      >
+      <SectionLabel className="mb-1.5">Members</SectionLabel>
+      <div className="bg-surface border border-border-base rounded-md overflow-hidden">
         {isLoading ? (
-          <div style={{ padding: '8px 10px', fontSize: 12, color: '#525252' }}>Loading…</div>
+          <div className="p-2.5 text-[12px] text-text-4">Loading…</div>
         ) : children.length === 0 ? (
-          <div style={{ padding: '8px 10px', fontSize: 12, color: '#525252', fontStyle: 'italic' }}>
-            No objects in this group yet.
-          </div>
+          <div className="p-2.5 text-[12px] text-text-4 italic">No objects in this group yet.</div>
         ) : (
-          children.map((child) => (
+          children.map((child, i) => (
             <button
               key={child.id}
               onClick={() => selectNode(child.id)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                width: '100%',
-                padding: '6px 10px',
-                background: 'transparent',
-                border: 'none',
-                borderBottom: '1px solid #1a1a1a',
-                color: '#d4d4d4',
-                cursor: 'pointer',
-                fontSize: 12,
-                textAlign: 'left',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = '#1c1c1c')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+              className={cn(
+                'flex items-center gap-2 w-full px-2.5 py-1.5 bg-transparent text-text-2 text-[12px] text-left hover:bg-surface-hi transition-colors',
+                i < children.length - 1 && 'border-b border-border-base',
+              )}
             >
-              <span style={{ opacity: 0.5, fontSize: 13 }}>{TYPE_ICONS[child.type]}</span>
-              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {child.name}
-              </span>
-              <span style={{ fontSize: 10, color: '#525252' }}>{TYPE_LABELS[child.type]}</span>
+              <span className="opacity-50 text-[13px]">{TYPE_ICONS[child.type]}</span>
+              <span className="flex-1 truncate">{child.name}</span>
+              <span className="text-[10px] text-text-4">{TYPE_LABELS[child.type]}</span>
             </button>
           ))
         )}
@@ -463,6 +728,8 @@ function GroupMembersSection({ groupId }: { groupId: string }) {
     </div>
   )
 }
+
+// ─── ConnectionsTab ───────────────────────────────────────────────────────────
 
 function ConnectionsTab({ objectId }: { objectId: string }) {
   const { data: connections = [] } = useConnections()
@@ -476,50 +743,46 @@ function ConnectionsTab({ objectId }: { objectId: string }) {
   return (
     <div className="space-y-4">
       <div>
-        <div className="text-xs text-neutral-500 mb-2">
-          Outgoing ({outgoing.length})
-        </div>
+        <SectionLabel className="mb-2" counter={outgoing.length}>Outgoing</SectionLabel>
         {outgoing.map((c) => (
-          <div key={c.id} className="flex items-center gap-2 py-1.5 text-xs">
-            <span className="text-neutral-500">→</span>
-            <span className="text-neutral-300">{getObjectName(c.target_id)}</span>
-            {c.label && <span className="text-neutral-600 truncate">({c.label})</span>}
+          <div key={c.id} className="flex items-center gap-2 py-1.5 text-[12px]">
+            <span className="text-text-3">→</span>
+            <span className="text-text-2">{getObjectName(c.target_id)}</span>
+            {c.label && <span className="text-text-4 font-mono text-[10.5px] truncate">({c.label})</span>}
           </div>
         ))}
         {outgoing.length === 0 && (
-          <div className="text-xs text-neutral-600 italic">None</div>
+          <div className="text-[11.5px] text-text-4 italic">None</div>
         )}
       </div>
       <div>
-        <div className="text-xs text-neutral-500 mb-2">
-          Incoming ({incoming.length})
-        </div>
+        <SectionLabel className="mb-2" counter={incoming.length}>Incoming</SectionLabel>
         {incoming.map((c) => (
-          <div key={c.id} className="flex items-center gap-2 py-1.5 text-xs">
-            <span className="text-neutral-500">←</span>
-            <span className="text-neutral-300">{getObjectName(c.source_id)}</span>
-            {c.label && <span className="text-neutral-600 truncate">({c.label})</span>}
+          <div key={c.id} className="flex items-center gap-2 py-1.5 text-[12px]">
+            <span className="text-text-3">←</span>
+            <span className="text-text-2">{getObjectName(c.source_id)}</span>
+            {c.label && <span className="text-text-4 font-mono text-[10.5px] truncate">({c.label})</span>}
           </div>
         ))}
         {incoming.length === 0 && (
-          <div className="text-xs text-neutral-600 italic">None</div>
+          <div className="text-[11.5px] text-text-4 italic">None</div>
         )}
       </div>
     </div>
   )
 }
 
+// ─── HistoryTab ───────────────────────────────────────────────────────────────
+
 function HistoryTab({ objectId }: { objectId: string }) {
   const { data: entries = [], isLoading } = useObjectHistory(objectId)
 
   if (isLoading) {
-    return <div className="text-xs text-neutral-500">Loading…</div>
+    return <div className="text-[11.5px] text-text-3">Loading…</div>
   }
   if (entries.length === 0) {
     return (
-      <div className="text-xs text-neutral-500 italic">
-        No changes recorded yet.
-      </div>
+      <div className="text-[11.5px] text-text-3 italic">No changes recorded yet.</div>
     )
   }
 
@@ -532,7 +795,6 @@ function HistoryTab({ objectId }: { objectId: string }) {
   )
 }
 
-// Fields that should never surface in the history diff (noise for the user).
 const HIDDEN_CHANGE_FIELDS = new Set(['metadata_'])
 
 function HistoryEntry({ entry }: { entry: ActivityLogEntry }) {
@@ -548,9 +810,9 @@ function HistoryEntry({ entry }: { entry: ActivityLogEntry }) {
   if (entry.action === 'created') {
     const snap = (entry.changes || {}) as Record<string, unknown>
     return (
-      <EntryShell when={when} action="Created" color="#22c55e">
+      <EntryShell when={when} action="Created" color="#4ade80">
         {typeof snap.name === 'string' && (
-          <div className="text-xs text-neutral-300">
+          <div className="text-[11.5px] text-text-2">
             Name: <span className="font-medium">{snap.name}</span>
           </div>
         )}
@@ -559,21 +821,20 @@ function HistoryEntry({ entry }: { entry: ActivityLogEntry }) {
   }
 
   if (entry.action === 'deleted') {
-    return <EntryShell when={when} action="Deleted" color="#ef4444" />
+    return <EntryShell when={when} action="Deleted" color="#f472b6" />
   }
 
-  // updated
   const changes = (entry.changes || {}) as Record<
     string,
     { before: unknown; after: unknown }
   >
   const fields = Object.keys(changes).filter((k) => !HIDDEN_CHANGE_FIELDS.has(k))
   if (fields.length === 0) {
-    return <EntryShell when={when} action="Updated" color="#3b82f6" />
+    return <EntryShell when={when} action="Updated" color="#60a5fa" />
   }
 
   return (
-    <EntryShell when={when} action="Updated" color="#3b82f6">
+    <EntryShell when={when} action="Updated" color="#60a5fa">
       <div className="space-y-1">
         {fields.map((field) => (
           <FieldDiff
@@ -603,12 +864,12 @@ function EntryShell({
     <div className="border-l-2 pl-3" style={{ borderColor: color }}>
       <div className="flex items-center gap-2 mb-1">
         <span
-          className="text-[10px] uppercase tracking-wide font-medium"
+          className="text-[10px] uppercase tracking-wide font-medium font-mono"
           style={{ color }}
         >
           {action}
         </span>
-        <span className="text-[10px] text-neutral-500">{when}</span>
+        <span className="text-[10px] text-text-4">{when}</span>
       </div>
       {children}
     </div>
@@ -632,68 +893,10 @@ function FieldDiff({
   after: unknown
 }) {
   return (
-    <div className="text-xs text-neutral-300">
-      <span className="text-neutral-500">{field}: </span>
-      <span className="line-through text-neutral-500 mr-1">{formatValue(before)}</span>
-      <span className="text-neutral-200">→ {formatValue(after)}</span>
-    </div>
-  )
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <div className="text-xs text-neutral-500 mb-1">{label}</div>
-      {children}
-    </div>
-  )
-}
-
-function TagEditor({
-  tags,
-  onChange,
-  placeholder,
-}: {
-  tags: string[]
-  onChange: (tags: string[]) => void
-  placeholder: string
-}) {
-  const [input, setInput] = useState('')
-
-  const handleAdd = () => {
-    const value = input.trim()
-    if (value && !tags.includes(value)) {
-      onChange([...tags, value])
-    }
-    setInput('')
-  }
-
-  return (
-    <div>
-      <div className="flex flex-wrap gap-1 mb-1">
-        {tags.map((tag) => (
-          <span
-            key={tag}
-            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-300 text-xs"
-          >
-            {tag}
-            <button
-              onClick={() => onChange(tags.filter((t) => t !== tag))}
-              className="text-neutral-500 hover:text-neutral-300"
-            >
-              ×
-            </button>
-          </span>
-        ))}
-      </div>
-      <input
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-        onBlur={handleAdd}
-        className="bg-neutral-800 text-neutral-200 text-xs rounded px-2 py-1 w-full border border-neutral-700"
-        placeholder={placeholder}
-      />
+    <div className="text-[11.5px] text-text-2">
+      <span className="text-text-3">{field}: </span>
+      <span className="line-through text-text-4 mr-1">{formatValue(before)}</span>
+      <span className="text-text-base">→ {formatValue(after)}</span>
     </div>
   )
 }
