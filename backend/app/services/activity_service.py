@@ -36,14 +36,21 @@ def _snapshot(obj: Any) -> dict:
         if attr_name in _IGNORED_DIFF_FIELDS or sql_name in _IGNORED_DIFF_FIELDS:
             continue
         value = getattr(obj, attr_name, None)
-        # enums → their string value; UUIDs → str; everything else is
-        # already JSON-safe for JSONB (dicts/lists/primitives).
-        if hasattr(value, "value"):
-            value = value.value
-        elif isinstance(value, uuid.UUID):
-            value = str(value)
-        result[attr_name] = value
+        result[attr_name] = _to_jsonable(value)
     return result
+
+
+def _to_jsonable(value: Any) -> Any:
+    """Coerce a column value into something JSON-safe for JSONB storage."""
+    if hasattr(value, "value") and not isinstance(value, (list, tuple, dict)):
+        return value.value
+    if isinstance(value, uuid.UUID):
+        return str(value)
+    if isinstance(value, (list, tuple)):
+        return [_to_jsonable(v) for v in value]
+    if isinstance(value, dict):
+        return {k: _to_jsonable(v) for k, v in value.items()}
+    return value
 
 
 def diff_snapshots(before: dict, after: dict) -> dict:
