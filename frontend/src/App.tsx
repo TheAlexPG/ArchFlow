@@ -14,6 +14,7 @@ import { MembersPage } from './pages/MembersPage'
 import { MyInvitesPage } from './pages/MyInvitesPage'
 import { LandingPage } from './pages/LandingPage'
 import { ObjectsPage } from './pages/ObjectsPage'
+import { TechnologiesPage } from './pages/TechnologiesPage'
 import { OverviewPage } from './pages/OverviewPage'
 import { PrivacyPage } from './pages/PrivacyPage'
 import { SettingsPage } from './pages/SettingsPage'
@@ -116,6 +117,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <ConnectionsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/technologies"
+            element={
+              <ProtectedRoute>
+                <TechnologiesPage />
               </ProtectedRoute>
             }
           />

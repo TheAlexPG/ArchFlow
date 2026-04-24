@@ -1445,3 +1445,28 @@ export function useDeleteCustomTechnology(workspaceId: string | null | undefined
     },
   })
 }
+
+export interface TechnologyUsage {
+  object_refs: number
+  connection_refs: number
+  detail: string
+}
+
+export function useTechnologyUsage(
+  workspaceId: string | null | undefined,
+  technologyId: string | null | undefined,
+) {
+  return useQuery({
+    queryKey: ['technology-usage', workspaceId, technologyId],
+    queryFn: async () => {
+      const { data } = await api.get<TechnologyUsage>(
+        `/workspaces/${workspaceId}/technologies/${technologyId}/usage`,
+      )
+      return data
+    },
+    enabled: !!workspaceId && !!technologyId,
+    // Reference counts drift as objects come and go; keep fresh on the
+    // management page but don't hammer the endpoint.
+    staleTime: 30 * 1000,
+  })
+}

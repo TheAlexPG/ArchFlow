@@ -79,6 +79,30 @@ async def update_custom_technology(
     return tech
 
 
+@router.get("/{technology_id}/usage", response_model=TechnologyDeleteConflict)
+async def technology_usage(
+    workspace_id: UUID,
+    technology_id: UUID,
+    _: Role = Depends(require_role(Role.VIEWER)),
+    db: AsyncSession = Depends(get_db),
+):
+    """Snapshot of how many objects / connections reference this tech.
+
+    Pairs with the 409 response from DELETE — the management page can
+    pre-check usage before offering a Delete button so the user isn't
+    surprised by a blocked request.
+    """
+    tech = await technology_service.get_technology(db, workspace_id, technology_id)
+    if tech is None:
+        raise HTTPException(404, "Technology not found")
+    obj_refs, conn_refs = await technology_service.count_references(db, tech.id)
+    return TechnologyDeleteConflict(
+        object_refs=obj_refs,
+        connection_refs=conn_refs,
+        detail=f"Referenced by {obj_refs} objects and {conn_refs} connections",
+    )
+
+
 @router.delete(
     "/{technology_id}",
     status_code=204,
