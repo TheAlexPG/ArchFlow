@@ -48,6 +48,13 @@ L3                      Component
 - Per-diagram positions — the **same** object can live on L1, L2, L3 with different coordinates on each canvas.
 - C4-aware quick-create: place the right types for the level you're on, but also allow cross-level references.
 
+### 🎛️ Technology catalog
+- **~170 built-in technologies** (Python, PostgreSQL, Kafka, Figma, gRPC, Kubernetes…) with Iconify-backed logos and brand colors.
+- Picker in the **object sidebar** (multi-select) and **edge sidebar** (single-select, filtered to protocols) — results group by category with fuzzy search over name / slug / aliases.
+- Canvas renders the primary technology as a **corner badge** on every node and resolves protocol icons onto edge labels.
+- Create **workspace-level custom technologies** — pick any Iconify icon for the logo, set your own name / slug / color / aliases.
+- Dedicated **`/technologies` management page** lists built-in + custom entries with scope + category filters.
+
 ### 🔀 Drafts & reviews
 - **Fork any diagram** into a draft that lives in isolation from live data.
 - Edit the fork freely — compare diffs, resolve conflicts with the live model, then merge.
