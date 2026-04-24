@@ -17,9 +17,12 @@ def upgrade() -> None:
     # ADD VALUE is the only ALTER TYPE operation that cannot run inside
     # a transaction in older Postgres versions — autocommit_block makes it
     # safe regardless of server version.
+    # PG enum values for activity_target_type are uppercase (OBJECT,
+    # CONNECTION, DIAGRAM) — match that convention so SQLAlchemy's
+    # name-based mapping round-trips correctly.
     with op.get_context().autocommit_block():
         op.execute(
-            "ALTER TYPE activity_target_type ADD VALUE IF NOT EXISTS 'technology'"
+            "ALTER TYPE activity_target_type ADD VALUE IF NOT EXISTS 'TECHNOLOGY'"
         )
 
 

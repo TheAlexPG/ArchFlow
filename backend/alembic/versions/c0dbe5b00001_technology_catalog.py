@@ -18,15 +18,20 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
+# PG enum values are the uppercase Python enum *names*, matching the
+# convention used by ObjectType / ActivityTargetType / etc. in this repo.
+# SQLAlchemy's default Enum() serializer maps ORM reads/writes by name, so
+# `Technology.category == TechCategory.LANGUAGE` round-trips as `'LANGUAGE'`
+# in Postgres and back to the `.value = "language"` on the Python side.
 _CATEGORY_VALUES = (
-    "language",
-    "framework",
-    "database",
-    "cloud",
-    "saas",
-    "tool",
-    "protocol",
-    "other",
+    "LANGUAGE",
+    "FRAMEWORK",
+    "DATABASE",
+    "CLOUD",
+    "SAAS",
+    "TOOL",
+    "PROTOCOL",
+    "OTHER",
 )
 
 
@@ -126,7 +131,10 @@ def upgrade() -> None:
                 "slug": row["slug"],
                 "name": row["name"],
                 "iconify_name": row["iconify_name"],
-                "category": row["category"],
+                # technologies.json stores categories lowercase (matching
+                # the Python enum value); the PG enum values are uppercase
+                # (matching the enum name), so normalize on the way in.
+                "category": row["category"].upper(),
                 "color": row.get("color"),
                 "aliases": row.get("aliases") or None,
             },
