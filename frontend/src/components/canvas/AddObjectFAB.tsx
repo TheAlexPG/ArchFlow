@@ -6,13 +6,16 @@ import {
   useCreateObject,
   useDiagramObjects,
   useObjects,
+  useTechnologies,
   useUpdateObject,
 } from '../../hooks/use-api'
 import { useDiagram } from '../../hooks/use-diagrams'
 import { useCanvasStore } from '../../stores/canvas-store'
+import { useWorkspaceStore } from '../../stores/workspace-store'
 import type { CommentType, DiagramType, ObjectType } from '../../types/model'
 import { cn } from '../../utils/cn'
 import { SectionLabel } from '../ui'
+import { TechIcon } from '../tech'
 import { detectParentGroup, nodeToRect } from './group-utils'
 import { TYPE_BORDER_COLORS, TYPE_LABELS } from './node-utils'
 import { NewObjectModal } from './NewObjectModal'
@@ -263,6 +266,8 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
 
   const { data: objects = [] } = useObjects(draftId)
   const { data: diagramObjects = [] } = useDiagramObjects(diagramId)
+  const workspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
+  const { data: catalog = [] } = useTechnologies(workspaceId)
   const createObject = useCreateObject(draftId)
   const addToDiagram = useAddObjectToDiagram()
   const updateObject = useUpdateObject()
@@ -299,7 +304,8 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
       (o) =>
         o.name.toLowerCase().includes(q) ||
         o.description?.toLowerCase().includes(q) ||
-        o.technology?.some((t) => t.toLowerCase().includes(q)),
+        // TODO(tech-catalog): match by resolved catalog name/aliases (M7).
+        o.technology_ids?.some((t: string) => t.toLowerCase().includes(q)),
     )
   }, [objects, search])
 
@@ -569,11 +575,27 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
                           <div className="text-[12.5px] font-medium text-text-base truncate">
                             {obj.name}
                           </div>
-                          <div className="font-mono text-[10.5px] text-text-3 truncate">
-                            {TYPE_LABELS[obj.type].toLowerCase()}
-                            {obj.technology && obj.technology.length > 0
-                              ? ` · ${obj.technology.join(', ')}`
-                              : ''}
+                          <div className="font-mono text-[10.5px] text-text-3 flex items-center gap-1 min-w-0">
+                            <span className="truncate">{TYPE_LABELS[obj.type].toLowerCase()}</span>
+                            {(() => {
+                              const techs = (obj.technology_ids ?? [])
+                                .map((id) => catalog.find((t) => t.id === id))
+                                .filter((t): t is NonNullable<typeof t> => Boolean(t))
+                              if (techs.length === 0) return null
+                              return (
+                                <>
+                                  <span className="text-text-4">·</span>
+                                  <span className="flex items-center gap-0.5 min-w-0">
+                                    {techs.slice(0, 3).map((t) => (
+                                      <TechIcon key={t.id} technology={t} size={10} />
+                                    ))}
+                                    <span className="truncate">
+                                      {techs.map((t) => t.name).join(', ')}
+                                    </span>
+                                  </span>
+                                </>
+                              )
+                            })()}
                           </div>
                         </div>
 

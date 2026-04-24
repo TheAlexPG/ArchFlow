@@ -1,14 +1,19 @@
 import { useMemo, useState } from 'react'
 import { AppSidebar } from '../components/nav/AppSidebar'
 import { PageToolbar } from '../components/nav/PageToolbar'
-import { useConnections, useObjects } from '../hooks/use-api'
+import { useConnections, useObjects, useTechnologies } from '../hooks/use-api'
+import { useWorkspaceStore } from '../stores/workspace-store'
+import { TechBadge } from '../components/tech'
 
 export function ConnectionsPage() {
   const { data: connections = [], isLoading } = useConnections()
   const { data: objects = [] } = useObjects()
+  const workspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
+  const { data: catalog = [] } = useTechnologies(workspaceId)
   const [search, setSearch] = useState('')
 
   const objectMap = useMemo(() => new Map(objects.map((o) => [o.id, o])), [objects])
+  const catalogMap = useMemo(() => new Map(catalog.map((t) => [t.id, t])), [catalog])
 
   const rows = useMemo(() => {
     return connections.map((c) => ({
@@ -16,10 +21,12 @@ export function ConnectionsPage() {
       source: objectMap.get(c.source_id)?.name || '—',
       target: objectMap.get(c.target_id)?.name || '—',
       label: c.label,
-      protocol: c.protocol,
+      protocols: (c.protocol_ids ?? [])
+        .map((id) => catalogMap.get(id))
+        .filter((t): t is NonNullable<typeof t> => Boolean(t)),
       direction: c.direction,
     }))
-  }, [connections, objectMap])
+  }, [connections, objectMap, catalogMap])
 
   const filtered = useMemo(() => {
     if (!search) return rows
@@ -29,7 +36,11 @@ export function ConnectionsPage() {
         r.source.toLowerCase().includes(q) ||
         r.target.toLowerCase().includes(q) ||
         r.label?.toLowerCase().includes(q) ||
-        r.protocol?.toLowerCase().includes(q),
+        r.protocols.some(
+          (p) =>
+            p.name.toLowerCase().includes(q) ||
+            p.slug.toLowerCase().includes(q),
+        ),
     )
   }, [rows, search])
 
@@ -64,7 +75,7 @@ export function ConnectionsPage() {
                 <th className="text-left px-4 py-2 font-medium">Target</th>
                 <th className="text-left px-4 py-2 font-medium">Direction</th>
                 <th className="text-left px-4 py-2 font-medium">Label</th>
-                <th className="text-left px-4 py-2 font-medium">Protocol</th>
+                <th className="text-left px-4 py-2 font-medium">Protocols</th>
               </tr>
             </thead>
             <tbody>
@@ -76,7 +87,22 @@ export function ConnectionsPage() {
                     {r.direction === 'bidirectional' ? '⇄ bidirectional' : '→ outgoing'}
                   </td>
                   <td className="px-4 py-2 text-neutral-400 text-xs">{r.label || '—'}</td>
-                  <td className="px-4 py-2 text-neutral-400 text-xs">{r.protocol || '—'}</td>
+                  <td className="px-4 py-2 text-xs">
+                    {r.protocols.length === 0 ? (
+                      <span className="text-neutral-600">—</span>
+                    ) : (
+                      <div className="flex flex-wrap gap-1">
+                        {r.protocols.slice(0, 4).map((p) => (
+                          <TechBadge key={p.id} technology={p} />
+                        ))}
+                        {r.protocols.length > 4 && (
+                          <span className="text-neutral-600">
+                            +{r.protocols.length - 4}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

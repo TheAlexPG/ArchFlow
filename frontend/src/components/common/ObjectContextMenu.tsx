@@ -85,7 +85,7 @@ export function ObjectContextMenu({ object, diagramId }: ObjectContextMenuProps)
         status: object.status,
         description: object.description,
         icon: object.icon,
-        technology: object.technology,
+        technology_ids: object.technology_ids,
         tags: object.tags,
         owner_team: object.owner_team,
       },

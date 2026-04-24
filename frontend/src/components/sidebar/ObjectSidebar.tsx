@@ -20,6 +20,9 @@ import {
   DRILLABLE_TYPES,
 } from '../drafts/CreateChildDiagramModal'
 import { Avatar, AvatarStack, Pill, SectionLabel } from '../ui'
+import { TechnologyPicker, TechBadge } from '../tech'
+import { useTechnologies } from '../../hooks/use-api'
+import { useWorkspaceStore } from '../../stores/workspace-store'
 import { cn } from '../../utils/cn'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -247,9 +250,13 @@ export function ObjectSidebar({
             {/* Technology stack */}
             <div>
               <SectionLabel className="mb-1.5">Technology stack</SectionLabel>
-              <TechEditor
-                tags={obj.technology || []}
-                onChange={(tags) => handleFieldChange('technology', tags)}
+              <TechnologyPicker
+                mode={{
+                  multi: true,
+                  value: obj.technology_ids || [],
+                  onChange: (ids) => handleFieldChange('technology_ids', ids),
+                }}
+                placeholder="Add technology…"
               />
             </div>
 
@@ -321,67 +328,6 @@ export function ObjectSidebar({
           </span>
         </div>
       </div>
-    </div>
-  )
-}
-
-// ─── Tech Editor ──────────────────────────────────────────────────────────────
-
-function TechEditor({
-  tags,
-  onChange,
-}: {
-  tags: string[]
-  onChange: (tags: string[]) => void
-}) {
-  const [adding, setAdding] = useState(false)
-  const [input, setInput] = useState('')
-
-  const handleAdd = () => {
-    const v = input.trim()
-    if (v && !tags.includes(v)) onChange([...tags, v])
-    setInput('')
-    setAdding(false)
-  }
-
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {tags.map((tag) => (
-        <span
-          key={tag}
-          className="group inline-flex items-center gap-1 px-2 py-[3px] border border-border-hi rounded-md font-mono text-[10.5px] text-text-base bg-surface"
-        >
-          {tag}
-          <button
-            onClick={() => onChange(tags.filter((t) => t !== tag))}
-            className="text-text-4 hover:text-text-2 opacity-0 group-hover:opacity-100 transition-opacity leading-none"
-            aria-label={`Remove ${tag}`}
-          >
-            ×
-          </button>
-        </span>
-      ))}
-      {adding ? (
-        <input
-          autoFocus
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') handleAdd()
-            if (e.key === 'Escape') { setAdding(false); setInput('') }
-          }}
-          onBlur={handleAdd}
-          className="inline-flex px-2 py-[3px] bg-surface border border-coral/50 rounded-md font-mono text-[10.5px] text-text-base outline-none w-24"
-          placeholder="tech..."
-        />
-      ) : (
-        <button
-          onClick={() => setAdding(true)}
-          className="inline-flex items-center gap-1 px-2 py-[3px] border border-dashed border-border-hi rounded-md font-mono text-[10.5px] text-text-3 hover:border-coral hover:text-coral transition-colors cursor-pointer"
-        >
-          + Add
-        </button>
-      )}
     </div>
   )
 }
@@ -465,6 +411,8 @@ function ConnectionsList({
   const { data: connections = [] } = useConnections()
   const { data: objects = [] } = useObjects()
   const { selectEdge } = useCanvasStore()
+  const workspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
+  const { data: catalog = [] } = useTechnologies(workspaceId)
 
   const related = connections.filter(
     (c) => c.source_id === objectId || c.target_id === objectId,
@@ -472,6 +420,10 @@ function ConnectionsList({
   if (related.length === 0) return null
 
   const getName = (id: string) => objects.find((o) => o.id === id)?.name ?? 'Unknown'
+  const getProtocols = (ids: string[] | null | undefined) =>
+    (ids ?? [])
+      .map((id) => catalog.find((t) => t.id === id))
+      .filter((t): t is NonNullable<typeof t> => Boolean(t))
 
   return (
     <div>
@@ -513,13 +465,29 @@ function ConnectionsList({
                 {getName(otherId)}
               </span>
 
-              {c.protocol && (
-                <span className={cn('font-mono text-[10.5px] flex-shrink-0', isSelected ? 'text-coral' : 'text-text-3')}>
-                  {c.protocol}
-                </span>
-              )}
+              {(() => {
+                const protos = getProtocols(c.protocol_ids)
+                if (protos.length === 0) return null
+                return (
+                  <span className="flex items-center gap-[2px] flex-shrink-0">
+                    {protos.slice(0, 3).map((p) => (
+                      <TechBadge
+                        key={p.id}
+                        technology={p}
+                        iconOnly
+                        className="!border-transparent !bg-transparent !px-0"
+                      />
+                    ))}
+                    {protos.length > 3 && (
+                      <span className="font-mono text-[9.5px] text-text-3 ml-0.5">
+                        +{protos.length - 3}
+                      </span>
+                    )}
+                  </span>
+                )
+              })()}
 
-              {!c.protocol && c.label && (
+              {(!c.protocol_ids || c.protocol_ids.length === 0) && c.label && (
                 <span className={cn('font-mono text-[10.5px] flex-shrink-0 truncate max-w-[70px]', isSelected ? 'text-coral' : 'text-text-3')}>
                   {c.label}
                 </span>

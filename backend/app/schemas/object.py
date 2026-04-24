@@ -14,7 +14,7 @@ class ObjectCreate(BaseModel):
     description: str | None = None
     icon: str | None = None
     parent_id: uuid.UUID | None = None
-    technology: list[str] | None = None
+    technology_ids: list[uuid.UUID] | None = None
     tags: list[str] | None = None
     owner_team: str | None = None
     external_links: dict | None = None
@@ -31,7 +31,7 @@ class ObjectUpdate(BaseModel):
     description: str | None = None
     icon: str | None = None
     parent_id: uuid.UUID | None = None
-    technology: list[str] | None = None
+    technology_ids: list[uuid.UUID] | None = None
     tags: list[str] | None = None
     owner_team: str | None = None
     external_links: dict | None = None
@@ -50,7 +50,7 @@ class ObjectResponse(BaseModel):
     description: str | None = None
     icon: str | None = None
     parent_id: uuid.UUID | None = None
-    technology: list[str] | None = None
+    technology_ids: list[uuid.UUID] | None = None
     tags: list[str] | None = None
     owner_team: str | None = None
     external_links: dict | None = None
@@ -72,7 +72,7 @@ class ObjectResponse(BaseModel):
             description=obj.description,
             icon=obj.icon,
             parent_id=obj.parent_id,
-            technology=obj.technology,
+            technology_ids=obj.technology_ids,
             tags=obj.tags,
             owner_team=obj.owner_team,
             external_links=obj.external_links,

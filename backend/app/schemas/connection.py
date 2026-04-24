@@ -10,7 +10,7 @@ class ConnectionCreate(BaseModel):
     source_id: uuid.UUID
     target_id: uuid.UUID
     label: str | None = None
-    protocol: str | None = None
+    protocol_ids: list[uuid.UUID] | None = None
     direction: ConnectionDirection = ConnectionDirection.UNIDIRECTIONAL
     tags: list[str] | None = None
     source_handle: str | None = None
@@ -22,7 +22,7 @@ class ConnectionCreate(BaseModel):
 
 class ConnectionUpdate(BaseModel):
     label: str | None = None
-    protocol: str | None = None
+    protocol_ids: list[uuid.UUID] | None = None
     direction: ConnectionDirection | None = None
     tags: list[str] | None = None
     source_handle: str | None = None
@@ -37,7 +37,7 @@ class ConnectionResponse(BaseModel):
     source_id: uuid.UUID
     target_id: uuid.UUID
     label: str | None = None
-    protocol: str | None = None
+    protocol_ids: list[uuid.UUID] | None = None
     direction: ConnectionDirection
     tags: list[str] | None = None
     source_handle: str | None = None

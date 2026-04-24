@@ -43,6 +43,10 @@ import type {
   ModelObject,
   ObjectCreate,
   ObjectUpdate,
+  TechCategory,
+  Technology,
+  TechnologyCreate,
+  TechnologyUpdate,
 } from '../types/model'
 import { api } from '../lib/api-client'
 
@@ -170,7 +174,43 @@ export function useUpdateObject() {
       const { data: result } = await api.put<ModelObject>(`/objects/${id}`, data)
       return result
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['objects'] }),
+    // Optimistic update — the sidebar pickers (tech, status, tags, …) feed
+    // straight into this mutation, so waiting for a full network round-trip
+    // before showing the result makes the UI feel broken (the user clicks
+    // an entry in TechnologyPicker and "nothing happens"). Patch both the
+    // individual-object cache and every list cache in-place so downstream
+    // consumers see the change in the same tick.
+    onMutate: async (vars) => {
+      const { id, ...patch } = vars
+      await qc.cancelQueries({ queryKey: ['objects'] })
+      const prevItem = qc.getQueryData<ModelObject>(['objects', id])
+      if (prevItem) {
+        qc.setQueryData<ModelObject>(['objects', id], { ...prevItem, ...patch } as ModelObject)
+      }
+      qc.setQueriesData<ModelObject[] | undefined>(
+        { queryKey: ['objects'] },
+        (rows) =>
+          Array.isArray(rows)
+            ? rows.map((r) => (r.id === id ? ({ ...r, ...patch } as ModelObject) : r))
+            : rows,
+      )
+      return { prevItem }
+    },
+    onError: (_err, vars, context) => {
+      if (context?.prevItem) qc.setQueryData(['objects', vars.id], context.prevItem)
+      // Full invalidate on error to recover any list drift.
+      qc.invalidateQueries({ queryKey: ['objects'] })
+    },
+    onSuccess: (updated) => {
+      qc.setQueryData(['objects', updated.id], updated)
+      qc.setQueriesData<ModelObject[] | undefined>(
+        { queryKey: ['objects'] },
+        (rows) =>
+          Array.isArray(rows)
+            ? rows.map((r) => (r.id === updated.id ? updated : r))
+            : rows,
+      )
+    },
   })
 }
 
@@ -389,6 +429,33 @@ export function useUpdateConnection() {
     mutationFn: async ({ id, ...data }: ConnectionUpdate & { id: string }) => {
       const { data: result } = await api.put<Connection>(`/connections/${id}`, data)
       return result
+    },
+    // Optimistic patch: mirrors the shape of useUpdateObject so adding a
+    // protocol in EdgeSidebar feels instant (sidebar shows the new badge
+    // the same tick). onError rolls back from the captured snapshot.
+    onMutate: async (vars) => {
+      const { id, ...patch } = vars
+      await qc.cancelQueries({ queryKey: ['connections'] })
+      const prevItem = qc.getQueryData<Connection>(['connections', id])
+      if (prevItem) {
+        qc.setQueryData<Connection>(['connections', id], {
+          ...prevItem,
+          ...patch,
+        } as Connection)
+      }
+      qc.setQueriesData<Connection[] | undefined>(
+        { queryKey: ['connections'] },
+        (rows) =>
+          Array.isArray(rows)
+            ? rows.map((r) => (r.id === id ? ({ ...r, ...patch } as Connection) : r))
+            : rows,
+      )
+      return { prevItem }
+    },
+    onError: (_err, vars, context) => {
+      if (context?.prevItem)
+        qc.setQueryData(['connections', vars.id], context.prevItem)
+      qc.invalidateQueries({ queryKey: ['connections'] })
     },
     onSuccess: (updated) => {
       // Write the updated connection into the individual-item cache so the
@@ -1360,5 +1427,109 @@ export function useMarkAllNotificationsRead() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['notifications'] })
     },
+  })
+}
+
+// ─── Technology catalog ──────────────────────────────────
+
+export interface UseTechnologiesParams {
+  q?: string
+  category?: TechCategory
+  scope?: 'all' | 'builtin' | 'custom'
+}
+
+export function useTechnologies(
+  workspaceId: string | null | undefined,
+  params: UseTechnologiesParams = {},
+) {
+  const { q, category, scope } = params
+  return useQuery({
+    queryKey: ['technologies', workspaceId, { q, category, scope }],
+    queryFn: async () => {
+      const { data } = await api.get<Technology[]>(
+        `/workspaces/${workspaceId}/technologies`,
+        { params: { q, category, scope } },
+      )
+      return data
+    },
+    enabled: !!workspaceId,
+    // Built-in catalog is effectively static — cache it generously so the
+    // picker opens instantly. WS events on custom mutations invalidate.
+    staleTime: 5 * 60 * 1000,
+  })
+}
+
+export function useCreateCustomTechnology(workspaceId: string | null | undefined) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (payload: TechnologyCreate) => {
+      const { data } = await api.post<Technology>(
+        `/workspaces/${workspaceId}/technologies`,
+        payload,
+      )
+      return data
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['technologies', workspaceId] })
+    },
+  })
+}
+
+export function useUpdateCustomTechnology(workspaceId: string | null | undefined) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({
+      id,
+      update,
+    }: {
+      id: string
+      update: TechnologyUpdate
+    }) => {
+      const { data } = await api.patch<Technology>(
+        `/workspaces/${workspaceId}/technologies/${id}`,
+        update,
+      )
+      return data
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['technologies', workspaceId] })
+    },
+  })
+}
+
+export function useDeleteCustomTechnology(workspaceId: string | null | undefined) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await api.delete(`/workspaces/${workspaceId}/technologies/${id}`)
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['technologies', workspaceId] })
+    },
+  })
+}
+
+export interface TechnologyUsage {
+  object_refs: number
+  connection_refs: number
+  detail: string
+}
+
+export function useTechnologyUsage(
+  workspaceId: string | null | undefined,
+  technologyId: string | null | undefined,
+) {
+  return useQuery({
+    queryKey: ['technology-usage', workspaceId, technologyId],
+    queryFn: async () => {
+      const { data } = await api.get<TechnologyUsage>(
+        `/workspaces/${workspaceId}/technologies/${technologyId}/usage`,
+      )
+      return data
+    },
+    enabled: !!workspaceId && !!technologyId,
+    // Reference counts drift as objects come and go; keep fresh on the
+    // management page but don't hammer the endpoint.
+    staleTime: 30 * 1000,
   })
 }

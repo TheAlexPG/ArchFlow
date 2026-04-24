@@ -1,11 +1,47 @@
 import uuid
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.connection import Connection
 from app.models.object import ModelObject
+from app.models.technology import Technology
 from app.schemas.connection import ConnectionCreate, ConnectionUpdate
+
+
+async def _validate_protocol_ids(
+    db: AsyncSession,
+    workspace_id: uuid.UUID | None,
+    protocol_ids: list[uuid.UUID] | None,
+) -> None:
+    if not protocol_ids:
+        return
+    result = await db.execute(
+        select(Technology.id).where(
+            Technology.id.in_(protocol_ids),
+            or_(
+                Technology.workspace_id.is_(None),
+                Technology.workspace_id == workspace_id,
+            ),
+        )
+    )
+    found = {row[0] for row in result.all()}
+    missing = set(protocol_ids) - found
+    if missing:
+        raise ValueError(
+            "Unknown or cross-workspace protocol_ids: "
+            f"{sorted(str(m) for m in missing)}"
+        )
+
+
+async def _source_workspace_id(
+    db: AsyncSession, source_id: uuid.UUID
+) -> uuid.UUID | None:
+    """The connection inherits its scope from the source object's workspace."""
+    result = await db.execute(
+        select(ModelObject.workspace_id).where(ModelObject.id == source_id)
+    )
+    return result.scalar_one_or_none()
 
 
 async def get_connections(
@@ -52,11 +88,14 @@ async def get_connections_between(
 async def create_connection(
     db: AsyncSession, data: ConnectionCreate, draft_id: uuid.UUID | None = None
 ) -> Connection:
+    ws_id = await _source_workspace_id(db, data.source_id)
+    await _validate_protocol_ids(db, ws_id, data.protocol_ids)
+
     conn = Connection(
         source_id=data.source_id,
         target_id=data.target_id,
         label=data.label,
-        protocol=data.protocol,
+        protocol_ids=data.protocol_ids,
         direction=data.direction,
         tags=data.tags,
         source_handle=data.source_handle,
@@ -75,6 +114,10 @@ async def create_connection(
 async def update_connection(
     db: AsyncSession, conn: Connection, data: ConnectionUpdate
 ) -> Connection:
+    if "protocol_ids" in data.model_fields_set:
+        ws_id = await _source_workspace_id(db, conn.source_id)
+        await _validate_protocol_ids(db, ws_id, data.protocol_ids)
+
     update_data = data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(conn, field, value)

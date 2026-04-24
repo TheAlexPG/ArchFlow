@@ -4,14 +4,38 @@ import { AppSidebar } from '../components/nav/AppSidebar'
 import { PageToolbar } from '../components/nav/PageToolbar'
 import { ObjectSidebar } from '../components/sidebar/ObjectSidebar'
 import { useObjectDiagrams } from '../hooks/use-diagrams'
-import { useObjects } from '../hooks/use-api'
-import type { ModelObject } from '../types/model'
+import { useObjects, useTechnologies } from '../hooks/use-api'
+import { useWorkspaceStore } from '../stores/workspace-store'
+import type { ModelObject, Technology } from '../types/model'
 import { STATUS_COLORS, TYPE_ICONS, TYPE_LABELS } from '../components/canvas/node-utils'
+import { TechBadge } from '../components/tech'
 
 export function ObjectsPage() {
   const { data: objects = [], isLoading } = useObjects()
+  const workspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
+  const { data: catalog = [] } = useTechnologies(workspaceId)
   const [search, setSearch] = useState('')
   const [editingObjectId, setEditingObjectId] = useState<string | null>(null)
+
+  // Resolve a text haystack once per object — matches by display name and
+  // aliases, not just UUIDs, so typing "postgres" finds every row tagged
+  // with the PostgreSQL technology.
+  const techText = useMemo(() => {
+    const byId = new Map(catalog.map((t) => [t.id, t]))
+    const map = new Map<string, string>()
+    for (const o of objects) {
+      const parts: string[] = []
+      for (const id of o.technology_ids ?? []) {
+        const t = byId.get(id)
+        if (t) {
+          parts.push(t.name.toLowerCase(), t.slug.toLowerCase())
+          for (const alias of t.aliases ?? []) parts.push(alias.toLowerCase())
+        }
+      }
+      map.set(o.id, parts.join(' '))
+    }
+    return map
+  }, [objects, catalog])
 
   const filtered = useMemo(() => {
     if (!search) return objects
@@ -20,9 +44,9 @@ export function ObjectsPage() {
       (o) =>
         o.name.toLowerCase().includes(q) ||
         o.description?.toLowerCase().includes(q) ||
-        o.technology?.some((t) => t.toLowerCase().includes(q)),
+        techText.get(o.id)?.includes(q),
     )
-  }, [objects, search])
+  }, [objects, search, techText])
 
   return (
     <div className="flex h-screen bg-bg text-text-base">
@@ -62,7 +86,12 @@ export function ObjectsPage() {
             </thead>
             <tbody>
               {filtered.map((o) => (
-                <ObjectRow key={o.id} obj={o} onEdit={setEditingObjectId} />
+                <ObjectRow
+                  key={o.id}
+                  obj={o}
+                  catalog={catalog}
+                  onEdit={setEditingObjectId}
+                />
               ))}
             </tbody>
           </table>
@@ -79,9 +108,20 @@ export function ObjectsPage() {
   )
 }
 
-function ObjectRow({ obj, onEdit }: { obj: ModelObject; onEdit: (id: string) => void }) {
+function ObjectRow({
+  obj,
+  catalog,
+  onEdit,
+}: {
+  obj: ModelObject
+  catalog: Technology[]
+  onEdit: (id: string) => void
+}) {
   const { data: diagrams = [] } = useObjectDiagrams(obj.id)
   const navigate = useNavigate()
+  const technologies = (obj.technology_ids ?? [])
+    .map((id) => catalog.find((t) => t.id === id))
+    .filter((t): t is Technology => Boolean(t))
 
   return (
     <tr className="border-b border-neutral-800 last:border-0 hover:bg-neutral-800/40">
@@ -102,8 +142,19 @@ function ObjectRow({ obj, onEdit }: { obj: ModelObject; onEdit: (id: string) => 
           {obj.status}
         </span>
       </td>
-      <td className="px-4 py-2 text-neutral-400 text-xs">
-        {obj.technology?.join(', ') || '—'}
+      <td className="px-4 py-2 text-xs">
+        {technologies.length === 0 ? (
+          <span className="text-neutral-600">—</span>
+        ) : (
+          <div className="flex flex-wrap gap-1">
+            {technologies.slice(0, 4).map((t) => (
+              <TechBadge key={t.id} technology={t} />
+            ))}
+            {technologies.length > 4 && (
+              <span className="text-neutral-600">+{technologies.length - 4}</span>
+            )}
+          </div>
+        )}
       </td>
       <td className="px-4 py-2 text-neutral-400 text-xs">{obj.owner_team || '—'}</td>
       <td className="px-4 py-2 text-xs">

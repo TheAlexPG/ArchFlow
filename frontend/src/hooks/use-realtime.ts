@@ -621,6 +621,17 @@ export function useWorkspaceSocket(): void {
           // Let the bell's own query refetch — payload has only the
           // unread_count delta, not the full row shape.
           void queryClient.invalidateQueries({ queryKey: ['notifications'] })
+        } else if (
+          type === 'technology.created' ||
+          type === 'technology.updated' ||
+          type === 'technology.deleted'
+        ) {
+          // Cheap invalidate — the catalog list is small (~200 rows) and
+          // rarely mutated, so a full refetch keeps the picker consistent
+          // across all filter/scope variants without us merging by hand.
+          void queryClient.invalidateQueries({
+            queryKey: ['technologies', workspaceId],
+          })
         }
       }
 

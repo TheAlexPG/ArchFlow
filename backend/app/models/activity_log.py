@@ -13,6 +13,7 @@ class ActivityTargetType(str, enum.Enum):
     OBJECT = "object"
     CONNECTION = "connection"
     DIAGRAM = "diagram"
+    TECHNOLOGY = "technology"
 
 
 class ActivityAction(str, enum.Enum):

@@ -58,7 +58,9 @@ class ModelObject(Base, UUIDMixin, TimestampMixin):
     parent_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("model_objects.id", ondelete="SET NULL"), default=None
     )
-    technology: Mapped[list[str] | None] = mapped_column(ARRAY(String), default=None)
+    technology_ids: Mapped[list[uuid.UUID] | None] = mapped_column(
+        ARRAY(UUID(as_uuid=True)), default=None
+    )
     tags: Mapped[list[str] | None] = mapped_column(ARRAY(String), default=None)
     owner_team: Mapped[str | None] = mapped_column(String(255), default=None)
     external_links: Mapped[dict | None] = mapped_column(JSONB, default=None)

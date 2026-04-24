@@ -57,6 +57,15 @@ const DraftsIcon = () => (
   </svg>
 )
 
+const TechnologiesIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <rect x="3" y="3" width="7" height="7" rx="1"/>
+    <rect x="14" y="3" width="7" height="7" rx="1"/>
+    <rect x="3" y="14" width="7" height="7" rx="1"/>
+    <circle cx="17.5" cy="17.5" r="3.5"/>
+  </svg>
+)
+
 const ActivityIcon = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
     <path d="M12 2v2m0 16v2M4 12H2m20 0h-2m-2.93-7.07L15.65 6.34m-7.3 11.32L6.93 19.07M19.07 19.07l-1.42-1.41m-11.3-11.31L4.93 4.93"/>
@@ -112,8 +121,9 @@ const SignOutIcon = () => (
 const MAIN_ITEMS: NavItemDef[] = [
   { label: 'Overview',      path: '/',            icon: <OverviewIcon />,     end: true },
   { label: 'Diagrams',      path: '/diagrams',    icon: <DiagramsIcon /> },
-  { label: 'Model Objects', path: '/objects',     icon: <ObjectsIcon /> },
-  { label: 'Connections',   path: '/connections', icon: <ConnectionsIcon /> },
+  { label: 'Model Objects', path: '/objects',      icon: <ObjectsIcon /> },
+  { label: 'Connections',   path: '/connections',  icon: <ConnectionsIcon /> },
+  { label: 'Technologies',  path: '/technologies', icon: <TechnologiesIcon /> },
 ]
 
 const WORKSPACE_ITEMS: NavItemDef[] = [

@@ -26,7 +26,7 @@ OBJECT_FIELDS = (
     "description",
     "icon",
     "parent_id",
-    "technology",
+    "technology_ids",
     "tags",
     "owner_team",
     "external_links",
@@ -39,9 +39,8 @@ CONNECTION_FIELDS = (
     "source_id",
     "target_id",
     "label",
-    "description",
     "direction",
-    "technology",
+    "protocol_ids",
     "tags",
 )
 

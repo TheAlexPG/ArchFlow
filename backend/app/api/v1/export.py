@@ -61,7 +61,7 @@ async def import_model(file: UploadFile, db: AsyncSession = Depends(get_db)):
             status=obj_data.get("status", "live"),
             description=obj_data.get("description"),
             icon=obj_data.get("icon"),
-            technology=obj_data.get("technology"),
+            technology_ids=obj_data.get("technology_ids"),
             tags=obj_data.get("tags"),
             owner_team=obj_data.get("owner_team"),
             external_links=obj_data.get("external_links"),
@@ -92,7 +92,7 @@ async def import_model(file: UploadFile, db: AsyncSession = Depends(get_db)):
                 source_id=id_map[old_source],
                 target_id=id_map[old_target],
                 label=conn_data.get("label"),
-                protocol=conn_data.get("protocol"),
+                protocol_ids=conn_data.get("protocol_ids"),
                 direction=conn_data.get("direction", "unidirectional"),
                 tags=conn_data.get("tags"),
             )

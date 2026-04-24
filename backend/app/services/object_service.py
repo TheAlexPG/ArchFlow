@@ -1,14 +1,41 @@
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.activity_log import ActivityTargetType
 from app.models.connection import Connection
 from app.models.object import ModelObject
+from app.models.technology import Technology
 from app.schemas.object import ObjectCreate, ObjectUpdate
 from app.services import activity_service
+
+
+async def validate_technology_ids(
+    db: AsyncSession,
+    workspace_id: uuid.UUID | None,
+    ids: list[uuid.UUID] | None,
+) -> None:
+    """Verify every id in `ids` is visible to this workspace (built-in or
+    workspace-owned). Raises ValueError listing the offenders on failure."""
+    if not ids:
+        return
+    result = await db.execute(
+        select(Technology.id).where(
+            Technology.id.in_(ids),
+            or_(
+                Technology.workspace_id.is_(None),
+                Technology.workspace_id == workspace_id,
+            ),
+        )
+    )
+    found = {row[0] for row in result.all()}
+    missing = set(ids) - found
+    if missing:
+        raise ValueError(
+            f"Unknown or cross-workspace technology_ids: {sorted(str(m) for m in missing)}"
+        )
 
 
 async def get_objects(
@@ -52,6 +79,7 @@ async def create_object(
     draft_id: uuid.UUID | None = None,
     workspace_id: uuid.UUID | None = None,
 ) -> ModelObject:
+    await validate_technology_ids(db, workspace_id, data.technology_ids)
     obj = ModelObject(
         name=data.name,
         type=data.type,
@@ -60,7 +88,7 @@ async def create_object(
         description=data.description,
         icon=data.icon,
         parent_id=data.parent_id,
-        technology=data.technology,
+        technology_ids=data.technology_ids,
         tags=data.tags,
         owner_team=data.owner_team,
         external_links=data.external_links,
@@ -83,6 +111,8 @@ async def create_object(
 async def update_object(
     db: AsyncSession, obj: ModelObject, data: ObjectUpdate
 ) -> ModelObject:
+    if "technology_ids" in data.model_fields_set:
+        await validate_technology_ids(db, obj.workspace_id, data.technology_ids)
     before = activity_service.snapshot(obj)
     update_data = data.model_dump(exclude_unset=True)
     for field, value in update_data.items():

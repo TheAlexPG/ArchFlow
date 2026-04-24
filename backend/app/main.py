@@ -8,22 +8,23 @@ from app.api.v1.api_keys import router as api_keys_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.comments import router as comments_router
 from app.api.v1.connections import router as connections_router
+from app.api.v1.diagram_access import router as diagram_access_router
 from app.api.v1.diagrams import router as diagrams_router
 from app.api.v1.drafts import router as drafts_router
 from app.api.v1.export import router as export_router
 from app.api.v1.flows import diagrams_router as flow_diagrams_router
 from app.api.v1.flows import router as flows_router
-from app.api.v1.objects import router as objects_router
-from app.api.v1.webhooks import router as webhooks_router
-from app.api.v1.diagram_access import router as diagram_access_router
 from app.api.v1.invites import router as invites_router
 from app.api.v1.members import router as members_router
 from app.api.v1.my_invites import router as my_invites_router
 from app.api.v1.notifications import router as notifications_router
 from app.api.v1.oauth_stub import router as oauth_router
-from app.api.v1.teams import router as teams_router
+from app.api.v1.objects import router as objects_router
 from app.api.v1.packs import router as packs_router
+from app.api.v1.teams import router as teams_router
+from app.api.v1.technologies import router as technologies_router
 from app.api.v1.versions import router as versions_router
+from app.api.v1.webhooks import router as webhooks_router
 from app.api.v1.websocket import router as websocket_router
 from app.api.v1.workspaces import router as workspaces_router
 from app.core.config import settings
@@ -73,6 +74,7 @@ def create_app() -> FastAPI:
     app.include_router(members_router, prefix="/api/v1")
     app.include_router(teams_router, prefix="/api/v1")
     app.include_router(packs_router, prefix="/api/v1")
+    app.include_router(technologies_router, prefix="/api/v1")
     app.include_router(diagram_access_router, prefix="/api/v1")
     app.include_router(oauth_router, prefix="/api/v1")
     app.include_router(invites_router, prefix="/api/v1")

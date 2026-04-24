@@ -31,7 +31,9 @@ class Connection(Base, UUIDMixin, TimestampMixin):
         UUID(as_uuid=True), ForeignKey("model_objects.id", ondelete="CASCADE")
     )
     label: Mapped[str | None] = mapped_column(Text, default=None)
-    protocol: Mapped[str | None] = mapped_column(String(100), default=None)
+    protocol_ids: Mapped[list[uuid.UUID] | None] = mapped_column(
+        ARRAY(UUID(as_uuid=True)), default=None
+    )
     direction: Mapped[ConnectionDirection] = mapped_column(
         Enum(ConnectionDirection, name="connection_direction"),
         default=ConnectionDirection.UNIDIRECTIONAL,

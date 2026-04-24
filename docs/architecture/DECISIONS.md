@@ -60,3 +60,25 @@ Architecture:
 - Phase 4: OAuth2 (Google, GitHub, GitLab).
 - Phase 8: SAML SSO.
 **Rationale:** Standard, stateless, works with both browser and API clients.
+
+## ADR-012: Technology Catalog
+**Decision:** Replace the free-text `model_objects.technology[]` and `connections.protocol` fields with a first-class `technologies` table referenced by UUID.
+
+**Storage and visibility.** One `technologies` table carries both the curated ~170-entry built-in set (`workspace_id IS NULL`) and workspace-scoped custom entries. Uniqueness is enforced with two partial indexes — `(slug) WHERE workspace_id IS NULL` and `(workspace_id, slug) WHERE workspace_id IS NOT NULL` — so a workspace can override a built-in slug locally and two workspaces can independently coin the same slug. Objects link via `technology_ids UUID[]` (order matters — first entry is the "primary" rendered on the canvas badge); connections link via a single `protocol_id UUID?`. Referential integrity is enforced in the service layer; Postgres doesn't support `FOREIGN KEY` on array elements, so we trade the DB constraint for application-side validation. PG enum values are the uppercase Python enum *names* (matching the rest of the repo's convention) — SQLAlchemy's default `Enum()` mapping uses names, so `TechCategory.LANGUAGE` round-trips as `'LANGUAGE'` in storage with `.value = "language"` on the Python side.
+
+**Icon source: Iconify, not bundled SVGs.** Built-in rows reference Iconify names (`logos:postgresql`, `simple-icons:figma`). The frontend lazy-loads the actual SVG through `@iconify/react`, avoiding a ~10MB sprite bundle and letting us point at ~200k icons without hosting any ourselves. Trade-off: Iconify's CDN becomes a runtime dependency. Self-hosting the Iconify API is left as a follow-up for air-gapped deployments (see "Future work" below).
+
+**Custom technology is light-custom for v1.** Users create a workspace custom entry by picking any Iconify icon plus a display name (modal searches `api.iconify.design/search` live). This avoids the storage / sanitization / CDN work that real SVG upload would need (see `docs/superpowers/specs/2026-04-23-technology-catalog-design.md` for the full scope analysis). Authentic internal logos that aren't in Iconify are the first use case for SVG upload — tracked as a future follow-up.
+
+**Unified catalog for objects and connection protocols.** Instead of two parallel concepts ("technology" vs "protocol"), connections pick from the same catalog filtered to `category=protocol`. The picker component is reused verbatim between `ObjectSidebar` and `EdgeSidebar`, the same `TechIcon` renders on nodes and edge labels, and category filters on the management page cover both cases.
+
+**Delete semantics.** Built-in rows are read-only at runtime (`403`). Deleting a custom row checks `model_objects.technology_ids` and `connections.protocol_id` via raw SQL; if any reference exists, the API returns `409` with `{object_refs, connection_refs, detail}`. The management page surfaces that body inline rather than generically failing. Rationale: silently orphaning references would corrupt the model; soft-deletion would complicate every query for limited benefit.
+
+**Rationale.** Free-text breaks filtering, consistent naming, and icon rendering — three features users expect from an IcePanel-class tool on day one. A typed catalog costs us one migration per affected table and a single extra query per sidebar (deduped by React Query across the whole page) in exchange for those features and for cleanly versioning the catalog over time.
+
+**Future work:**
+- SVG upload with `svg-sanitizer` (backend) + `DOMPurify` (frontend) + object storage for truly internal logos.
+- Self-hosted Iconify API for air-gapped / strict-egress customers.
+- Protocol auto-suggestion from source/target object types (App→Store ⇒ suggest `jdbc`, App→App ⇒ `http`/`grpc`).
+- Make the Mermaid and Structurizr importers workspace-aware so they can resolve the DSL's `technology`/`protocol` text against the catalog instead of dropping it.
+- Bulk rename / merge tool for custom technologies whose slug evolves.

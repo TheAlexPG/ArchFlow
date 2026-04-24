@@ -188,7 +188,8 @@ async def import_mermaid(db: AsyncSession, src: str) -> dict:
             name=obj["name"],
             type=obj["type"],
             description=obj.get("description"),
-            technology=obj.get("technology"),
+            # TODO(tech-catalog): resolve obj["technology"] text against the
+            # catalog once importers know their target workspace.
         )
         db.add(model_obj)
         await db.flush()
@@ -204,7 +205,9 @@ async def import_mermaid(db: AsyncSession, src: str) -> dict:
             source_id=src_id,
             target_id=tgt_id,
             label=rel["label"],
-            protocol=rel.get("technology"),
+            # TODO(tech-catalog): resolve rel.get("technology") text against the
+            # catalog once importers know their target workspace.
+            protocol_ids=None,
         )
         db.add(conn)
         created_rels += 1

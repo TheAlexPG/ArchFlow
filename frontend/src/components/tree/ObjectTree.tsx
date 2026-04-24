@@ -4,8 +4,10 @@ import {
   useCreateObject,
   useDiagramObjects,
   useObjects,
+  useTechnologies,
 } from '../../hooks/use-api'
 import { useCanvasStore } from '../../stores/canvas-store'
+import { useWorkspaceStore } from '../../stores/workspace-store'
 import type { ModelObject, ObjectType } from '../../types/model'
 import { TYPE_ICONS, TYPE_LABELS } from '../canvas/node-utils'
 import { ObjectContextMenu } from '../common/ObjectContextMenu'
@@ -35,12 +37,16 @@ function buildTree(objects: ModelObject[]): TreeNode[] {
   return roots
 }
 
-function matchesSearch(obj: ModelObject, query: string): boolean {
+function matchesSearch(
+  obj: ModelObject,
+  query: string,
+  techText: Map<string, string>,
+): boolean {
   const q = query.toLowerCase()
   return (
     obj.name.toLowerCase().includes(q) ||
     (obj.description?.toLowerCase().includes(q) ?? false) ||
-    (obj.technology?.some((t) => t.toLowerCase().includes(q)) ?? false)
+    (techText.get(obj.id)?.includes(q) ?? false)
   )
 }
 
@@ -51,6 +57,8 @@ interface ObjectTreeProps {
 export function ObjectTree({ diagramId }: ObjectTreeProps) {
   const { data: objects = [] } = useObjects()
   const { data: diagramObjects = [] } = useDiagramObjects(diagramId)
+  const workspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
+  const { data: catalog = [] } = useTechnologies(workspaceId)
   const [search, setSearch] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const { selectNode } = useCanvasStore()
@@ -62,10 +70,30 @@ export function ObjectTree({ diagramId }: ObjectTreeProps) {
     [diagramObjects],
   )
 
+  // Prebuild a per-object haystack with resolved technology names / slugs /
+  // aliases so the search bar matches human terms like "postgres" instead
+  // of UUIDs.
+  const techText = useMemo(() => {
+    const byId = new Map(catalog.map((t) => [t.id, t]))
+    const map = new Map<string, string>()
+    for (const o of objects) {
+      const parts: string[] = []
+      for (const id of o.technology_ids ?? []) {
+        const t = byId.get(id)
+        if (t) {
+          parts.push(t.name.toLowerCase(), t.slug.toLowerCase())
+          for (const alias of t.aliases ?? []) parts.push(alias.toLowerCase())
+        }
+      }
+      map.set(o.id, parts.join(' '))
+    }
+    return map
+  }, [objects, catalog])
+
   const tree = useMemo(() => buildTree(objects), [objects])
 
   const filteredObjects = search
-    ? objects.filter((obj) => matchesSearch(obj, search))
+    ? objects.filter((obj) => matchesSearch(obj, search, techText))
     : null
 
   const toggleExpand = (id: string) => {

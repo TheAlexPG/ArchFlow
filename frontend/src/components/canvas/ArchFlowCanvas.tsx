@@ -75,7 +75,7 @@ function connectionToEdge(conn: Connection): Edge {
     markerStart,
     data: {
       label: conn.label,
-      protocol: conn.protocol,
+      protocol_ids: conn.protocol_ids,
       shape: conn.shape,
       labelSize: conn.label_size,
       direction: conn.direction,
@@ -129,7 +129,7 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
       if (!activeFilterValue) return true
       if (filterDim === 'tags') return obj.tags?.includes(activeFilterValue) ?? false
       if (filterDim === 'technology')
-        return obj.technology?.includes(activeFilterValue) ?? false
+        return obj.technology_ids?.includes(activeFilterValue) ?? false
       return extractFilterValue(obj, filterDim) === activeFilterValue
     },
     [activeFilterValue, filterDim],
@@ -358,7 +358,7 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     const connKey = filtered
       .map(
         (c) =>
-          `${c.id}:${c.source_id}:${c.target_id}:${c.shape}:${c.label_size}:${c.direction}:${c.label ?? ''}:${c.protocol ?? ''}:${c.source_handle ?? ''}:${c.target_handle ?? ''}`,
+          `${c.id}:${c.source_id}:${c.target_id}:${c.shape}:${c.label_size}:${c.direction}:${c.label ?? ''}:${(c.protocol_ids ?? []).join(',')}:${c.source_handle ?? ''}:${c.target_handle ?? ''}`,
       )
       .join(',')
 
