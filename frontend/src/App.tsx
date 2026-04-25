@@ -8,6 +8,7 @@ import { ActivityPage } from './pages/ActivityPage'
 import { ConnectionsPage } from './pages/ConnectionsPage'
 import { DiagramPage } from './pages/DiagramPage'
 import { DiagramsPage } from './pages/DiagramsPage'
+import { DocsPage } from './pages/DocsPage'
 import { DraftDetailPage } from './pages/DraftDetailPage'
 import { DraftsPage } from './pages/DraftsPage'
 import { MembersPage } from './pages/MembersPage'
@@ -84,6 +85,7 @@ function App() {
               consent screen without requiring an account. */}
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
+          <Route path="/docs" element={<DocsPage />} />
           <Route
             path="/"
             element={isAuthenticated ? <OverviewPage /> : <LandingPage />}

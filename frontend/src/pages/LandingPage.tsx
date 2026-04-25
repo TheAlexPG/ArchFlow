@@ -500,7 +500,7 @@ function Footer() {
         </FooterCol>
         <FooterCol title="Resources">
           <a href={`${GITHUB_URL}#quick-start`} target="_blank" rel="noreferrer" className="hover:text-orange-400 transition">Quick start</a>
-          <a href={`${GITHUB_URL}/tree/main/docs`} target="_blank" rel="noreferrer" className="hover:text-orange-400 transition">Docs</a>
+          <Link to="/docs" className="hover:text-orange-400 transition">Docs</Link>
           <a href="https://c4model.com" target="_blank" rel="noreferrer" className="hover:text-orange-400 transition">C4 model</a>
         </FooterCol>
       </div>
