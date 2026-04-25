@@ -42,10 +42,18 @@ export function DocsLayout({
   const pillRefs = useRef<Record<string, HTMLAnchorElement | null>>({})
 
   // Keep the active pill visible inside the horizontally-scrolling mobile nav.
+  // We scroll the pill list container directly instead of calling
+  // scrollIntoView on the pill — on mobile browsers, scrollIntoView walks the
+  // scroll-ancestor chain and (with a position:sticky header) can scroll the
+  // document even with block:'nearest', causing the page to jump toward the top.
   useEffect(() => {
     if (!activeId) return
     const el = pillRefs.current[activeId]
-    if (el) el.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
+    if (!el) return
+    const container = el.closest<HTMLElement>('ul')
+    if (!container) return
+    const target = el.offsetLeft - container.clientWidth / 2 + el.clientWidth / 2
+    container.scrollTo({ left: target, behavior: 'smooth' })
   }, [activeId])
 
   return (
