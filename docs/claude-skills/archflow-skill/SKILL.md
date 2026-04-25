@@ -1,226 +1,434 @@
 ---
-name: archflow-developer
-description: Use when working in the ArchFlow repository (the C4-style architecture modeling tool at github.com/TheAlexPG/ArchFlow) — adding or modifying API endpoints, database models, React pages, tests, or migrations. Project-specific conventions for the FastAPI + SQLAlchemy + Pydantic backend and the React 19 + Vite + Zustand + React Query frontend, including realtime WebSocket fanout, Alembic migrations, and the PR-based contribution workflow.
+name: archflow-api-client
+description: Use when the user has an ArchFlow API key (starts with ak_) and wants to programmatically create or query architecture diagrams — listing workspaces, creating objects (people, systems, containers, components, groups), wiring connections between them, creating diagrams, placing objects on diagrams with x/y positions, or reading existing diagrams. Covers Authorization Bearer authentication, the X-Workspace-ID header, error handling for 401/403/404/409/429, and the constraint that API keys cannot authenticate WebSocket connections (use polling instead).
 ---
 
-# ArchFlow developer skill
+# ArchFlow API client skill
 
 ## Overview
 
-ArchFlow is a self-hostable, C4-style architecture modeling tool: users build hierarchical models out of **objects** (person, system, container, component, group), wire them with **connections**, and lay them out on **diagrams**. Everything is workspace-scoped. The web UI is real-time multi-user via WebSocket.
+ArchFlow exposes a REST API at `/api/v1` for programmatically building C4-style architecture models. This skill is a practical guide for an agent that has been given an API key and wants to drive the API end-to-end: pick a workspace, create objects, wire connections, lay them out on a diagram, and read the result back.
 
-This skill captures conventions that aren't obvious from reading any single file: the layered backend pattern, the realtime fanout idiom, how the frontend consumes the API, and how the team handles branches/PRs/migrations.
+You do not need to clone the ArchFlow repository to use this skill. You only need:
 
-## Stack at a glance
+- A reachable ArchFlow base URL (e.g. `https://api.archflow.tools` or a self-hosted instance like `http://localhost:8000`).
+- An API key the user has issued you (a bearer token starting with `ak_`).
 
-| Layer    | Tech                                                                                       |
-| -------- | ------------------------------------------------------------------------------------------ |
-| Backend  | FastAPI, SQLAlchemy 2.0 (async), Pydantic v2, asyncpg, Alembic, Redis (pub/sub + rate-limit) |
-| Frontend | React 19, Vite, TypeScript, TailwindCSS v4, React Router 7, Zustand, TanStack Query, axios, React Flow (`@xyflow/react`), Iconify |
-| Auth     | JWT (access + refresh) **or** API key (`ak_` prefix); both ride the `Authorization: Bearer` header |
-| Realtime | FastAPI WebSocket + Redis pub/sub for multi-instance fanout                                |
-| Infra    | Docker Compose, Postgres 16, Redis 7, Caddy reverse proxy                                  |
-| Tooling  | `uv` (Python deps), `npm` (Node deps), `make` (top-level orchestrator), `orval` (API client codegen), `ruff`, ESLint |
+## Mental model
 
-## Repository layout
+Three resource types, in this order of dependency:
 
 ```
-ArchFlow/
-├── backend/              # FastAPI service (uv-managed)
-│   ├── app/
-│   │   ├── api/v1/       # ⬅ HTTP/WS routers (one file per resource)
-│   │   ├── api/deps.py   # get_current_user, get_optional_user, get_current_workspace_id
-│   │   ├── api/permissions_dep.py  # require_role(Role.ADMIN) etc.
-│   │   ├── api/rate_limit_dep.py
-│   │   ├── core/         # config, database, security, permissions, rate_limit
-│   │   ├── models/       # SQLAlchemy ORM models
-│   │   ├── schemas/      # Pydantic request/response schemas
-│   │   ├── services/     # Business logic — routers MUST go through these
-│   │   ├── realtime/     # WebSocket connection manager, Redis pub/sub
-│   │   ├── ws/           # WebSocket helpers
-│   │   └── main.py       # create_app() — registers every router
-│   ├── alembic/versions/ # Migrations (one .py per revision)
-│   ├── tests/            # pytest (api/, core/, services/)
-│   └── pyproject.toml
-├── frontend/             # Vite + React app
-│   ├── src/
-│   │   ├── api/          # orval-generated client (do not edit by hand)
-│   │   ├── components/   # canvas/, sidebar/, tree/, toolbar/, nav/, auth/, ui/
-│   │   ├── hooks/        # use-realtime, etc.
-│   │   ├── pages/        # one .tsx per route + the /docs page subtree
-│   │   ├── stores/       # Zustand stores (UI state only — server state lives in React Query)
-│   │   ├── lib/api-client.ts  # axios instance with auth + X-Workspace-ID interceptors
-│   │   └── App.tsx       # all <Route> definitions
-│   └── package.json
-├── docker/               # docker-compose.yml + dev override + Caddy + Postgres init
-├── docs/                 # architecture/, api/ (markdown mirror), superpowers/ (specs+plans)
-├── Makefile              # The only thing you need to remember to run
-└── .github/workflows/    # CI = build Docker images on PR; deploy on push to main
+Workspace      ← isolation boundary; everything below lives in one workspace
+  ├─ Object   ← a thing in the architecture: person, system, container, component, group
+  ├─ Connection ← directed edge from object A to object B
+  └─ Diagram  ← a 2D canvas
+       └─ DiagramObject ← "object O placed at x,y on diagram D" (a junction row)
 ```
 
-## Setup, run, test, build
+Important consequences:
+
+- **Objects and connections exist independent of any diagram.** You first create the objects, *then* build a diagram, *then* place the objects on it with positions. The same object can appear on many diagrams at different x/y coordinates.
+- **Workspace is implicit.** Most endpoints read the current workspace from the `X-Workspace-ID` header. Forget the header and you'll silently land on the user's *oldest* workspace, which is rarely what you want.
+- **Connection endpoints reference object UUIDs that already exist.** Create both objects first; the API will 400 if `source_id` or `target_id` is unknown.
+
+## Configuration
+
+Read these from environment variables (or ask the user once and remember them for the session):
+
+| Variable               | Example                              | Required                                        |
+| ---------------------- | ------------------------------------ | ----------------------------------------------- |
+| `ARCHFLOW_API_URL`     | `https://api.archflow.tools`         | yes — base URL, no trailing slash               |
+| `ARCHFLOW_API_KEY`     | `ak_aB3d_...`                        | yes — must start with `ak_`                     |
+| `ARCHFLOW_WORKSPACE_ID`| `9f1e...`                            | optional — sets `X-Workspace-ID` for every call |
+
+If the user hasn't given you a workspace id, list their workspaces (see below) and pick one explicitly before mutating. Don't rely on the "oldest workspace" fallback for anything that creates state — confirm first.
+
+## Authentication
+
+Every authenticated request needs:
+
+```http
+Authorization: Bearer ak_<the rest of the key>
+```
+
+The same `Authorization` header carries either a JWT or an API key — the server detects API keys by the `ak_` prefix. WebSockets are the one exception: `/api/v1/ws/*` only accept JWT access tokens (passed as `?token=`), so you can't subscribe to realtime updates with an API key. Poll the relevant REST endpoints instead.
+
+API keys today inherit the owning user's full access (`permissions` array on a key is stored but unenforced). That means: if the user can do it, the key can do it. Workspace-mutating endpoints still enforce per-workspace role checks (`viewer < reviewer < editor < admin < owner`) — those check the *user's* role, not anything on the key.
+
+### One-call sanity check
+
+Before doing anything else, confirm the key works and identify the user:
 
 ```bash
-make setup        # one-time: deps + docker infra + initial DB migration + .env
-make dev          # backend (uv run uvicorn ...:reload) + frontend (vite) + docker infra
-make test         # pytest + vitest
-make test-backend # only pytest
-make test-frontend
-make lint         # ruff + ruff format --check + eslint
-make build        # docker compose -f docker/docker-compose.yml build
-make up | down    # full prod stack via compose
+curl -s "$ARCHFLOW_API_URL/api/v1/auth/me" \
+  -H "Authorization: Bearer $ARCHFLOW_API_KEY"
 ```
 
-Direct equivalents if you prefer not using make:
+Expect `200` with `{ "id": "...", "email": "...", "name": "...", "created_at": "..." }`. A `401` means the key is wrong, revoked, or expired — stop and tell the user.
+
+## Workspace management
+
+Choose a workspace before creating anything.
 
 ```bash
-# Backend
-cd backend && uv sync --all-extras
-cd backend && uv run uvicorn app.main:app --reload
-cd backend && uv run pytest -v
-cd backend && uv run ruff check . && uv run ruff format --check .
-
-# Frontend
-cd frontend && npm install
-cd frontend && npm run dev          # http://localhost:5173
-cd frontend && npm run test         # vitest run
-cd frontend && npm run build        # tsc -b && vite build
-cd frontend && npm run lint
-cd frontend && npm run api:generate # orval — regenerate after adding a backend endpoint
-
-# Docker infra only (Postgres + Redis)
-docker compose -f docker/docker-compose.dev.yml up -d
+# List workspaces the key's owner is a member of
+curl -s "$ARCHFLOW_API_URL/api/v1/workspaces" \
+  -H "Authorization: Bearer $ARCHFLOW_API_KEY"
 ```
 
-The backend test suite **requires Postgres + Redis** to be running (the dev compose stack provides both). Without them, ~half the suite fails with `redis.exceptions.ConnectionError` and async DB errors — that is environmental, not a code regression.
+Response shape:
 
-## Backend conventions
-
-### Layered architecture (load-bearing)
-
-Routers (`app/api/v1/*.py`) **must not** call SQLAlchemy directly for non-trivial logic. The flow is:
-
-```
-HTTP request
-  → router (validates with Pydantic, applies auth deps)
-    → service function (orchestrates DB + realtime + webhooks)
-      → SQLAlchemy session (DB)
+```json
+[
+  { "id": "uuid", "org_id": "uuid", "name": "Personal",
+    "slug": "agent-personal", "role": "owner",
+    "created_at": "2026-04-25T..." }
+]
 ```
 
-Routers should be thin: dependency-inject, call a service, fan out events, return. Services own the business logic and can be reused by tests, websocket handlers, or import scripts.
+Pick one and pass its `id` as `X-Workspace-ID` on subsequent calls. If the user hasn't told you which workspace to use and there are multiple, ask them — don't guess.
 
-### Adding a new HTTP endpoint
-
-1. **Schemas first** — add request/response models in `backend/app/schemas/<resource>.py`. Use Pydantic v2, `from_attributes=True`, and explicit field aliases when the model uses a Python keyword (see `metadata_: dict | None = Field(None, alias="metadata")` in `schemas/object.py`).
-2. **Service function** — put the business logic in `backend/app/services/<resource>_service.py`. Accept `AsyncSession` plus typed args; return ORM objects or plain dicts; never raise `HTTPException` here.
-3. **Router** — add to (or create) `backend/app/api/v1/<resource>.py`. Use the right deps:
-   - `Depends(get_current_user)` — required JWT/API-key auth.
-   - `Depends(get_optional_user)` — accept anonymous reads.
-   - `Depends(get_current_workspace_id)` — resolve `X-Workspace-ID` header → membership-checked workspace UUID (or default workspace).
-   - `Depends(require_role(Role.ADMIN))` — role-gated mutation. The 5-rank ladder is `viewer < reviewer < editor < admin < owner` (see `app/core/permissions.py`).
-   - `Depends(enforce_rate_limit)` — sliding-window per-caller limit, scopes by API-key id when present.
-4. **Register the router** in `backend/app/main.py:create_app()` with `app.include_router(<router>, prefix="/api/v1")`.
-5. **Realtime + webhooks** — emit events from the router after a successful mutation. Use the helpers from `app/realtime/manager.py` (`fire_and_forget_publish`, `fire_and_forget_publish_diagram`) and `app/services/webhook_service.fire_and_forget_emit`. The pattern is "publish per workspace, then per-diagram for any diagrams that contain the touched object". `fanout` helpers in `app/api/v1/objects.py` and `connections.py` show the canonical shape.
-6. **Tests** — add to `backend/tests/api/test_<resource>.py`. Use the `conftest.py` fixtures (`client`, `auth_user`, `workspace`).
-7. **Frontend client** — run `cd frontend && npm run api:generate` to regenerate the orval client from the live OpenAPI doc. Commit the generated diff.
-
-### Database & migrations
-
-Models live under `backend/app/models/`. They use the SQLAlchemy 2.0 typed mapped-column style, with `UUIDMixin` + `TimestampMixin` from `models/base.py`. After changing a model:
+If you need a brand-new workspace for the work you're about to do (e.g., a "scratch" sandbox so you don't pollute their main one):
 
 ```bash
-cd backend && uv run alembic revision --autogenerate -m "add foo to bar"
-# Inspect the generated revision in alembic/versions/ — autogen often misses
-# server defaults, indexes on JSON columns, and enum changes. Edit before applying.
-cd backend && uv run alembic upgrade head
+curl -s -X POST "$ARCHFLOW_API_URL/api/v1/workspaces" \
+  -H "Authorization: Bearer $ARCHFLOW_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "name": "Agent scratchpad" }'
 ```
 
-Every upgrade **must** ship a working `downgrade()` (this is enforced in code review). Multi-step changes (e.g., NOT NULL add) need backfill migrations split into separate revisions.
+## Step 1 — Create objects
 
-### Realtime fanout (the part that surprises people)
+`POST /api/v1/objects`. The two fields you almost always set are `name` and `type`. Everything else is optional.
 
-The backend has **two** publish channels:
+```bash
+curl -s -X POST "$ARCHFLOW_API_URL/api/v1/objects" \
+  -H "Authorization: Bearer $ARCHFLOW_API_KEY" \
+  -H "X-Workspace-ID: $ARCHFLOW_WORKSPACE_ID" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Auth Service",
+    "type": "container",
+    "scope": "internal",
+    "status": "live",
+    "description": "Issues and validates JWTs.",
+    "tags": ["platform"]
+  }'
+```
 
-- **Workspace channel** (`workspace:<uuid>`) — every workspace member's UI subscribes via `useWorkspaceSocket()`. Used to invalidate React Query caches on object/connection/diagram CRUD.
-- **Diagram channel** (`diagram:<uuid>`) — only callers viewing that diagram subscribe. Used for cursor presence, selection, and per-diagram-object placement events.
+Allowed enum values:
 
-When you mutate an object that lives on multiple diagrams, you must fan out to **every diagram that contains it** before the row goes away — otherwise viewers of those diagrams won't refetch. See `_fanout_object_to_diagrams()` in `objects.py` and `_fanout_to_endpoint_diagrams()` in `connections.py` for the exact pattern. Capturing diagram membership *before* the delete is the trickiest part.
+- `type`: `person | system | container | component | group`
+- `scope`: `internal | external` (default `internal`)
+- `status`: `live | deprecated | planned` (default `live`)
 
-The Redis subscriber is started in `lifespan()` in `main.py`. Local dev needs `redis://localhost:6379/0` reachable.
+Capture the returned `id` — you'll need it for connections and diagram placements.
 
-### API keys vs JWT
+```json
+{
+  "id": "f0a8...-uuid",
+  "name": "Auth Service",
+  "type": "container",
+  "c4_level": "L3",
+  "...": "..."
+}
+```
 
-Both auth modes resolve through `get_current_user` in `app/api/deps.py`. An API key whose secret starts with `ak_` is hashed-checked, then the owning user is loaded; from that point on the request looks identical to a JWT request. The `permissions` array on API keys is **not enforced today** — it's stored and echoed back, but every key inherits its owning user's full access. Workspace RBAC (`require_role`) gates against the user's `WorkspaceMember.role`, not the key's permission tokens.
+`c4_level` is computed by the server from `type` (`person/system → L1/L2`, `container → L3`, `component → L4`). You don't set it; you read it.
 
-WebSocket endpoints accept JWT only (passed as `?token=`), not API keys. See `backend/app/api/v1/websocket.py:_authenticate`.
+### Creating a hierarchy
 
-## Frontend conventions
+Pass `parent_id` to nest. A `container` with `parent_id` set to a `system` says "this container belongs to that system." A `group` is a visual cluster (e.g., "all microservices in this VPC").
 
-### Server state vs UI state
+```bash
+# Parent system
+SYSTEM_ID=$(curl -s -X POST "$ARCHFLOW_API_URL/api/v1/objects" \
+  -H "Authorization: Bearer $ARCHFLOW_API_KEY" \
+  -H "X-Workspace-ID: $ARCHFLOW_WORKSPACE_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Identity Platform", "type": "system"}' \
+  | jq -r .id)
 
-- **Server state** — TanStack Query. Use the orval-generated hooks in `frontend/src/api/`. The cache key includes the URL and query params; the `X-Workspace-ID` header is **not** part of the key, so when the user switches workspaces the app calls `queryClient.removeQueries()` (see `WorkspaceCacheReset` in `App.tsx`).
-- **UI state** — Zustand stores under `frontend/src/stores/`. `auth-store` and `workspace-store` are the two load-bearing ones. Never put server data in Zustand — it'll desync from React Query.
+# Child container
+curl -s -X POST "$ARCHFLOW_API_URL/api/v1/objects" \
+  -H "Authorization: Bearer $ARCHFLOW_API_KEY" \
+  -H "X-Workspace-ID: $ARCHFLOW_WORKSPACE_ID" \
+  -H "Content-Type: application/json" \
+  -d "{\"name\": \"Auth Service\", \"type\": \"container\", \"parent_id\": \"$SYSTEM_ID\"}"
+```
 
-### Calling the API
+## Step 2 — Wire connections
 
-`frontend/src/lib/api-client.ts` wraps axios with two interceptors: one stamps `Authorization: Bearer <token>` from `auth-store`, the other adds `X-Workspace-ID` from `workspace-store`. Always use the orval-generated hooks (`useListObjects`, `useCreateObject`, …) instead of raw axios — that way the workspace header and auth go through automatically.
+`POST /api/v1/connections`. Connections are directed: `source_id → target_id`.
 
-### Adding a route / page
+```bash
+curl -s -X POST "$ARCHFLOW_API_URL/api/v1/connections" \
+  -H "Authorization: Bearer $ARCHFLOW_API_KEY" \
+  -H "X-Workspace-ID: $ARCHFLOW_WORKSPACE_ID" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source_id": "<auth-service uuid>",
+    "target_id": "<postgres uuid>",
+    "label": "reads/writes",
+    "direction": "unidirectional",
+    "shape": "smoothstep"
+  }'
+```
 
-1. Create `frontend/src/pages/<Name>Page.tsx`. If the route is authed, do nothing special — the `<ProtectedRoute>` wrapper in `App.tsx` handles it.
-2. Add an `import` and a `<Route>` in `frontend/src/App.tsx`. Public routes (`/terms`, `/privacy`, `/docs`) sit *outside* the `<ProtectedRoute>` blocks.
-3. If the page lives in the authed shell, mirror an existing page (e.g., `ObjectsPage.tsx`) for the layout.
+- `direction`: `unidirectional` (single arrow) or `bidirectional` (arrow on both ends).
+- `shape`: `smoothstep | bezier | step | straight` — purely visual; pick `smoothstep` if you don't have a preference.
+- `label` is freeform text. Use it to describe the verb of the relationship ("reads", "publishes events to", "authenticates against").
 
-### Styling
+Both endpoints must already exist; you'll get `400 Source object not found` if not.
 
-TailwindCSS v4 with project-level CSS variables in `frontend/src/index.css` (look for `@theme { ... }`). The dark theme uses `--color-bg: #0a0a0b` and the brand coral `--color-coral: #FF6B35`. Use the design tokens (`bg-panel`, `border-base`, `text-2`, etc.) instead of hardcoded hex.
+If you got the direction wrong after the fact, don't recreate — flip:
 
-The `LegalLayout` (`frontend/src/pages/legal-layout.tsx`) is the canonical "public dark page" template; the `/docs` page reuses its visual chrome.
+```bash
+curl -s -X POST "$ARCHFLOW_API_URL/api/v1/connections/$CONN_ID/flip" \
+  -H "Authorization: Bearer $ARCHFLOW_API_KEY"
+```
 
-### Testing
+## Step 3 — Create a diagram
 
-- Vitest + jsdom + Testing Library. Test setup in `frontend/src/test-setup.ts`.
-- Co-locate test files (`Foo.test.tsx`) next to components.
-- `npm run test` is `vitest run` (CI mode); `npm run test:watch` for development.
+`POST /api/v1/diagrams`. A diagram is a canvas; its `type` is the C4 level you intend to draw at.
 
-## Git workflow
+```bash
+DIAGRAM_ID=$(curl -s -X POST "$ARCHFLOW_API_URL/api/v1/diagrams" \
+  -H "Authorization: Bearer $ARCHFLOW_API_KEY" \
+  -H "X-Workspace-ID: $ARCHFLOW_WORKSPACE_ID" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Identity Platform — L3 components",
+    "type": "L3",
+    "description": "Containers inside the Identity Platform system."
+  }' \
+  | jq -r .id)
+```
 
-`main` is protected. **Never commit there directly.** The convention from `CONTRIBUTING.md`:
+`type`: `L1 | L2 | L3 | L4 | flow`. The diagram does not auto-include any objects — that's the next step.
 
-- Branch names: `<type>/<kebab-description>` where type ∈ `feat fix refactor perf docs chore test style`.
-- Commit headlines: `<type>(<optional scope>): <imperative-mood summary>` (~70 chars). Body explains the *why*.
-- PRs squash-merge into `main`; the PR title becomes the squash commit message.
-- Local pre-PR checks: `make lint && make test`.
-- CI (`.github/workflows/deploy.yml`) builds backend and frontend Docker images on every PR; deploy runs only after merge to main. Pytest itself is **not** in CI.
-- Migrations must have a working `downgrade()`.
-- No commented-out code in PRs — `git remembers`.
-- Frontend PRs that change UI ship screenshots or short clips.
+## Step 4 — Place objects on the diagram
 
-Use `gh pr create` for PRs. Title and body should match the structure used in recent PRs (`gh pr list --limit 5` to see examples).
+`POST /api/v1/diagrams/{diagram_id}/objects` adds an existing object to a diagram with a position.
 
-## Where to look first
+```bash
+curl -s -X POST "$ARCHFLOW_API_URL/api/v1/diagrams/$DIAGRAM_ID/objects" \
+  -H "Authorization: Bearer $ARCHFLOW_API_KEY" \
+  -H "X-Workspace-ID: $ARCHFLOW_WORKSPACE_ID" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "object_id": "<auth-service uuid>",
+    "position_x": 240,
+    "position_y": 120,
+    "width": 220,
+    "height": 100
+  }'
+```
 
-| You want to…                            | Open                                                  |
-| --------------------------------------- | ----------------------------------------------------- |
-| Understand the full HTTP surface        | `docs/api/index.md` (or visit `/docs` in the UI)      |
-| See how auth resolves                   | `backend/app/api/deps.py`                             |
-| Add a route                             | mirror `backend/app/api/v1/objects.py`                |
-| Understand the realtime fanout          | `backend/app/realtime/manager.py` + the `_fanout_*` helpers in `objects.py`/`connections.py` |
-| Find a frontend page                    | `frontend/src/pages/`                                 |
-| Look at the design tokens               | `frontend/src/index.css` (the `@theme { ... }` block) |
-| Read why something was decided          | `docs/architecture/DECISIONS.md`                      |
-| Read the contribution rules             | `CONTRIBUTING.md`                                     |
+Coordinate system: top-left origin, units are pixels at 1× zoom. The web canvas uses a 24px grid, so multiples of 24 (or 120 = 5 × 24) lay out cleanly. Reasonable defaults:
+
+- `width`: 220 for a container, 180 for a component, 260 for a system, 80 for a person.
+- `height`: 100 for boxes, 120 for grouped boxes.
+- Spacing: leave at least 80px of horizontal gap and 60px of vertical gap between siblings, so labels don't collide with the connection routing.
+
+A simple "left-to-right pipeline" layout for N items: place the i-th item at `x = 120 + i * 320`, `y = 200`.
+
+You **must** add an object to a diagram for it to render there. Connections are *not* placed — they auto-route between whichever placements exist on the diagram. So the pattern is "place both endpoints of a connection on the diagram, and the edge appears."
+
+To move or resize a placement later:
+
+```bash
+curl -s -X PUT "$ARCHFLOW_API_URL/api/v1/diagrams/$DIAGRAM_ID/objects/$OBJECT_ID" \
+  -H "Authorization: Bearer $ARCHFLOW_API_KEY" \
+  -H "X-Workspace-ID: $ARCHFLOW_WORKSPACE_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"position_x": 480, "position_y": 320}'
+```
+
+To remove an object from a diagram (it survives elsewhere):
+
+```bash
+curl -s -X DELETE "$ARCHFLOW_API_URL/api/v1/diagrams/$DIAGRAM_ID/objects/$OBJECT_ID" \
+  -H "Authorization: Bearer $ARCHFLOW_API_KEY" \
+  -H "X-Workspace-ID: $ARCHFLOW_WORKSPACE_ID"
+```
+
+## Querying existing diagrams
+
+| Need                            | Endpoint                                                    |
+| ------------------------------- | ----------------------------------------------------------- |
+| List diagrams in workspace      | `GET /api/v1/diagrams`                                      |
+| One diagram's metadata          | `GET /api/v1/diagrams/{id}`                                 |
+| Object placements on a diagram  | `GET /api/v1/diagrams/{id}/objects`                         |
+| All objects in workspace        | `GET /api/v1/objects` (filter with `?type=`, `?status=`)    |
+| Diagrams that contain an object | `GET /api/v1/objects/{id}/diagrams`                         |
+| All connections                 | `GET /api/v1/connections`                                   |
+| Connections between two objects | `GET /api/v1/connections/between?src=<uuid>&tgt=<uuid>`     |
+| Direct children of an object    | `GET /api/v1/objects/{id}/children`                         |
+| Resolved upstream/downstream    | `GET /api/v1/objects/{id}/dependencies`                     |
+
+To reconstruct the full picture of a diagram (objects + their positions + the edges between them):
+
+1. `GET /api/v1/diagrams/{id}/objects` → list of `{object_id, position_x, position_y, width, height}`.
+2. For each `object_id`, `GET /api/v1/objects/{object_id}` → the actual object metadata (name, type, description, tags).
+3. `GET /api/v1/connections` → filter to those whose `source_id` and `target_id` are both in step 1's set; those are the edges that render on this diagram.
+
+## Error handling
+
+| Status | What it means                                                                 | What to do                                                  |
+| ------ | ----------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| 400    | Validation error — bad enum, missing required field, unknown referenced UUID | Read `detail`, fix the payload, retry                       |
+| 401    | Missing/invalid/revoked/expired token                                         | Stop. Ask the user for a new key                            |
+| 403    | Authenticated but not allowed (e.g., editor-only endpoint, workspace member with insufficient role) | Stop. Tell the user which role is required               |
+| 404    | Resource doesn't exist *or* the caller can't see it (workspace isolation often surfaces as 404) | Verify your `X-Workspace-ID`; verify the UUID exists; don't retry blindly |
+| 409    | Conflict — most commonly a duplicate slug on technologies, or deleting a tech that's still referenced | Read `detail`; for tech deletes, fetch `/usage` and clean refs first |
+| 429    | Rate limited — per-key sliding window                                         | Inspect `Retry-After`/`X-RateLimit-Reset` headers, sleep, retry |
+| 5xx    | Server error                                                                  | Retry with exponential backoff up to ~3 attempts; surface to user if persistent |
+
+Error envelope is always `{"detail": "<human-readable message>"}` (sometimes `detail` is an object for structured errors like 409 on technology deletes).
+
+Always inspect response status before parsing the body. A non-2xx body usually doesn't match the success schema and will crash a strict parser if you skip the status check.
+
+### Idempotency
+
+The API is **not** idempotent at the HTTP level — there is no `Idempotency-Key` header today. If you retry a `POST /objects` after a network blip you may end up with two duplicate objects. Defenses:
+
+- Before retrying a create, list the resource (`GET /objects?type=container`) and check whether the previous attempt already landed.
+- For batch jobs, write a small client-side dedupe based on `name + type + parent_id`.
+- For destructive retries, `DELETE` first, then re-create.
+
+## Realtime
+
+API keys cannot authenticate the WebSocket endpoints (`/api/v1/ws/*`) — those need a JWT access token. If the user wants realtime updates from an agent that only has an API key, the agent must poll. Reasonable polling intervals:
+
+- Workspace-level overview (objects + connections changing): 10–30 s.
+- One specific diagram (you're watching for collaborator edits): 5–10 s.
+
+For most agent workflows this doesn't matter — you make a change, you got the response, you already know the new state. Polling is only needed if you're watching for *other* clients' edits.
+
+## Putting it all together — a runnable Python example
+
+The single most useful pattern: build a small system end-to-end and verify it. This script creates two objects, connects them, makes a diagram, and places them.
+
+```python
+"""Build a tiny architecture diagram via the ArchFlow API.
+
+Usage:
+    export ARCHFLOW_API_URL=https://api.archflow.tools
+    export ARCHFLOW_API_KEY=ak_xxx
+    export ARCHFLOW_WORKSPACE_ID=<uuid>   # optional; uses default workspace if unset
+    python build_demo_diagram.py
+"""
+import os
+import sys
+import requests
+
+BASE = os.environ["ARCHFLOW_API_URL"].rstrip("/")
+KEY = os.environ["ARCHFLOW_API_KEY"]
+WORKSPACE = os.environ.get("ARCHFLOW_WORKSPACE_ID")
+
+session = requests.Session()
+session.headers["Authorization"] = f"Bearer {KEY}"
+if WORKSPACE:
+    session.headers["X-Workspace-ID"] = WORKSPACE
+
+
+def call(method: str, path: str, **kwargs) -> dict | None:
+    """Wrapper that surfaces ArchFlow's {"detail": ...} error envelope."""
+    response = session.request(method, f"{BASE}{path}", timeout=15, **kwargs)
+    if not response.ok:
+        try:
+            detail = response.json().get("detail")
+        except ValueError:
+            detail = response.text
+        sys.exit(f"{method} {path} -> {response.status_code}: {detail}")
+    return response.json() if response.content else None
+
+
+# 0) sanity check — confirms the key works
+me = call("GET", "/api/v1/auth/me")
+print(f"Authenticated as {me['email']}")
+
+# 1) ensure we know which workspace we're operating in
+if not WORKSPACE:
+    workspaces = call("GET", "/api/v1/workspaces")
+    if len(workspaces) != 1:
+        sys.exit(
+            "ARCHFLOW_WORKSPACE_ID is unset and the user belongs to "
+            f"{len(workspaces)} workspaces. Please set it explicitly."
+        )
+    session.headers["X-Workspace-ID"] = workspaces[0]["id"]
+    print(f"Using workspace {workspaces[0]['name']}")
+
+# 2) create the objects
+user = call("POST", "/api/v1/objects",
+            json={"name": "End User", "type": "person", "scope": "external"})
+api = call("POST", "/api/v1/objects",
+           json={"name": "Public API", "type": "container",
+                 "description": "FastAPI service.", "tags": ["edge"]})
+db = call("POST", "/api/v1/objects",
+          json={"name": "Postgres", "type": "container",
+                "description": "Primary datastore.", "tags": ["data"]})
+print(f"Created: user={user['id']}  api={api['id']}  db={db['id']}")
+
+# 3) wire the connections
+call("POST", "/api/v1/connections",
+     json={"source_id": user["id"], "target_id": api["id"],
+           "label": "uses", "shape": "smoothstep"})
+call("POST", "/api/v1/connections",
+     json={"source_id": api["id"], "target_id": db["id"],
+           "label": "reads/writes", "shape": "smoothstep"})
+
+# 4) make a diagram
+diagram = call("POST", "/api/v1/diagrams",
+               json={"name": "Demo system — L3", "type": "L3"})
+print(f"Diagram id: {diagram['id']}")
+
+# 5) place the objects left-to-right
+for i, obj in enumerate([user, api, db]):
+    call("POST", f"/api/v1/diagrams/{diagram['id']}/objects",
+         json={"object_id": obj["id"],
+               "position_x": 120 + i * 320,
+               "position_y": 240,
+               "width": 220, "height": 100})
+
+# 6) verify
+placements = call("GET", f"/api/v1/diagrams/{diagram['id']}/objects")
+print(f"Diagram now has {len(placements)} placed objects.")
+```
+
+Bash flavor of the same flow is mechanical — replace `session.request(...)` with `curl`, capture ids with `jq -r .id`.
 
 ## Common pitfalls
 
-- **Forgetting the workspace header.** Workspace-scoped endpoints fall back to the user's *oldest* workspace if `X-Workspace-ID` is missing. This is a frequent source of "why are my objects in the wrong place?" bugs in scripts.
-- **Skipping fanout.** A mutation that updates the DB but doesn't publish to the workspace channel won't show up in other users' UIs until a manual refresh.
-- **Capturing relationships before delete.** When you delete an object/connection that fans out to diagrams, capture the diagram set *before* the delete — junction rows go with the row.
-- **Hand-editing `frontend/src/api/`.** It's regenerated by `npm run api:generate`. Hand edits are lost on the next regeneration.
-- **Bypassing the service layer.** Don't put queries directly in routers. Tests and WS handlers reuse the service layer; duplicating logic in a router will silently diverge.
-- **Pushing to `main`.** Branch protection will reject it. Always branch and PR.
-- **Running pytest without infra.** Many tests need Postgres + Redis; bring them up with `docker compose -f docker/docker-compose.dev.yml up -d` before running the suite.
+- **Forgetting `X-Workspace-ID`.** The default-workspace fallback is silent; you'll only notice when the objects you "created" don't appear where the user is looking. Always set the header on mutations.
+- **Creating a connection before both endpoints exist.** API returns 400. Create both objects, then the connection.
+- **Expecting connections to render without placing both endpoints.** The diagram only renders edges where both endpoints are placed on *that* diagram.
+- **Using the API key on a WebSocket.** Won't work. Poll, or get a JWT.
+- **Treating placements like edits to the object.** Moving an object on diagram A doesn't move it on diagram B — placements are per-diagram.
+- **Retrying a `POST` after a timeout.** Without idempotency, you'll create duplicates. List first, then act.
+- **Hardcoding a workspace UUID across users.** If you're sharing a script, always look up the workspace by name or ask the user — UUIDs are per-account.
+- **Ignoring 429.** The rate limit is per-API-key. Honor `Retry-After`; back off don't hammer.
 
-## License
+## Quick reference
 
-ArchFlow itself is AGPL-3.0. By contributing, you agree your contribution is licensed under the same terms — see `LICENSE` in the repo root.
+| Action                          | Endpoint                                                     |
+| ------------------------------- | ------------------------------------------------------------ |
+| Verify key                      | `GET /api/v1/auth/me`                                        |
+| List workspaces                 | `GET /api/v1/workspaces`                                     |
+| Create workspace                | `POST /api/v1/workspaces`                                    |
+| Create object                   | `POST /api/v1/objects`                                       |
+| Update object                   | `PUT /api/v1/objects/{id}`                                   |
+| Delete object                   | `DELETE /api/v1/objects/{id}` (cascades placements + edges)  |
+| Create connection               | `POST /api/v1/connections`                                   |
+| Flip connection                 | `POST /api/v1/connections/{id}/flip`                         |
+| Delete connection               | `DELETE /api/v1/connections/{id}`                            |
+| Create diagram                  | `POST /api/v1/diagrams`                                      |
+| Add object to diagram           | `POST /api/v1/diagrams/{id}/objects`                         |
+| Move/resize placement           | `PUT /api/v1/diagrams/{id}/objects/{object_id}`              |
+| Remove placement (keep object)  | `DELETE /api/v1/diagrams/{id}/objects/{object_id}`           |
+| Read placements                 | `GET /api/v1/diagrams/{id}/objects`                          |
+| Read all diagrams               | `GET /api/v1/diagrams`                                       |
+
+For the full HTTP surface, see ArchFlow's own `/docs` page or the markdown mirror under [`docs/api/`](https://github.com/TheAlexPG/ArchFlow/tree/main/docs/api).
