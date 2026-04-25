@@ -6,14 +6,11 @@ export function WorkspacesSection() {
     <section id="workspaces">
       <h2>Workspaces</h2>
       <p>
-        A workspace is the unit of isolation for objects, connections,
-        diagrams, technologies, teams and members. Every user is provisioned
-        a personal workspace at sign-up. Most resource calls are
-        workspace-scoped via the <code>X-Workspace-ID</code> header.
-      </p>
-      <p>
-        Roles are <code>owner</code>, <code>admin</code>, <code>editor</code>,
-        and <code>viewer</code>. Mutating endpoints check the caller's role.
+        The unit of isolation for objects, connections, diagrams, technologies,
+        teams and members. Every user is provisioned one at sign-up; most
+        resource calls scope to it via the <code>X-Workspace-ID</code> header.
+        Mutating endpoints check the caller's role — <code>owner</code>,{' '}
+        <code>admin</code>, <code>editor</code>, or <code>viewer</code>.
       </p>
 
       <h3 id="workspaces-list">List my workspaces</h3>

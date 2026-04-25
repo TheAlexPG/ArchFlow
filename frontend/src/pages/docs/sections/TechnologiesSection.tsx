@@ -6,10 +6,10 @@ export function TechnologiesSection() {
     <section id="technologies">
       <h2>Technologies</h2>
       <p>
-        Technologies are the labels you attach to objects and connections
-        ("PostgreSQL", "REST", "gRPC"). Each workspace gets the read-only
-        built-in catalog plus its own custom set. Custom technologies are
-        scoped to a single workspace.
+        Tags you attach to objects and connections — "PostgreSQL", "REST",
+        "gRPC". Every workspace sees the read-only built-in catalog and can
+        layer its own custom entries on top; custom technologies stay scoped
+        to the workspace that created them.
       </p>
 
       <h3 id="technologies-shape">Shape</h3>

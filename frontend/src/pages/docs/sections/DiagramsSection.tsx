@@ -6,10 +6,11 @@ export function DiagramsSection() {
     <section id="diagrams">
       <h2>Diagrams</h2>
       <p>
-        A diagram is a 2D canvas that pins a set of objects at specific
-        positions. Diagrams have a type (a C4 level shorthand) and live in a
-        workspace. Add objects to a diagram via{' '}
-        <code>POST /diagrams/{'{id}'}/objects</code>.
+        A 2D canvas that pins a set of objects at specific positions. Each
+        diagram has a C4 level (<code>L1</code>–<code>L4</code> or{' '}
+        <code>flow</code>) and lives in one workspace. Place objects onto it
+        with <code>POST /diagrams/{'{id}'}/objects</code>; the same object can
+        appear on many diagrams with independent positions.
       </p>
 
       <h3 id="diagrams-shape">Shape</h3>

@@ -6,9 +6,10 @@ export function WebhooksSection() {
     <section id="webhooks">
       <h2>Webhooks</h2>
       <p>
-        Webhooks deliver workspace events to an HTTPS endpoint of your
-        choice. Each delivery is signed with the per-webhook secret so you
-        can verify authenticity. The secret is shown only at creation time.
+        HTTPS callbacks for workspace events — subscribe an endpoint, receive
+        a signed POST whenever a relevant change lands. Each delivery is
+        signed with the per-webhook secret (HMAC-SHA256) so you can verify
+        authenticity; the secret itself is returned only at creation time.
       </p>
 
       <h3 id="webhooks-events">Event catalog</h3>

@@ -6,10 +6,11 @@ export function RealtimeSection() {
     <section id="realtime">
       <h2>Realtime (WebSocket)</h2>
       <p>
-        Three WebSocket endpoints surface live state. All authenticate via a
-        JWT access token passed as a <code>?token=</code> query parameter
-        (the standard browser WebSocket API does not support custom auth
-        headers).
+        Three WebSocket channels for live state — diagram presence/cursors, a
+        workspace-wide change firehose, and a per-user notification stream.
+        All authenticate via a JWT access token passed as <code>?token=</code>{' '}
+        on the query string (browser WebSockets cannot set custom headers; API
+        keys are not currently accepted on WS).
       </p>
 
       <h3 id="realtime-diagram">Diagram room</h3>

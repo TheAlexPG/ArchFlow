@@ -6,20 +6,12 @@ export function AuthSection() {
     <section id="auth">
       <h2>Authentication</h2>
       <p>
-        ArchFlow accepts two credential types on the same{' '}
-        <code>Authorization</code> header:
+        Register users, trade credentials for tokens, and resolve the current
+        identity. Two credential types are accepted on the same{' '}
+        <code>Authorization</code> header — short-lived JWTs (good for browser
+        sessions) and long-lived API keys prefixed <code>ak_</code> (good for
+        agents; see <a href="#api-keys">API Keys</a>).
       </p>
-      <ul>
-        <li>
-          <strong>JWT bearer</strong> — short-lived access token from{' '}
-          <code>POST /auth/login</code> (or refresh).
-        </li>
-        <li>
-          <strong>API key</strong> — long-lived token prefixed with{' '}
-          <code>ak_</code>, ideal for agents. See{' '}
-          <a href="#api-keys">API Keys</a>.
-        </li>
-      </ul>
       <CodeBlock title="Authorization header (either)">
 {`Authorization: Bearer <jwt access token>
 Authorization: Bearer ak_<api key secret>`}

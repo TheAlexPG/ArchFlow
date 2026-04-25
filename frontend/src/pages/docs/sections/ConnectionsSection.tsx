@@ -6,9 +6,10 @@ export function ConnectionsSection() {
     <section id="connections">
       <h2>Connections</h2>
       <p>
-        A connection is a directed relationship between two objects (the
-        edge in your diagram). It carries an optional label, protocol tags,
-        direction, edge shape and label size, plus optional waypoints.
+        Directed edges between two objects. Each connection carries an
+        optional label, protocol tags, edge shape, and direction
+        (uni- or bidirectional), plus optional waypoints for routing the line
+        on the canvas.
       </p>
 
       <h3 id="connections-shape">Shape</h3>

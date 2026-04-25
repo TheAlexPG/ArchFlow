@@ -5,9 +5,10 @@ export function MiscSection() {
     <section id="misc">
       <h2>Other endpoints</h2>
       <p>
-        These endpoints are useful but secondary for most agents. They are
-        listed here so you know they exist; consult the source for full
-        request/response shapes.
+        Secondary surfaces — drafts, comments, activity, versions, members &amp;
+        invites, teams, packs, diagram access, flows, export/import, and
+        notifications. Listed in compact form so you know they exist; consult
+        the source or OpenAPI for full request/response shapes.
       </p>
 
       <h3 id="misc-drafts">Drafts</h3>
