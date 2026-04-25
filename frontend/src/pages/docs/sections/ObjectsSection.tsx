@@ -6,10 +6,10 @@ export function ObjectsSection() {
     <section id="objects">
       <h2>Objects</h2>
       <p>
-        An <em>object</em> is the canonical building block of an architecture
-        model — a system, container, component, person, or group. Objects live
-        in a workspace and can be added to one or more diagrams (each
-        membership carries its own position).
+        The building blocks of an architecture model — a system, container,
+        component, person, or group. Objects live in a workspace and can appear
+        on multiple diagrams; each placement carries its own position so the
+        same object can sit anywhere on each canvas.
       </p>
 
       <h3 id="objects-shape">Shape</h3>

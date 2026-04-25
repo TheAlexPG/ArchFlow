@@ -6,14 +6,10 @@ export function ApiKeysSection() {
     <section id="api-keys">
       <h2>API Keys</h2>
       <p>
-        API keys are long-lived credentials suited for AI agents and CI
-        integrations. They begin with <code>ak_</code> and are presented as
-        plaintext on the <code>Authorization</code> header.
-      </p>
-      <p>
-        The full secret is returned <strong>only at creation time</strong> — store
-        it immediately. Subsequent <code>GET</code> calls return only the{' '}
-        <code>key_prefix</code>.
+        Long-lived bearer tokens for agents and CI integrations. Keys begin
+        with <code>ak_</code> and ride the standard <code>Authorization</code>{' '}
+        header. The full secret is returned <strong>only at creation</strong>{' '}
+        — store it immediately; later reads expose only the prefix.
       </p>
 
       <h3 id="api-keys-create">Create key</h3>
