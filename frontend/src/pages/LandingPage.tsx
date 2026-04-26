@@ -99,17 +99,17 @@ function Hero() {
           Self-hosted · AGPL-3.0 open source
         </div>
         <h1 className="text-4xl md:text-6xl font-bold tracking-tight leading-[1.1]">
-          <span className="text-neutral-100">Architecture diagrams</span>
+          <span className="text-neutral-100">Map your architecture.</span>
           <br />
           <span className="bg-gradient-to-r from-orange-400 via-orange-300 to-fuchsia-400 bg-clip-text text-transparent">
-            that stay in sync with reality.
+            From satellite to syscall.
           </span>
         </h1>
         <p className="mt-6 text-lg text-neutral-400 max-w-2xl mx-auto leading-relaxed">
-          Most architecture tools give you pretty pictures that rot the moment
-          someone renames a service. ArchFlow treats your architecture as a
-          <span className="text-neutral-200"> typed, versioned, collaborative model</span> —
-          drill from landscape to component, branch like git, review like code.
+          Four C4 levels —{' '}
+          <span className="text-neutral-200">context, container, component, code</span>{' '}
+          — sitting on a typed, versioned model your team branches and reviews like code.
+          <span className="text-neutral-200"> The map that doesn&apos;t go stale.</span>
         </p>
         <div className="mt-9 flex flex-wrap gap-3 justify-center">
           <Link
