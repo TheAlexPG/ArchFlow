@@ -67,6 +67,36 @@ explicitly wants a free-standing diagram.
    plan the **first coherent phase** (≤ 40 steps) and describe the
    remaining phases inside `goal` so the supervisor can call you again.
 
+7. **Infer obvious connections among siblings.** When the user adds 2+
+   components/apps inside the same parent (Facade, System, App,
+   microservices group, etc.), do NOT stop at `create_object` steps.
+   Add `create_connection` steps for relationships that are visually
+   self-evident from naming or role:
+
+   - `*Controller` typically calls a matching `*Service` / `*System`.
+     Example: `User Controller → User Service`,
+     `Project Controller → Project System`.
+   - A wrapper / orchestrator (Facade, API Gateway) connects **into**
+     each internal component it fronts.
+   - Every Controller / Service that owns persistent state connects
+     **outbound** to the parent's database (e.g. each Controller →
+     `Postgres`).
+   - Auth / Identity components are inbound dependencies of every
+     component that does access checks.
+   - "X System for Y" means Y consumes X (e.g. `License System` is
+     consumed by `User Controller` for access checks; `Payment System`
+     is consumed by `Project Controller` to charge for projects).
+   - When two siblings clearly serve unrelated domains, leave them
+     disconnected and note that in the plan's `goal`.
+
+   **Mark each inferred connection's `rationale` with the prefix
+   `"inferred: "`** — the diagram-agent uses this to tell the user in
+   the recap that these are guesses they may want to revise.
+
+   When the supervisor's brief explicitly says "propose connections from
+   naming", treat that as required — without inferred connections the
+   user gets orphan boxes and the design is useless.
+
 ## Output format — STRICT JSON
 
 Return **only** a JSON object that validates against this schema. No
@@ -153,5 +183,74 @@ If your search had returned an existing Redis (id `o-redis`), step 1
 would have been dropped, the placeholder `"<step 1 result>"` replaced
 with `"o-redis"`, and `reuse_findings` would gain
 `"reuses Redis id=o-redis"`.
+
+## Worked example 2 — multi-component design with inferred connections
+
+User: *"add Facade containing User Controller, Project Controller,
+Payment System, License System, Postgres — and connect Facade to APP
+frontend (id `o-app-frontend`)."*
+
+A complete plan **must** include the obvious internal connections:
+
+```json
+{
+  "goal": "Build Facade with 5 internal components and the connections among them.",
+  "steps": [
+    {"index": 0, "kind": "create_object",
+     "args": {"name": "Facade", "kind": "app", "level": "L2",
+              "parent_object_id": "o-app-frontend"},
+     "depends_on": [], "rationale": "Container that fronts the controllers."},
+    {"index": 1, "kind": "create_child_diagram_for_object",
+     "args": {"object_id": "<step 0 result>", "name": "Facade Internal", "level": "L3"},
+     "depends_on": [0], "rationale": "Drill-down for Facade internals."},
+    {"index": 2, "kind": "create_object",
+     "args": {"name": "User Controller", "kind": "component", "level": "L3"},
+     "depends_on": [], "rationale": "Handles user-domain operations."},
+    {"index": 3, "kind": "create_object",
+     "args": {"name": "Project Controller", "kind": "component", "level": "L3"},
+     "depends_on": [], "rationale": "Handles project-domain operations."},
+    {"index": 4, "kind": "create_object",
+     "args": {"name": "Payment System", "kind": "component", "level": "L3"},
+     "depends_on": [], "rationale": "Charge processing."},
+    {"index": 5, "kind": "create_object",
+     "args": {"name": "License System", "kind": "component", "level": "L3"},
+     "depends_on": [], "rationale": "Access / licence checks."},
+    {"index": 6, "kind": "create_object",
+     "args": {"name": "Postgres", "kind": "store", "level": "L3", "technology": "PostgreSQL"},
+     "depends_on": [], "rationale": "Persistence for the Facade domain."},
+
+    {"index": 7, "kind": "create_connection",
+     "args": {"from_object_id": "<step 0 result>", "to_object_id": "o-app-frontend",
+              "direction": "bidirectional", "label": "communicates with"},
+     "depends_on": [0],
+     "rationale": "Facade ↔ APP frontend (user-stated)."},
+
+    {"index": 8, "kind": "create_connection",
+     "args": {"from_object_id": "<step 2 result>", "to_object_id": "<step 6 result>",
+              "label": "CRUD"},
+     "depends_on": [2, 6],
+     "rationale": "inferred: User Controller persists to Postgres."},
+    {"index": 9, "kind": "create_connection",
+     "args": {"from_object_id": "<step 3 result>", "to_object_id": "<step 6 result>",
+              "label": "CRUD"},
+     "depends_on": [3, 6],
+     "rationale": "inferred: Project Controller persists to Postgres."},
+    {"index": 10, "kind": "create_connection",
+     "args": {"from_object_id": "<step 3 result>", "to_object_id": "<step 4 result>",
+              "label": "charge"},
+     "depends_on": [3, 4],
+     "rationale": "inferred: Project Controller drives Payment System charges."},
+    {"index": 11, "kind": "create_connection",
+     "args": {"from_object_id": "<step 2 result>", "to_object_id": "<step 5 result>",
+              "label": "verify access"},
+     "depends_on": [2, 5],
+     "rationale": "inferred: User Controller checks License System for access."}
+  ],
+  "reuse_findings": ["reuses APP frontend id=o-app-frontend"]
+}
+```
+
+Note: every internal-edge step has `rationale` starting with `"inferred:"`
+so the diagram-agent can flag them in its recap.
 
 Now plan.

@@ -315,9 +315,10 @@ def make_critic_config(
 ) -> NodeConfig:
     """Build the NodeConfig for the critic ReAct loop.
 
-    - max_steps=3 (lowered from 6 — qwen would burn 200+ seconds emitting
-      multi-thousand-token reasoning before reaching a verdict; verdict +
-      one supporting tool fetch fits in 3 steps)
+    - max_steps=200 — generous ceiling; cost is bounded by the workspace
+      budget guard, not this counter. Critic usually converges in 1-2
+      steps on simple verdicts; complex revise loops occasionally need
+      4-5 read calls.
     - output_schema=Critique (structured JSON output)
     - additional_system_blocks render the original goal and applied changes
     - ``tool_filter`` — optional callable applied to ``CRITIC_TOOLS`` for
@@ -329,7 +330,7 @@ def make_critic_config(
         system_prompt=load_critic_prompt(),
         tools=tools,
         tool_executor=tool_executor,
-        max_steps=3,
+        max_steps=200,
         output_schema=Critique,
         additional_system_blocks=[
             render_active_context_block,

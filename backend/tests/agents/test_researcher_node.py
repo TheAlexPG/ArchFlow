@@ -173,11 +173,9 @@ def test_findings_missing_summary_raises():
 
 
 def test_make_researcher_config_max_steps():  # noqa: D103
-    """Lowered from 6 → 4 in 2026-05 to stop qwen looping on tool calls (it
-    would resolve technology_ids as object_ids, get not-found, retry, and so
-    on for the full step budget)."""
+    """Generous step ceiling — cost is enforced via the workspace budget."""
     cfg = make_researcher_config(_noop_tool_executor)
-    assert cfg.max_steps == 4
+    assert cfg.max_steps == 200
 
 
 def test_make_researcher_config_output_schema():

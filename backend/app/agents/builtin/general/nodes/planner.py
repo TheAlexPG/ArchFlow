@@ -214,7 +214,8 @@ def make_planner_config(
 ) -> NodeConfig:
     """Build the :class:`NodeConfig` for the planner node.
 
-    - ``max_steps=6`` matches the spec's planner budget (§3.2).
+    - ``max_steps=200`` — high ceiling so the planner never aborts mid-decompose
+      on a multi-component design. Real cost guard is the workspace budget.
     - ``output_schema=Plan`` so :func:`run_react` parses the final JSON.
     - ``enable_streaming=False`` — the planner returns one JSON object.
     - No ``additional_system_blocks`` — the planner has no scratchpad.
@@ -231,7 +232,7 @@ def make_planner_config(
         system_prompt=load_planner_prompt(),
         tools=tools,
         tool_executor=tool_executor,
-        max_steps=6,
+        max_steps=200,
         output_schema=Plan,
         enable_streaming=False,
         additional_system_blocks=[

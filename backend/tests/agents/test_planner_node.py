@@ -271,10 +271,10 @@ def test_topological_order_raises_on_duplicate_indices():
 # ---------------------------------------------------------------------------
 
 
-def test_make_planner_config_uses_plan_schema_and_six_steps():
+def test_make_planner_config_uses_plan_schema_and_high_step_ceiling():
     cfg = planner.make_planner_config(_make_tool_executor())
     assert cfg.name == "planner"
-    assert cfg.max_steps == 6
+    assert cfg.max_steps == 200
     assert cfg.output_schema is Plan
     assert cfg.enable_streaming is False
     names = [b.__name__ for b in cfg.additional_system_blocks]

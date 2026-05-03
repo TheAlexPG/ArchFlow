@@ -143,7 +143,7 @@ def make_researcher_config(
 ) -> NodeConfig:
     """Build the NodeConfig for the researcher node.
 
-    Spec: max_steps=6, output_schema=Findings, enable_streaming=False.
+    Spec: max_steps=200, output_schema=Findings, enable_streaming=False.
 
     Tool definitions are pulled from the global registry and serialised via
     ``Tool.to_openai_schema`` — names that aren't registered yet are skipped
@@ -167,12 +167,13 @@ def make_researcher_config(
         system_prompt=load_researcher_prompt(),
         tools=tools,
         tool_executor=tool_executor,
-        # Local models (qwen) tend to loop on tool calls when something
-        # surprises them (e.g. resolving technology_ids as object_ids,
-        # getting "not found", retrying with the same uuid in a different
-        # tool, etc). 4 steps is enough for a sensible read-diagram-then-
-        # describe path; anything longer is almost always wandering.
-        max_steps=4,
+        # Generous step ceiling — the workspace budget is the real cost
+        # guard. Earlier we capped at 4 to prevent qwen from looping on
+        # confused tool calls; with the post-#48 prompts the loop pressure
+        # is much lower and complex investigations occasionally need
+        # 6-10 steps (read_diagram → list_child_diagrams → read_object_full
+        # × N → web_fetch).
+        max_steps=200,
         output_schema=Findings,
         enable_streaming=False,
         additional_system_blocks=[

@@ -13,7 +13,7 @@ Owns:
   * :func:`render_pending_changes_block` / :func:`render_active_diagram_block`
     — system-block renderers attached to ``NodeConfig.additional_system_blocks``
     so the LLM always sees the current plan progress and active draft target.
-  * :func:`make_diagram_config` — composes a ``NodeConfig`` with ``max_steps=10``
+  * :func:`make_diagram_config` — composes a ``NodeConfig`` with ``max_steps=200``
     per spec §3.3 ("Diagram-agent: ReAct loop, max 10 steps").
   * :func:`run` — async generator wrapping :func:`run_react`. After the loop
     finishes, parses tool results to accumulate ``applied_changes`` and marks
@@ -718,7 +718,7 @@ def make_diagram_config(
         system_prompt=load_diagram_prompt(),
         tools=tools,
         tool_executor=tool_executor,
-        max_steps=10,
+        max_steps=200,
         output_schema=None,
         additional_system_blocks=[
             render_pending_changes_block,

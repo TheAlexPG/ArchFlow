@@ -267,9 +267,9 @@ def test_critic_tools_are_openai_shape():
 
 
 def test_make_critic_config_max_steps():
-    """Lowered from 6 to 3 to keep critic quick on local models."""
+    """Generous step ceiling — workspace budget is the real cost guard."""
     cfg = make_critic_config(_noop_tool_executor)
-    assert cfg.max_steps == 3
+    assert cfg.max_steps == 200
 
 
 def test_make_critic_config_output_schema():

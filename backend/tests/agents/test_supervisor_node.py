@@ -229,7 +229,7 @@ def test_render_applied_changes_block_caps_to_five():
 def test_make_supervisor_config_sets_expected_knobs():
     cfg = make_supervisor_config(_make_executor())
     assert cfg.name == "supervisor"
-    assert cfg.max_steps == 12
+    assert cfg.max_steps == 200
     assert cfg.enable_streaming is True
     assert cfg.output_schema is None
     # All declared SUPERVISOR_TOOLS land on the config.

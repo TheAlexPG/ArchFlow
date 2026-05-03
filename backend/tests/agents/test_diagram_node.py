@@ -357,7 +357,7 @@ def test_make_diagram_config_shape():
     cfg = make_diagram_config(executor)
 
     assert cfg.name == "diagram"
-    assert cfg.max_steps == 10
+    assert cfg.max_steps == 200
     assert cfg.output_schema is None
     assert cfg.tools is DIAGRAM_TOOLS
     assert cfg.tool_executor is executor
@@ -676,20 +676,40 @@ async def test_run_tool_error_does_not_crash_assistant_continues():
 
 
 @pytest.mark.asyncio
-async def test_run_long_path_reaches_max_steps_cleanly():
-    """Every step asks for a tool — never terminal → max_steps=10 trips."""
+async def test_run_long_path_reaches_max_steps_cleanly(monkeypatch):
+    """Every step asks for a tool — never terminal → max_steps trips.
+
+    The diagram node ships with a generous ``max_steps=200`` so the workspace
+    budget — not this counter — is the real cost guard. Re-running the loop
+    test against 200 iterations would be slow and brittle; we instead patch
+    the config to a small ceiling and verify run_react still terminates
+    cleanly with ``forced_finalize='max_steps'``.
+    """
+    from app.agents.builtin.general.nodes import diagram as diagram_node
+
+    real_make = diagram_node.make_diagram_config
+
+    def small_ceiling_config(*args, **kwargs):
+        cfg = real_make(*args, **kwargs)
+        # Replace the dataclass with a small max_steps via dataclasses.replace.
+        from dataclasses import replace as _replace
+
+        return _replace(cfg, max_steps=10)
+
+    monkeypatch.setattr(
+        diagram_node, "make_diagram_config", small_ceiling_config
+    )
+
     forever_call = {
         "id": "loop",
         "name": "read_diagram",
         "arguments": json.dumps({"diagram_id": str(uuid4())}),
     }
-    # 12 successive tool-call results — run_react will only hit max_steps=10.
+    # 12 successive tool-call results — patched max_steps=10 traps the loop.
     results = [_llm_result(text=None, tool_calls=[forever_call]) for _ in range(12)]
     enforcer = _make_enforcer(results=results)
     cm = _make_context_manager()
 
-    # Tool always succeeds with a simple ok payload (no canonical action → no
-    # applied_changes accumulated; that's expected for read tools).
     executor = _make_tool_executor(
         results=[
             {
@@ -716,7 +736,7 @@ async def test_run_long_path_reaches_max_steps_cleanly():
 
     output = _terminal_output(events)
     assert output.forced_finalize == "max_steps"
-    # max_steps=10 → exactly 10 tool calls executed.
+    # Patched max_steps=10 → exactly 10 tool calls executed.
     assert output.tool_calls_made == 10
     # Read-only tool results carry no canonical 'action' → no applied_changes.
     assert output.state_patch.get("applied_changes", []) == []

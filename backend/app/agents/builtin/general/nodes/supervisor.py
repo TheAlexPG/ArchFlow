@@ -371,7 +371,10 @@ def make_supervisor_config(
 
     Knobs:
 
-      * ``max_steps=12`` — see spec §3.3 step budget table.
+      * ``max_steps=200`` — generous ceiling so the supervisor never aborts
+        with ``forced_finalize=max_steps`` during a real architecture-design
+        session. The actual cost guard lives in
+        :class:`LimitsEnforcer` (turn / budget caps), not in this counter.
       * ``enable_streaming=True`` — supervisor speaks to the user.
       * ``output_schema=None`` — free-form text; structured output is for
         sub-agents (planner, critic).
@@ -388,7 +391,7 @@ def make_supervisor_config(
         system_prompt=load_supervisor_prompt(),
         tools=tools,
         tool_executor=tool_executor,
-        max_steps=12,
+        max_steps=200,
         output_schema=None,
         enable_streaming=True,
         additional_system_blocks=[
