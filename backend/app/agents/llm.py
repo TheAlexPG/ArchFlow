@@ -104,7 +104,7 @@ class LLMClient:
         model_override: str | None = None,
         max_tokens: int | None = None,
         temperature: float | None = None,
-        timeout: float = 90.0,
+        timeout: float = 2000.0,
     ) -> LLMResult:
         """Make one chat completion call. Non-streaming."""
         kwargs = self._build_call_kwargs(
@@ -156,7 +156,7 @@ class LLMClient:
         model_override: str | None = None,
         max_tokens: int | None = None,
         temperature: float | None = None,
-        timeout: float = 90.0,
+        timeout: float = 2000.0,
     ) -> AsyncIterator[dict]:
         """Async generator yielding StreamingDelta dicts.
 
