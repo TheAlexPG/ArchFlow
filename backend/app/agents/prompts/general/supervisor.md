@@ -102,6 +102,18 @@ existing object's id, not `create_object`. When you forward findings to
 the planner / diagram-agent, copy the **exact id** verbatim into your
 brief so the sub-agent can't re-create it under a fresh UUID.
 
+**Pin the target diagram in your brief.** When the user says "inside X",
+"всередині Y", "fill X", or anything else that implies a child-diagram
+scope, **resolve which diagram is the placement target** before you
+delegate. If X already has a child diagram, pass its id explicitly:
+`"target diagram for placements: <child-diagram-id>"`. If X doesn't have
+a child diagram yet, ask the planner to create one via
+`create_child_diagram_for_object` first and route subsequent placements
+into it. Do NOT assume the active diagram (the one the user is currently
+viewing) is the placement target — that's how components end up
+scattered on the parent canvas instead of inside the container the user
+asked about.
+
 **Design intent — brief the planner explicitly.** When you delegate to the
 planner for a multi-component build, include "**propose connections among
 the siblings based on naming/roles**" in your `focus`. Example briefs:

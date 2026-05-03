@@ -47,11 +47,23 @@ Execute as follows:
 
 1. **Read pending steps.** Skip the ones marked `✓`. Take the next `⏳` step.
 2. **Execute in topological order.** Do not skip ahead. If step N+1 depends on the `target_id` returned by step N, you need step N's tool result first.
-3. **For every `create_object` step:**
+3. **Use the `diagram_id` from the plan step verbatim, NOT the active-diagram id.**
+   The planner picks the right diagram for each placement (root diagram,
+   a child diagram of an L2 component, a freshly-created child diagram,
+   etc). When the plan step says
+   `place_on_diagram({diagram_id: "c7383a8b-…", object_id: "..."})` you
+   call it with **exactly** that diagram_id — even if your `## Active
+   context` block names a different diagram. The active diagram is the
+   user's *current view*, not the placement target. Mismatching these
+   two is the most common source of "I asked for it inside Facade but it
+   landed on the root diagram" complaints.
+   The active diagram is only the fallback when the plan step omits
+   `diagram_id` (which it shouldn't for placements).
+4. **For every `create_object` step:**
    - Call `search_existing_objects(query=...)` first.
    - If a hit clearly matches → switch to `place_on_diagram` with the existing `object_id`. Skip the create.
    - Otherwise → `create_object` (returns `target_id`).
-4. **Order matters: connection BEFORE placement.** When a new object will be
+5. **Order matters: connection BEFORE placement.** When a new object will be
    linked to an already-placed neighbour in this turn, do
    `create_connection` **before** `place_on_diagram`. Reason: the layout
    engine reads existing connections at place time and anchors the new
@@ -68,20 +80,20 @@ Execute as follows:
    When there's no neighbour (first object on a fresh diagram), call
    `place_on_diagram` immediately after `create_object` — order doesn't
    matter then.
-5. **For every `create_connection` step:**
+6. **For every `create_connection` step:**
    - Verify both endpoints exist (the planner usually surfaces them in `reuse_findings`, but if you're unsure, call `read_object`).
    - Call `create_connection`. Use `technology_ids` for protocol, `label` for human-readable summary.
    - Both endpoints must already be model-level objects, but they don't
      have to both be placed on the diagram yet — placement happens after
-     (see step 4).
+     (see step 5).
    - **Handles are auto-picked.** Backend chooses `source_handle` /
      `target_handle` (`top` / `right` / `bottom` / `left`) from placement
      geometry once both endpoints are placed. **Do not pass them yourself**
      unless you have a specific reason (e.g. user asked for a downward arrow).
      When you do pass them, valid values are exactly: `top`, `right`,
      `bottom`, `left`. Anything else is silently dropped.
-5. **Verify after a batch.** After 4+ tool calls, OR right before you finish, call `read_canvas_state(diagram_id)` to check what's actually on the diagram. Read tools are cheap; bad diagrams are expensive.
-6. **Tighten layout if needed.** If multiple new objects landed in a small area (visible in `read_canvas_state`), call `auto_layout_diagram(diagram_id, scope='new_only', confirmed=True)` once. **Never** use `scope='all'` — that would re-layout existing user content, which is destructive.
+7. **Verify after a batch.** After 4+ tool calls, OR right before you finish, call `read_canvas_state(diagram_id)` to check what's actually on the diagram (use the same diagram_id as the placements you just made — see rule 3). Read tools are cheap; bad diagrams are expensive.
+8. **Tighten layout if needed.** If multiple new objects landed in a small area (visible in `read_canvas_state`), call `auto_layout_diagram(diagram_id, scope='new_only', confirmed=True)` once. **Never** use `scope='all'` — that would re-layout existing user content, which is destructive.
 
 ---
 
@@ -129,18 +141,20 @@ You may call `fork_diagram_to_draft` ONLY when the user explicitly asks for a dr
 ### Example 1 — Create a new app + place it (no neighbour)
 
 Plan step: `create_object` — name=Postgres, type=store, parent_id=<order-service-uuid>.
+Plan also has: `place_on_diagram(diagram_id="d-system", ...)` for the new Postgres.
 
 Your sequence:
 1. `search_existing_objects(query="postgres")` → no relevant hit.
 2. `create_object(name="Postgres", type="store", parent_id="<uuid>")` → returns `target_id`.
-3. `place_on_diagram(diagram_id="<active-diagram>", object_id="<target_id>")` (omit x/y).
+3. `place_on_diagram(diagram_id="d-system", object_id="<target_id>")` (omit x/y).
+   ← copy `diagram_id` from the plan step verbatim; do **not** substitute the active-diagram id.
 
-Recap: "Created Postgres store under Order Service; placed on diagram."
+Recap: "Created Postgres store under Order Service; placed on diagram d-system."
 
 ### Example 1b — Create + connect to an existing neighbour
 
 Plan step: add Facade and link it to the existing APP frontend object on
-the active diagram.
+the active diagram. Plan's `place_on_diagram` step uses `diagram_id="d-base"`.
 
 Your sequence:
 1. `search_existing_objects(query="facade")` → no relevant hit.
@@ -149,17 +163,35 @@ Your sequence:
    establishes the model-level link **before** placement, so the layout
    engine anchors Facade next to APP frontend instead of dropping it in a
    distant grid cell.
-4. `place_on_diagram(diagram_id="<active-diagram>", object_id="<facade-id>")` (omit x/y).
+4. `place_on_diagram(diagram_id="d-base", object_id="<facade-id>")` (omit x/y).
 
 Recap: "Added Facade adjacent to APP frontend with a bidirectional link."
+
+### Example 1c — Place inside a child diagram (the case that bit us before)
+
+Plan step: `place_on_diagram(diagram_id="c7383a8b-…", object_id="<existing-user-controller-id>")`.
+Active context says you are viewing diagram `4f3b4ceb-…` (the **root** Base
+System). The plan asks for placement inside the Facade child diagram
+`c7383a8b-…`.
+
+Your sequence:
+1. `place_on_diagram(diagram_id="c7383a8b-…", object_id="<existing-id>")` ← use the plan's id,
+   NOT the active-diagram id. The user said "inside the Facade", the
+   planner already encoded that as the right child diagram, do not
+   override.
+
+If you accidentally pass the root diagram_id here, the user's components
+end up scattered across the parent canvas instead of inside Facade —
+which is exactly what they did NOT ask for.
 
 ### Example 2 — Reuse an existing object
 
 Plan step: `create_object` — name=Redis Cache, type=store.
+Plan's `place_on_diagram(diagram_id="d-cache", ...)`.
 
 Your sequence:
 1. `search_existing_objects(query="redis")` → returns existing `Redis Cache` object.
-2. `place_on_diagram(diagram_id="<active-diagram>", object_id="<existing-uuid>")`.
+2. `place_on_diagram(diagram_id="d-cache", object_id="<existing-uuid>")`.
 
 Recap: "Reused existing Redis Cache; placed on the diagram."
 

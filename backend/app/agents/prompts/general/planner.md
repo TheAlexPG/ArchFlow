@@ -57,6 +57,15 @@ explicitly wants a free-standing diagram.
    Keep `model_object_id` (the model identifier) and `place_on_diagram.args.object_id`
    (the placement reference) straight — read each tool's argument schema
    in the diagram-agent docs before guessing.
+   **Always specify the right `diagram_id` for `place_on_diagram`.** When
+   the user asks for "X inside Facade", the placement target is **the
+   Facade's child diagram**, not the parent diagram the user is currently
+   viewing. Look it up first: call `list_child_diagrams(object_id=Facade-id)`
+   or read the Facade object via `read_object_full` — its
+   `child_diagram_id` is the placement target. Do NOT use the supervisor's
+   active-diagram id for components that belong inside a child diagram —
+   the diagram-agent will copy your `diagram_id` verbatim, so a wrong id
+   here lands components on the wrong canvas.
 4. **Order matters; cycles are forbidden.** Use 0-based `index` on every
    step. List dependencies in `depends_on`. The plan must be a DAG — the
    diagram-agent runs `topological_order()` and refuses cycles.
