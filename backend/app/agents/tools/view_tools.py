@@ -363,7 +363,13 @@ async def place_on_diagram(args: PlaceOnDiagramInput, ctx: ToolContext) -> dict:
             height=height,
         ),
     )
-    from app.agents.tools._realtime import publish_placement_event
+    from app.agents.tools._handle_resolver import (
+        refresh_handles_for_object_placement,
+    )
+    from app.agents.tools._realtime import (
+        publish_connection_event,
+        publish_placement_event,
+    )
 
     await publish_placement_event(
         db=ctx.db,
@@ -372,6 +378,23 @@ async def place_on_diagram(args: PlaceOnDiagramInput, ctx: ToolContext) -> dict:
         event_type="diagram_object.added",
         draft_id=ctx.active_draft_id,
     )
+    # Now that a new placement landed, walk every connection touching this
+    # object on this diagram and fill in null handles using the geometry
+    # of both endpoints. Each updated connection emits its own WS event so
+    # open canvases redraw the edge from the right side.
+    if ctx.active_draft_id is None:
+        updated_connections = await refresh_handles_for_object_placement(
+            db=ctx.db,
+            diagram_id=args.diagram_id,
+            object_id=args.object_id,
+        )
+        for conn in updated_connections:
+            await publish_connection_event(
+                db=ctx.db,
+                conn=conn,
+                event_type="connection.updated",
+                draft_id=getattr(conn, "draft_id", None),
+            )
 
     return {
         "action": "object.placed",
@@ -413,7 +436,13 @@ async def move_on_diagram(args: MoveOnDiagramInput, ctx: ToolContext) -> dict:
         raise ToolDenied(
             f"object {args.object_id} is not placed on diagram {args.diagram_id}"
         )
-    from app.agents.tools._realtime import publish_placement_event
+    from app.agents.tools._handle_resolver import (
+        refresh_handles_for_object_placement,
+    )
+    from app.agents.tools._realtime import (
+        publish_connection_event,
+        publish_placement_event,
+    )
 
     await publish_placement_event(
         db=ctx.db,
@@ -422,6 +451,19 @@ async def move_on_diagram(args: MoveOnDiagramInput, ctx: ToolContext) -> dict:
         event_type="diagram_object.updated",
         draft_id=ctx.active_draft_id,
     )
+    if ctx.active_draft_id is None:
+        updated_connections = await refresh_handles_for_object_placement(
+            db=ctx.db,
+            diagram_id=args.diagram_id,
+            object_id=args.object_id,
+        )
+        for conn in updated_connections:
+            await publish_connection_event(
+                db=ctx.db,
+                conn=conn,
+                event_type="connection.updated",
+                draft_id=getattr(conn, "draft_id", None),
+            )
 
     return {
         "action": "object.moved",

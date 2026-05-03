@@ -419,6 +419,118 @@ async def test_create_connection_happy(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_create_connection_explicit_handles_win(monkeypatch):
+    """Agent-supplied handle values must override the auto-pick path."""
+    _patch_acl_pass(monkeypatch)
+
+    create_mock = AsyncMock(return_value=_make_connection_row(label="api call"))
+    monkeypatch.setattr(
+        "app.services.connection_service.create_connection", create_mock
+    )
+    # Auto-pick would normally probe shared diagrams; force the geometry
+    # path to return a different pair so we can prove the override wins.
+    from app.agents.tools import _handle_resolver
+
+    monkeypatch.setattr(
+        _handle_resolver,
+        "resolve_handles_for_connection",
+        AsyncMock(return_value=("right", "left")),
+    )
+
+    ctx = _ctx()
+    out = await execute_tool(
+        {
+            "id": "c6h",
+            "name": "create_connection",
+            "arguments": {
+                "source_object_id": str(uuid4()),
+                "target_object_id": str(uuid4()),
+                "source_handle": "top",
+                "target_handle": "bottom",
+            },
+        },
+        ctx,
+    )
+    assert out.status == "ok", out.content
+    create_data = create_mock.await_args.args[1]
+    assert create_data.source_handle == "top"
+    assert create_data.target_handle == "bottom"
+
+
+@pytest.mark.asyncio
+async def test_create_connection_auto_handles_when_no_explicit(monkeypatch):
+    """Without explicit handles, the resolver's pair gets persisted."""
+    _patch_acl_pass(monkeypatch)
+
+    create_mock = AsyncMock(return_value=_make_connection_row(label="api call"))
+    monkeypatch.setattr(
+        "app.services.connection_service.create_connection", create_mock
+    )
+    from app.agents.tools import _handle_resolver
+
+    monkeypatch.setattr(
+        _handle_resolver,
+        "resolve_handles_for_connection",
+        AsyncMock(return_value=("right", "left")),
+    )
+
+    ctx = _ctx()
+    out = await execute_tool(
+        {
+            "id": "c6a",
+            "name": "create_connection",
+            "arguments": {
+                "source_object_id": str(uuid4()),
+                "target_object_id": str(uuid4()),
+            },
+        },
+        ctx,
+    )
+    assert out.status == "ok", out.content
+    create_data = create_mock.await_args.args[1]
+    assert create_data.source_handle == "right"
+    assert create_data.target_handle == "left"
+
+
+@pytest.mark.asyncio
+async def test_create_connection_drops_invalid_handle_value(monkeypatch):
+    """Agent-supplied junk handle name must be ignored, not propagated."""
+    _patch_acl_pass(monkeypatch)
+
+    create_mock = AsyncMock(return_value=_make_connection_row(label="api call"))
+    monkeypatch.setattr(
+        "app.services.connection_service.create_connection", create_mock
+    )
+    from app.agents.tools import _handle_resolver
+
+    monkeypatch.setattr(
+        _handle_resolver,
+        "resolve_handles_for_connection",
+        AsyncMock(return_value=(None, None)),
+    )
+
+    ctx = _ctx()
+    out = await execute_tool(
+        {
+            "id": "c6j",
+            "name": "create_connection",
+            "arguments": {
+                "source_object_id": str(uuid4()),
+                "target_object_id": str(uuid4()),
+                "source_handle": "center",  # not in {top,right,bottom,left}
+                "target_handle": "diagonal",
+            },
+        },
+        ctx,
+    )
+    assert out.status == "ok", out.content
+    create_data = create_mock.await_args.args[1]
+    # Invalid values dropped → resolver returned None → handles stay None.
+    assert create_data.source_handle is None
+    assert create_data.target_handle is None
+
+
+@pytest.mark.asyncio
 async def test_delete_connection_preview_then_confirmed(monkeypatch):
     _patch_acl_pass(monkeypatch)
 

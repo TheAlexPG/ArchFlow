@@ -74,6 +74,12 @@ Execute as follows:
    - Both endpoints must already be model-level objects, but they don't
      have to both be placed on the diagram yet — placement happens after
      (see step 4).
+   - **Handles are auto-picked.** Backend chooses `source_handle` /
+     `target_handle` (`top` / `right` / `bottom` / `left`) from placement
+     geometry once both endpoints are placed. **Do not pass them yourself**
+     unless you have a specific reason (e.g. user asked for a downward arrow).
+     When you do pass them, valid values are exactly: `top`, `right`,
+     `bottom`, `left`. Anything else is silently dropped.
 5. **Verify after a batch.** After 4+ tool calls, OR right before you finish, call `read_canvas_state(diagram_id)` to check what's actually on the diagram. Read tools are cheap; bad diagrams are expensive.
 6. **Tighten layout if needed.** If multiple new objects landed in a small area (visible in `read_canvas_state`), call `auto_layout_diagram(diagram_id, scope='new_only', confirmed=True)` once. **Never** use `scope='all'` — that would re-layout existing user content, which is destructive.
 

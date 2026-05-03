@@ -90,6 +90,12 @@ class CreateConnectionInput(BaseModel):
     direction: str = "outgoing"
     technology_ids: list[UUID] = Field(default_factory=list)
     description: str | None = None
+    # Optional explicit React Flow handle ids (top|right|bottom|left). When
+    # omitted, ``app.agents.layout.handles.auto_pick_handles`` chooses the
+    # best pair based on the placement geometry of both endpoints (when both
+    # are already placed). Invalid values are silently dropped.
+    source_handle: str | None = None
+    target_handle: str | None = None
 
 
 class UpdateConnectionInput(BaseModel):
@@ -980,12 +986,30 @@ async def create_connection(args: CreateConnectionInput, ctx: ToolContext) -> di
         record["target_id"] = reused.id
         return record
 
+    # Resolve handles: agent overrides win (when valid); otherwise fall back
+    # to geometric auto-pick when both endpoints are already placed on a
+    # diagram visible to the agent.
+    from app.agents.layout.handles import is_valid_handle
+    from app.agents.tools._handle_resolver import resolve_handles_for_connection
+
+    explicit_source = args.source_handle if is_valid_handle(args.source_handle) else None
+    explicit_target = args.target_handle if is_valid_handle(args.target_handle) else None
+    auto_source, auto_target = await resolve_handles_for_connection(
+        db=ctx.db,
+        source_id=args.source_object_id,
+        target_id=args.target_object_id,
+    )
+    source_handle = explicit_source or auto_source
+    target_handle = explicit_target or auto_target
+
     create_data = ConnectionCreate(
         source_id=args.source_object_id,
         target_id=args.target_object_id,
         label=args.label,
         protocol_ids=list(args.technology_ids) if args.technology_ids else None,
         direction=direction,
+        source_handle=source_handle,
+        target_handle=target_handle,
     )
 
     conn = await connection_service.create_connection(
