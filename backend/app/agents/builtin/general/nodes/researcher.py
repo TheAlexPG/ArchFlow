@@ -82,7 +82,11 @@ class Findings(BaseModel):
 
     summary: str = Field(
         ...,
-        max_length=4000,
+        # Generous cap — researcher answers about diagrams with many objects
+        # routinely run 4-12k chars. Truncating crashed the run with
+        # ``string_too_long``. The token budget (workspace-level) is the
+        # real cost guard.
+        max_length=16000,
         description="Markdown body, primary deliverable",
     )
     citations: list[dict] = Field(

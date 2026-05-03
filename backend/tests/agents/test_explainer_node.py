@@ -133,7 +133,7 @@ class TestExplanationModel:
 
     def test_summary_max_length_enforced(self):
         with pytest.raises(ValidationError):
-            Explanation(summary="x" * 4001)
+            Explanation(summary="x" * 16001)
 
     def test_from_json(self):
         data = {

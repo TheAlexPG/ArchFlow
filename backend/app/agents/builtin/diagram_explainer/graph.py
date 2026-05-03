@@ -189,7 +189,7 @@ EXPLAINER_TOOLS: list[dict] = [
 
 
 class Explanation(BaseModel):
-    summary: str = Field(..., max_length=4000)
+    summary: str = Field(..., max_length=16000)
     relations: list[dict] = Field(
         default_factory=list,
         description=(

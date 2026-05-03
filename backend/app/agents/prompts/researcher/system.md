@@ -63,7 +63,7 @@ Respond with a single JSON object conforming to the `Findings` schema — no pro
 
 ```json
 {
-  "summary": "<markdown body — your primary deliverable, ≤ 4000 chars>",
+  "summary": "<markdown body — your primary deliverable, ≤ 16000 chars>",
   "citations": [
     {"type": "object",     "id_or_url": "<uuid>",  "note": "<why cited>"},
     {"type": "diagram",    "id_or_url": "<uuid>",  "note": "<why cited>"},

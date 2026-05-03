@@ -152,9 +152,18 @@ def test_findings_valid_full():
 
 
 def test_findings_summary_max_length_exceeded():
-    """summary has max_length=4000; Pydantic v2 enforces this with a ValidationError."""
+    """summary has max_length=16000; Pydantic v2 enforces with ValidationError."""
     with pytest.raises(ValidationError):
-        Findings(summary="x" * 4001)
+        Findings(summary="x" * 16001)
+
+
+def test_findings_summary_accepts_long_markdown_under_cap():
+    """A 12k-char Findings body must validate — it routinely happens for
+    diagrams with many objects (multi-component architecture answers)."""
+    body = "## Section\n" + ("- item line\n" * 600)  # ~12k chars
+    assert 4000 < len(body) < 16000
+    f = Findings(summary=body)
+    assert len(f.summary) == len(body)
 
 
 def test_findings_default_confidence_is_medium():
