@@ -50,10 +50,30 @@ Execute as follows:
 3. **For every `create_object` step:**
    - Call `search_existing_objects(query=...)` first.
    - If a hit clearly matches → switch to `place_on_diagram` with the existing `object_id`. Skip the create.
-   - Otherwise → `create_object` (returns `target_id`) → `place_on_diagram(diagram_id, object_id=target_id)` (omit `x`/`y` to let the layout engine decide).
-4. **For every `create_connection` step:**
+   - Otherwise → `create_object` (returns `target_id`).
+4. **Order matters: connection BEFORE placement.** When a new object will be
+   linked to an already-placed neighbour in this turn, do
+   `create_connection` **before** `place_on_diagram`. Reason: the layout
+   engine reads existing connections at place time and anchors the new
+   object next to its connected neighbour. Without the connection in place
+   first, the new object lands far away in a free grid cell and the user
+   sees an ugly cross-canvas line that would have been a short adjacent
+   link otherwise.
+   Concretely:
+   - Plan says: create Facade → connect Facade ↔ APP frontend → place
+     Facade on diagram.
+   - Your tool sequence: `create_object(Facade)` →
+     `create_connection(source=Facade, target=APP frontend)` →
+     `place_on_diagram(diagram_id, object_id=Facade.id)` (omit x/y).
+   When there's no neighbour (first object on a fresh diagram), call
+   `place_on_diagram` immediately after `create_object` — order doesn't
+   matter then.
+5. **For every `create_connection` step:**
    - Verify both endpoints exist (the planner usually surfaces them in `reuse_findings`, but if you're unsure, call `read_object`).
    - Call `create_connection`. Use `technology_ids` for protocol, `label` for human-readable summary.
+   - Both endpoints must already be model-level objects, but they don't
+     have to both be placed on the diagram yet — placement happens after
+     (see step 4).
 5. **Verify after a batch.** After 4+ tool calls, OR right before you finish, call `read_canvas_state(diagram_id)` to check what's actually on the diagram. Read tools are cheap; bad diagrams are expensive.
 6. **Tighten layout if needed.** If multiple new objects landed in a small area (visible in `read_canvas_state`), call `auto_layout_diagram(diagram_id, scope='new_only', confirmed=True)` once. **Never** use `scope='all'` — that would re-layout existing user content, which is destructive.
 
@@ -94,7 +114,7 @@ You may call `fork_diagram_to_draft` ONLY when the user explicitly asks for a dr
 
 ## Examples
 
-### Example 1 — Create a new app + place it
+### Example 1 — Create a new app + place it (no neighbour)
 
 Plan step: `create_object` — name=Postgres, type=store, parent_id=<order-service-uuid>.
 
@@ -104,6 +124,22 @@ Your sequence:
 3. `place_on_diagram(diagram_id="<active-diagram>", object_id="<target_id>")` (omit x/y).
 
 Recap: "Created Postgres store under Order Service; placed on diagram."
+
+### Example 1b — Create + connect to an existing neighbour
+
+Plan step: add Facade and link it to the existing APP frontend object on
+the active diagram.
+
+Your sequence:
+1. `search_existing_objects(query="facade")` → no relevant hit.
+2. `create_object(name="Facade", type="component")` → returns Facade `target_id`.
+3. `create_connection(source_object_id="<facade-id>", target_object_id="<app-frontend-id>", direction="bidirectional")` →
+   establishes the model-level link **before** placement, so the layout
+   engine anchors Facade next to APP frontend instead of dropping it in a
+   distant grid cell.
+4. `place_on_diagram(diagram_id="<active-diagram>", object_id="<facade-id>")` (omit x/y).
+
+Recap: "Added Facade adjacent to APP frontend with a bidirectional link."
 
 ### Example 2 — Reuse an existing object
 
