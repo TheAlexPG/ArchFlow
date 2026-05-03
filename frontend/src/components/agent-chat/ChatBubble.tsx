@@ -7,6 +7,7 @@ import { ChatHistory } from './ChatHistory'
 import { ChatStatusBar } from './ChatStatusBar'
 import { DraftCreatedBanner } from './DraftCreatedBanner'
 import { AgentStreamProvider } from './hooks/use-agent-stream'
+import { useAppliedChangeSync } from './hooks/use-applied-change-sync'
 import { useViewChange } from './hooks/use-view-change'
 import { useAgentChatStore } from './store'
 
@@ -96,6 +97,9 @@ function ChatBubblePanel() {
   // Wire view_change handler — navigates + shows toast whenever the agent
   // emits a view_change event. Must run inside the AgentStreamProvider tree.
   useViewChange()
+  // Refresh canvas / object / connection caches whenever the agent applied
+  // a mutation, so the live diagram updates without a page reload.
+  useAppliedChangeSync()
 
   const isExpanded = bubbleState === 'expanded'
 

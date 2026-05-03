@@ -27,6 +27,7 @@ from app.agents.nodes.base import (
     NodeOutput,
     NodeStreamEvent,
     compose_messages_for_llm,
+    rewrite_subagent_tool_result,
     run_react,
 )
 
@@ -241,15 +242,118 @@ def test_compose_messages_skips_compacted_messages():
     assert out[1] == {"role": "user", "content": "current"}
 
 
-def test_compose_messages_truncates_to_recent_history_limit():
+def test_compose_messages_truncates_but_keeps_first_user_message():
+    """When trimming, the first user message is always kept on top of the
+    tail. For sub-agents this carries the supervisor brief — without it the
+    LLM template fails with "No user query found in messages"."""
     cfg = _make_cfg()
     history = [{"role": "user", "content": f"m{i}"} for i in range(30)]
     state = _make_state(messages=history)
     out = compose_messages_for_llm(state, cfg, recent_history_limit=5)
-    # 1 system + 5 history.
-    assert len(out) == 6
-    assert out[1]["content"] == "m25"
+    # 1 system + first-user (m0) + 5 tail (m25..m29) = 7 items.
+    assert len(out) == 7
+    assert out[1]["content"] == "m0"  # first user message preserved
+    assert out[2]["content"] == "m25"
     assert out[-1]["content"] == "m29"
+
+
+def _supervisor_history_with_delegate(
+    *, kind: str, call_id: str = "call-1", question: str = "Find Redis"
+) -> list[dict]:
+    """Build a minimal supervisor history showing one delegate_to_<kind> call
+    plus its echo-shaped tool result."""
+    return [
+        {"role": "user", "content": "describe diagram"},
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": call_id,
+                    "type": "function",
+                    "function": {
+                        "name": f"delegate_to_{kind}",
+                        "arguments": f'{{"question": "{question}"}}',
+                    },
+                }
+            ],
+        },
+        {
+            "role": "tool",
+            "tool_call_id": call_id,
+            "content": '{"action": "delegate.researcher", "question": "..."}',
+        },
+    ]
+
+
+def test_rewrite_subagent_tool_result_findings_replaces_echo_content():
+    """After researcher returns, the supervisor's matching tool message must
+    carry the actual findings.summary — not the echo of its own input."""
+    history = _supervisor_history_with_delegate(kind="researcher")
+    findings = {"summary": "Redis exists at id `r-1`.", "confidence": "high"}
+
+    out = rewrite_subagent_tool_result(history, kind="researcher", findings=findings)
+
+    # The history is intact except the tool message at index 2.
+    assert len(out) == 3
+    assert out[0] is history[0]
+    assert out[1] is history[1]
+    tool_msg = out[2]
+    assert tool_msg["role"] == "tool"
+    assert tool_msg["tool_call_id"] == "call-1"
+    assert "Redis exists at id `r-1`." in tool_msg["content"]
+    assert "confidence: high" in tool_msg["content"]
+    # Original list isn't mutated in place.
+    assert history[2]["content"].startswith('{"action"')
+
+
+def test_rewrite_subagent_tool_result_applied_changes_renders_list():
+    history = _supervisor_history_with_delegate(kind="diagram")
+    applied = [
+        {"action": "object.created", "name": "Redis", "target_id": "obj-1"},
+        {"action": "object.placed", "name": "Redis"},
+    ]
+    out = rewrite_subagent_tool_result(
+        history, kind="diagram", applied_changes=applied
+    )
+    body = out[2]["content"]
+    assert "Applied changes (2 total)" in body
+    assert "object.created" in body
+    assert "obj-1" in body
+
+
+def test_rewrite_subagent_tool_result_no_matching_call_is_noop():
+    """Without a delegate_to_planner in history, requesting a planner rewrite
+    must return the input unchanged."""
+    history = _supervisor_history_with_delegate(kind="researcher")
+    plan = {"goal": "noop", "steps": []}
+    out = rewrite_subagent_tool_result(history, kind="planner", plan=plan)
+    # Identical content — no rewrite happened.
+    assert [m.get("content") for m in out] == [
+        m.get("content") for m in history
+    ]
+
+
+def test_rewrite_subagent_tool_result_no_artefact_is_noop():
+    history = _supervisor_history_with_delegate(kind="researcher")
+    out = rewrite_subagent_tool_result(history, kind="researcher")
+    assert out == history
+
+
+def test_compose_messages_skips_first_user_prepend_when_tail_includes_it():
+    """If the tail already covers the first user message we shouldn't
+    duplicate it on top — only prepend when truly trimmed away."""
+    cfg = _make_cfg()
+    history = [
+        {"role": "user", "content": "u0"},
+        {"role": "assistant", "content": "a"},
+        {"role": "tool", "tool_call_id": "x", "content": "{}"},
+    ]
+    state = _make_state(messages=history)
+    out = compose_messages_for_llm(state, cfg, recent_history_limit=5)
+    # 1 system + 3 history (no trim, no duplication).
+    assert len(out) == 4
+    assert out[1]["content"] == "u0"
 
 
 # ---------------------------------------------------------------------------

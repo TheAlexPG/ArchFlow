@@ -45,7 +45,14 @@ class AcceptInviteRequest(BaseModel):
 
 
 class RoleUpdateRequest(BaseModel):
-    role: Role
+    """Partial update of a workspace member.
+
+    Both fields are optional so the client can flip just one (e.g. raise the
+    user's agent_access without touching their role). At least one must be
+    provided — empty body would be a no-op.
+    """
+
+    role: Role | None = None
     agent_access: AgentAccessLevel | None = None
 
 
@@ -138,9 +145,19 @@ async def update_member_role(
     _: Role = Depends(require_role(Role.ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
+    if payload.role is None and payload.agent_access is None:
+        raise HTTPException(400, "At least one of 'role' or 'agent_access' is required")
+
     try:
         member = await member_service.update_member_role(
-            db, workspace_id, user_id, payload.role
+            db,
+            workspace_id,
+            user_id,
+            # When the caller only changes agent_access, keep the existing
+            # role (service will fetch it; we pass a sentinel that triggers
+            # a no-op for role).
+            payload.role,  # type: ignore[arg-type]  — service handles None
+            agent_access=payload.agent_access,
         )
     except member_service.LastOwnerError as e:
         raise HTTPException(400, str(e)) from e

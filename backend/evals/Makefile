@@ -1,4 +1,4 @@
-.PHONY: fast slow planner diagram critic researcher explainer e2e draft permission tool budget compact layout eval-quick eval-release eval-baseline
+.PHONY: fast slow planner diagram critic researcher explainer e2e draft permission tool budget compact layout eval-quick eval-release eval-baseline eval-golden
 
 PYTEST = uv run --extra agents --extra dev --extra evals pytest
 
@@ -39,3 +39,14 @@ eval-release: fast slow
 
 eval-baseline:
 	@python evals/lib/baseline.py save
+
+# Live "golden" suite — runs the supervisor + sub-agents end-to-end against
+# a real local Qwen instance (LM Studio) while mocking DB / tool execution.
+# Skipped unless RUN_GOLDEN_EVALS=1 is set in the environment.
+#
+# Override the endpoint/model with GOLDEN_EVAL_BASE_URL / GOLDEN_EVAL_MODEL.
+eval-golden:
+	RUN_GOLDEN_EVALS=1 $(PYTEST) \
+		evals/test_golden_investigate.py \
+		evals/test_golden_create_basic.py \
+		-v -s

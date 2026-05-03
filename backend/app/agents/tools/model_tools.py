@@ -757,6 +757,13 @@ async def create_object(args: CreateObjectInput, ctx: ToolContext) -> dict:
         draft_id=ctx.active_draft_id,
         workspace_id=ctx.workspace_id,
     )
+    # Push a live event so open canvases / workspace clients update without
+    # waiting for the SSE applied_change → invalidate → REST refetch round-trip.
+    from app.agents.tools._realtime import publish_object_event
+
+    publish_object_event(
+        obj=obj, event_type="object.created", draft_id=ctx.active_draft_id
+    )
 
     record: dict[str, Any] = {
         "action": "object.created",
@@ -798,6 +805,14 @@ async def update_object(args: UpdateObjectInput, ctx: ToolContext) -> dict:
 
     update_data = ObjectUpdate(**patch)
     updated = await object_service.update_object(ctx.db, obj, update_data)
+    from app.agents.tools._realtime import publish_object_event_with_diagram_fanout
+
+    await publish_object_event_with_diagram_fanout(
+        db=ctx.db,
+        obj=updated,
+        event_type="object.updated",
+        draft_id=getattr(updated, "draft_id", None),
+    )
 
     record: dict[str, Any] = {
         "action": "object.updated",
@@ -864,7 +879,35 @@ async def delete_object(args: DeleteObjectInput, ctx: ToolContext) -> dict:
 
     name = obj.name
     target_id = obj.id
+    was_draft = getattr(obj, "draft_id", None)
+    # Capture diagrams BEFORE the cascade so we can fanout the event after
+    # the row is gone — mirrors REST behaviour.
+    diagrams_before = (
+        await diagram_service.get_diagrams_containing_object(ctx.db, obj.id)
+        if was_draft is None
+        else []
+    )
+    obj_workspace_id = getattr(obj, "workspace_id", None)
     await object_service.delete_object(ctx.db, obj)
+
+    from app.agents.tools._realtime import publish_object_event
+    from app.realtime.manager import fire_and_forget_publish_diagram
+
+    # Reuse the helper for workspace-scope publish; fanout per-diagram below
+    # mirrors :func:`app.api.v1.objects._fanout_object_to_diagrams`.
+    publish_object_event(
+        obj=type("_Stub", (), {"id": target_id, "workspace_id": obj_workspace_id})(),
+        event_type="object.deleted",
+        draft_id=was_draft,
+    )
+    if was_draft is None:
+        for d in diagrams_before:
+            fire_and_forget_publish_diagram(
+                getattr(d, "id", None),
+                "object.deleted",
+                {"id": str(target_id)},
+            )
+
     return {
         "action": "object.deleted",
         "target_type": "object",
@@ -884,11 +927,59 @@ async def delete_object(args: DeleteObjectInput, ctx: ToolContext) -> dict:
     mutating=True,
 )
 async def create_connection(args: CreateConnectionInput, ctx: ToolContext) -> dict:
-    """Create a connection. Returns action='connection.created'."""
+    """Create a connection. Returns action='connection.created'.
+
+    Idempotency: when a connection with the same source/target/direction (or
+    the symmetric pair for undirected) already exists in the same workspace
+    scope, we reuse it instead of creating a duplicate. This is the fix for
+    the "agent created 4 identical connections" trace — Qwen would loop
+    `create_connection(redis ↔ APP frontend)` across re-delegations and
+    each call inserted a fresh row.
+    """
     from app.schemas.connection import ConnectionCreate
     from app.services import connection_service
 
     direction = _coerce_connection_direction(args.direction)
+
+    # ── Dedupe pre-check ──────────────────────────────────────────────
+    existing = await connection_service.get_connections_between(
+        ctx.db, args.source_object_id, args.target_object_id
+    )
+    if not existing and direction != "directed":
+        # Undirected connections may already exist in the reverse
+        # orientation — those are semantically the same edge.
+        existing = await connection_service.get_connections_between(
+            ctx.db, args.target_object_id, args.source_object_id
+        )
+
+    def _matches(conn: Any) -> bool:
+        # Match on direction + active draft scope. If the agent specifies
+        # technologies, also require overlap so we don't reuse a "plain"
+        # arrow when they want a typed Redis link (and vice versa).
+        if str(getattr(conn, "direction", "") or "") != direction:
+            return False
+        existing_draft = getattr(conn, "draft_id", None)
+        if existing_draft != ctx.active_draft_id:
+            return False
+        if args.technology_ids:
+            existing_techs = set(getattr(conn, "technology_ids", []) or [])
+            wanted = set(args.technology_ids)
+            if not (existing_techs & wanted):
+                return False
+        return True
+
+    reused = next((c for c in existing if _matches(c)), None)
+    if reused is not None:
+        record: dict[str, Any] = {
+            "action": "connection.reused",
+            "target_type": "connection",
+            "name": reused.label or "",
+            "preview": short_preview("Reused", "connection", reused.label or ""),
+        }
+        record.update(_project_connection(reused))
+        record["target_id"] = reused.id
+        return record
+
     create_data = ConnectionCreate(
         source_id=args.source_object_id,
         target_id=args.target_object_id,
@@ -900,8 +991,16 @@ async def create_connection(args: CreateConnectionInput, ctx: ToolContext) -> di
     conn = await connection_service.create_connection(
         ctx.db, create_data, draft_id=ctx.active_draft_id
     )
+    from app.agents.tools._realtime import publish_connection_event
 
-    record: dict[str, Any] = {
+    await publish_connection_event(
+        db=ctx.db,
+        conn=conn,
+        event_type="connection.created",
+        draft_id=ctx.active_draft_id,
+    )
+
+    record = {
         "action": "connection.created",
         "target_type": "connection",
         "name": conn.label or "",
@@ -941,6 +1040,14 @@ async def update_connection(args: UpdateConnectionInput, ctx: ToolContext) -> di
 
     update_data = ConnectionUpdate(**patch)
     updated = await connection_service.update_connection(ctx.db, conn, update_data)
+    from app.agents.tools._realtime import publish_connection_event
+
+    await publish_connection_event(
+        db=ctx.db,
+        conn=updated,
+        event_type="connection.updated",
+        draft_id=getattr(updated, "draft_id", None),
+    )
 
     record: dict[str, Any] = {
         "action": "connection.updated",
@@ -993,7 +1100,28 @@ async def delete_connection(args: DeleteConnectionInput, ctx: ToolContext) -> di
 
     label = conn.label or ""
     target_id = conn.id
+    # Capture pre-delete metadata for the post-delete WS broadcast.
+    snapshot_source = getattr(conn, "source_id", None)
+    snapshot_target = getattr(conn, "target_id", None)
+    snapshot_draft = getattr(conn, "draft_id", None)
     await connection_service.delete_connection(ctx.db, conn)
+    from app.agents.tools._realtime import publish_connection_event
+
+    await publish_connection_event(
+        db=ctx.db,
+        conn=type(
+            "_ConnStub",
+            (),
+            {
+                "id": target_id,
+                "source_id": snapshot_source,
+                "target_id": snapshot_target,
+                "draft_id": snapshot_draft,
+            },
+        )(),
+        event_type="connection.deleted",
+        draft_id=snapshot_draft,
+    )
     return {
         "action": "connection.deleted",
         "target_type": "connection",

@@ -117,6 +117,12 @@ class NodeConfig:
     output_schema: type[BaseModel] | None = None
     temperature: float | None = None
     enable_streaming: bool = False
+    # Hard cap on output tokens per LLM call. Without this, Qwen / DeepSeek
+    # routinely emit 3000-5500 tokens of reasoning_content + JSON for what
+    # should be a one-tool-call decision — pushing latency from 5s to 100s
+    # per step. Set per-node to something sensible (planner: bigger because
+    # it produces a Plan; diagram: smaller because each step is a tool call).
+    max_tokens: int | None = None
     additional_system_blocks: list[Callable[[AgentState], str]] = field(default_factory=list)
     # Tool names whose execution should terminate the ReAct loop *immediately*
     # after the tool result is appended — no follow-up LLM call. Used by the
@@ -185,7 +191,26 @@ def compose_messages_for_llm(
     history = state.get("messages") or []
     visible = [m for m in history if not m.get("is_compacted")]
     if recent_history_limit > 0 and len(visible) > recent_history_limit:
-        visible = visible[-recent_history_limit:]
+        # Always keep the FIRST user message in the prompt — for sub-agents
+        # (researcher / planner / diagram / critic) it carries the supervisor
+        # brief, and several LLM templates (LM Studio jinja, llama.cpp's
+        # default chat template) hard-fail with "No user query found in
+        # messages" when they only see system + assistant + tool messages.
+        # Without this guard, after a long ReAct loop (~20 tool turns) the
+        # brief gets sliced off and the very next LLM call dies with a
+        # cryptic 400 from the local model server.
+        first_user_idx = next(
+            (i for i, m in enumerate(visible) if m.get("role") == "user"),
+            None,
+        )
+        tail = visible[-recent_history_limit:]
+        if (
+            first_user_idx is not None
+            and visible[first_user_idx] not in tail
+        ):
+            visible = [visible[first_user_idx], *tail]
+        else:
+            visible = tail
 
     out.extend(visible)
     return out
@@ -204,7 +229,8 @@ def render_subagent_results_block(state: AgentState) -> str:
     Returns an empty string when no sub-agent has produced results yet — the
     first supervisor visit then sees clean context.
 
-    Sources surfaced:
+    Sources surfaced (rendered in full so the supervisor has every piece of
+    information it needs to decide the next action without re-delegation):
       * ``state['findings']`` — researcher's :class:`Findings` (or dict).
       * ``state['plan']`` — planner's :class:`Plan` (or dict).
       * ``state['applied_changes']`` — list of mutations applied by diagram.
@@ -218,7 +244,14 @@ def render_subagent_results_block(state: AgentState) -> str:
     if not (findings or plan or applied or critique):
         return ""
 
-    lines: list[str] = ["## Sub-agent results so far"]
+    lines: list[str] = [
+        "## Sub-agent results so far",
+        "_(authoritative — re-delegating to the same sub-agent with the "
+        "**same subject** is forbidden. Re-delegate only with a different "
+        "subject (object/diagram/connection), a new angle/hypothesis, or a "
+        "concrete approach hint. Otherwise compose your reply from these "
+        "artefacts and call `finalize`.)_",
+    ]
 
     if findings is not None:
         summary = (
@@ -226,13 +259,14 @@ def render_subagent_results_block(state: AgentState) -> str:
             if not isinstance(findings, dict)
             else findings.get("summary")
         )
-        snippet = (summary or "").strip()
-        if len(snippet) > 500:
-            snippet = snippet[:500] + "…"
-        lines.append(
-            f"- Findings (researcher): {snippet}" if snippet else
-            "- Findings (researcher): (empty summary)"
-        )
+        confidence = (
+            getattr(findings, "confidence", None)
+            if not isinstance(findings, dict)
+            else findings.get("confidence")
+        ) or "medium"
+        body = (summary or "").strip() or "(empty summary)"
+        lines.append(f"\n### Findings from researcher (confidence: {confidence})")
+        lines.append(body)
 
     if plan is not None:
         steps = (
@@ -240,9 +274,16 @@ def render_subagent_results_block(state: AgentState) -> str:
             if not isinstance(plan, dict)
             else plan.get("steps")
         ) or []
+        goal = (
+            getattr(plan, "goal", None)
+            if not isinstance(plan, dict)
+            else plan.get("goal")
+        ) or ""
+        lines.append("\n### Plan from planner")
+        if goal:
+            lines.append(f"**Goal:** {goal}")
         if steps:
-            lines.append("- Plan (planner):")
-            for step in steps:
+            for i, step in enumerate(steps, 1):
                 kind = (
                     getattr(step, "kind", None)
                     if not isinstance(step, dict)
@@ -253,20 +294,30 @@ def render_subagent_results_block(state: AgentState) -> str:
                     if not isinstance(step, dict)
                     else step.get("rationale")
                 ) or ""
-                lines.append(f"  - {kind}: {rationale}")
+                args = (
+                    getattr(step, "args", None)
+                    if not isinstance(step, dict)
+                    else step.get("args")
+                ) or {}
+                args_preview = ""
+                if isinstance(args, dict) and args:
+                    bits = [f"{k}={v}" for k, v in list(args.items())[:3]]
+                    args_preview = f" `{', '.join(bits)}`"
+                line = f"{i}. **{kind}**{args_preview}"
+                if rationale:
+                    line += f" — {rationale}"
+                lines.append(line)
         else:
-            lines.append("- Plan (planner): (empty)")
+            lines.append("(no steps)")
 
     if applied:
-        last_three = applied[-3:]
-        rendered = []
-        for change in last_three:
+        lines.append(f"\n### Applied changes ({len(applied)} total)")
+        for change in applied:
             action = change.get("action", "?")
-            name = change.get("name") or change.get("target_id") or "?"
-            rendered.append(f'{action} "{name}"')
-        lines.append(
-            f"- Applied changes: {len(applied)} total; last: " + "; ".join(rendered)
-        )
+            name = change.get("name") or "?"
+            target_id = change.get("target_id")
+            target_str = f" `{target_id}`" if target_id else ""
+            lines.append(f"- {action}: **{name}**{target_str}")
 
     if critique is not None:
         verdict = (
@@ -279,10 +330,225 @@ def render_subagent_results_block(state: AgentState) -> str:
             if not isinstance(critique, dict)
             else critique.get("issues")
         ) or []
-        suffix = f" — issues: {'; '.join(issues[:3])}" if issues else ""
-        lines.append(f"- Critique (critic): {verdict}{suffix}")
+        strengths = (
+            getattr(critique, "strengths", None)
+            if not isinstance(critique, dict)
+            else critique.get("strengths")
+        ) or []
+        revision = (
+            getattr(critique, "revision_request", None)
+            if not isinstance(critique, dict)
+            else critique.get("revision_request")
+        )
+        lines.append(f"\n### Critique from critic — **{verdict}**")
+        if strengths:
+            lines.append("**Strengths:**")
+            for s in strengths:
+                lines.append(f"- {s}")
+        if issues:
+            lines.append("**Issues:**")
+            for i in issues:
+                lines.append(f"- {i}")
+        if revision:
+            lines.append(f"**Revision request:** {revision}")
 
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Helper: render a sub-agent's result into the matching tool result message
+# ---------------------------------------------------------------------------
+
+
+_DELEGATE_TOOL_TO_KIND: dict[str, str] = {
+    "delegate_to_researcher": "researcher",
+    "delegate_to_planner": "planner",
+    "delegate_to_diagram": "diagram",
+    "delegate_to_critic": "critic",
+}
+
+
+def _render_findings(findings: Any) -> str:
+    summary = (
+        getattr(findings, "summary", None)
+        if not isinstance(findings, dict)
+        else findings.get("summary")
+    )
+    confidence = (
+        getattr(findings, "confidence", None)
+        if not isinstance(findings, dict)
+        else findings.get("confidence")
+    ) or "medium"
+    body = (summary or "").strip() or "(empty summary)"
+    return f"### Findings from researcher (confidence: {confidence})\n{body}"
+
+
+def _render_plan(plan: Any) -> str:
+    steps = (
+        getattr(plan, "steps", None)
+        if not isinstance(plan, dict)
+        else plan.get("steps")
+    ) or []
+    goal = (
+        getattr(plan, "goal", None)
+        if not isinstance(plan, dict)
+        else plan.get("goal")
+    ) or ""
+    lines = ["### Plan from planner"]
+    if goal:
+        lines.append(f"**Goal:** {goal}")
+    if steps:
+        for i, step in enumerate(steps, 1):
+            kind = (
+                getattr(step, "kind", None)
+                if not isinstance(step, dict)
+                else step.get("kind")
+            ) or "?"
+            rationale = (
+                getattr(step, "rationale", None)
+                if not isinstance(step, dict)
+                else step.get("rationale")
+            ) or ""
+            args = (
+                getattr(step, "args", None)
+                if not isinstance(step, dict)
+                else step.get("args")
+            ) or {}
+            args_preview = ""
+            if isinstance(args, dict) and args:
+                bits = [f"{k}={v}" for k, v in list(args.items())[:3]]
+                args_preview = f" `{', '.join(bits)}`"
+            line = f"{i}. **{kind}**{args_preview}"
+            if rationale:
+                line += f" — {rationale}"
+            lines.append(line)
+    else:
+        lines.append("(no steps)")
+    return "\n".join(lines)
+
+
+def _render_applied(applied: list[dict]) -> str:
+    lines = [f"### Applied changes ({len(applied)} total)"]
+    if not applied:
+        lines.append("(no changes were applied)")
+        return "\n".join(lines)
+    for change in applied:
+        action = change.get("action", "?")
+        name = change.get("name") or "?"
+        target_id = change.get("target_id")
+        target_str = f" `{target_id}`" if target_id else ""
+        lines.append(f"- {action}: **{name}**{target_str}")
+    return "\n".join(lines)
+
+
+def _render_critique(critique: Any) -> str:
+    verdict = (
+        getattr(critique, "verdict", None)
+        if not isinstance(critique, dict)
+        else critique.get("verdict")
+    ) or "?"
+    issues = (
+        getattr(critique, "issues", None)
+        if not isinstance(critique, dict)
+        else critique.get("issues")
+    ) or []
+    strengths = (
+        getattr(critique, "strengths", None)
+        if not isinstance(critique, dict)
+        else critique.get("strengths")
+    ) or []
+    revision = (
+        getattr(critique, "revision_request", None)
+        if not isinstance(critique, dict)
+        else critique.get("revision_request")
+    )
+    lines = [f"### Critique from critic — **{verdict}**"]
+    if strengths:
+        lines.append("**Strengths:**")
+        for s in strengths:
+            lines.append(f"- {s}")
+    if issues:
+        lines.append("**Issues:**")
+        for i in issues:
+            lines.append(f"- {i}")
+    if revision:
+        lines.append(f"**Revision request:** {revision}")
+    return "\n".join(lines)
+
+
+def rewrite_subagent_tool_result(
+    parent_messages: list[dict],
+    *,
+    kind: str,
+    findings: Any | None = None,
+    plan: Any | None = None,
+    applied_changes: list[dict] | None = None,
+    critique: Any | None = None,
+) -> list[dict]:
+    """Return a copy of ``parent_messages`` with the most recent ``delegate_to_<kind>``
+    tool result rewritten to carry the actual sub-agent output.
+
+    Without this, the supervisor's history shows the OpenAI tool-call protocol
+    pair as ``[assistant: tool_call(delegate_to_researcher, args)]`` followed
+    by ``[tool: {"action": "delegate.researcher", "question": "..."}]`` —
+    the latter is just an echo of the supervisor's input, not the researcher's
+    answer. With many local models (Qwen / DeepSeek) that mismatch causes the
+    supervisor to re-issue the same delegation indefinitely.
+
+    This helper finds the latest assistant message containing a
+    ``delegate_to_<kind>`` tool call, then walks forward to the matching tool
+    result (by ``tool_call_id``) and replaces its ``content`` with a markdown
+    summary of the supplied artefact.
+
+    No-op when no matching pair is found — guards against missing brief or
+    out-of-order graph routing.
+    """
+    expected_tool = f"delegate_to_{kind}"
+    if expected_tool not in _DELEGATE_TOOL_TO_KIND:
+        return list(parent_messages)
+
+    if findings is not None:
+        new_content = _render_findings(findings)
+    elif plan is not None:
+        new_content = _render_plan(plan)
+    elif applied_changes is not None:
+        new_content = _render_applied(applied_changes)
+    elif critique is not None:
+        new_content = _render_critique(critique)
+    else:
+        return list(parent_messages)
+
+    rewritten = list(parent_messages)
+    # Walk backwards for the latest assistant turn with a matching delegate call.
+    target_call_id: str | None = None
+    for idx in range(len(rewritten) - 1, -1, -1):
+        msg = rewritten[idx]
+        if msg.get("role") != "assistant":
+            continue
+        for tc in msg.get("tool_calls") or []:
+            fn = tc.get("function") or {}
+            name = fn.get("name") or tc.get("name")
+            if name == expected_tool:
+                target_call_id = tc.get("id")
+                break
+        if target_call_id is not None:
+            break
+
+    if target_call_id is None:
+        return rewritten
+
+    # Find the matching tool result (forward search; usually next message).
+    for idx, msg in enumerate(rewritten):
+        if (
+            msg.get("role") == "tool"
+            and msg.get("tool_call_id") == target_call_id
+        ):
+            replaced = dict(msg)
+            replaced["content"] = new_content
+            rewritten[idx] = replaced
+            break
+
+    return rewritten
 
 
 # ---------------------------------------------------------------------------
@@ -325,50 +591,71 @@ def isolated_state_for_subagent(
     state: AgentState, *, fallback_user_message: str | None = None
 ) -> AgentState:
     """Return a shallow copy of ``state`` with ``messages`` replaced by an
-    isolated single-message conversation seeded from the supervisor's brief.
+    isolated, **fully-contextualised** single user message.
 
-    Sub-agents (researcher, planner, diagram, critic) run as **tools** of the
-    supervisor — they should NOT see the supervisor's user/assistant history
-    (the original user message, the supervisor's ``delegate_to_*`` tool call,
-    or the delegate-tool result). Showing them all of that confuses local
-    models, bloats context, and breaks the "sub-agent = tool" abstraction we
-    promised.
+    Sub-agents (researcher / planner / diagram / critic) run as *tools* of
+    the supervisor — they don't see its ReAct chatter, its delegate tool
+    calls, or its scratchpad. But they **do** need:
 
-    This builds a clean message list for the sub-agent: ``[{"role": "user",
-    "content": <brief>}]``. The brief is taken from
-    ``state['delegate_brief'].instruction`` (set by the supervisor adapter),
-    or — when no brief is present (e.g. standalone graphs hit the sub-agent
-    directly) — from ``fallback_user_message`` or the most recent original
-    user message in ``state['messages']``.
+      1. The user's original ask, verbatim — so the critic can verify
+         the work against it, the diagram-agent can re-read intent if the
+         brief is ambiguous, etc.
+      2. The supervisor's specific brief for this delegation — what
+         exactly the supervisor wants this sub-agent to do.
+      3. Optional reason / hint that supervisor passed along.
 
-    The sub-agent's own ReAct loop (``run_react``) will then append its own
-    assistant + tool messages to that isolated list. Wrappers should NOT
-    propagate ``patch['messages']`` from the sub-agent back into the global
-    LangGraph state — only structured outputs (findings / plan /
-    applied_changes / critique) flow back.
+    All of the above is packed into ONE user message so the model sees a
+    clean conversation: system prompt → context blocks → user (full
+    context) → its own ReAct turns. Without this, the critic in
+    particular was operating without ever seeing the user's original goal.
+
+    Wrappers must NOT propagate ``patch['messages']`` back into global
+    state — only structured outputs (findings / plan / applied_changes /
+    critique) flow back.
     """
     brief = state.get("delegate_brief") or {}
     instruction = ""
+    reason = ""
     if isinstance(brief, dict):
-        raw = brief.get("instruction")
-        if isinstance(raw, str):
-            instruction = raw.strip()
+        raw_i = brief.get("instruction")
+        raw_r = brief.get("reason")
+        if isinstance(raw_i, str):
+            instruction = raw_i.strip()
+        if isinstance(raw_r, str):
+            reason = raw_r.strip()
+
+    # The original user request is the FIRST user-role message in the
+    # supervisor's history. We track it separately from the brief so the
+    # sub-agent always knows the broader goal.
+    original_user = None
+    for msg in (state.get("messages") or []):
+        if msg.get("role") == "user" and isinstance(msg.get("content"), str):
+            content = msg["content"].strip()
+            if content:
+                original_user = content
+                break
 
     if not instruction and fallback_user_message:
         instruction = fallback_user_message.strip()
 
-    if not instruction:
-        # Fall back to the most recent user message in the global history.
-        for msg in reversed(state.get("messages") or []):
-            if msg.get("role") == "user" and isinstance(msg.get("content"), str):
-                instruction = msg["content"].strip()
-                break
+    # Compose the unified user message. We use Markdown headings so local
+    # models can clearly distinguish "what the user asked" from "what
+    # supervisor wants from me".
+    parts: list[str] = []
+    if original_user:
+        parts.append(f"## Original user request\n{original_user}")
+    if instruction:
+        parts.append(f"## Your specific task\n{instruction}")
+    if reason:
+        parts.append(f"_Supervisor's reasoning:_ {reason}")
+    if not parts:
+        parts.append("(no instruction provided — use the active context "
+                     "block to determine what to do)")
 
-    if not instruction:
-        instruction = "(no brief provided)"
+    user_msg = "\n\n".join(parts)
 
     isolated: AgentState = dict(state)  # type: ignore[assignment]
-    isolated["messages"] = [{"role": "user", "content": instruction}]
+    isolated["messages"] = [{"role": "user", "content": user_msg}]
     return isolated
 
 
@@ -662,6 +949,7 @@ async def run_react(
                 tools=cfg.tools or None,
                 metadata=call_metadata,
                 temperature=cfg.temperature,
+                max_tokens=cfg.max_tokens,
             )
             logger.warning(
                 "run_react[%s] step=%d result: text_len=%d tool_calls=%d finish=%s",

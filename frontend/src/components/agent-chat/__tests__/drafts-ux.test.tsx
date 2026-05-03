@@ -43,6 +43,8 @@ vi.mock('../../../hooks/use-api', () => ({
   useDraftsForDiagram: (_id: string | undefined) => ({
     data: _id ? mockDrafts : undefined,
   }),
+  useCurrentMemberAgentAccess: () => 'full' as const,
+  useCurrentMemberRole: () => 'owner' as const,
 }))
 
 vi.mock('../hooks/use-agent-stream', () => ({

@@ -35,7 +35,6 @@ from app.agents.nodes.base import (
     NodeOutput,
     NodeStreamEvent,
     ToolExecutor,
-    render_subagent_results_block,
     run_react,
 )
 from app.agents.state import AgentState
@@ -396,10 +395,15 @@ def make_supervisor_config(
             render_scratchpad_block,
             render_resources_block,
             render_applied_changes_block,
-            # Surfaces findings/plan/applied/critique on 2nd+ visits so the
-            # supervisor can build on prior delegate output. Returns "" on the
-            # first visit (clean context).
-            render_subagent_results_block,
+            # NOTE: ``render_subagent_results_block`` was previously appended
+            # here as a workaround for the OpenAI tool-call protocol gap —
+            # the supervisor's ``delegate_to_*`` tool result only echoed the
+            # input args, so the supervisor couldn't see what the sub-agent
+            # actually produced. The graph-level helper
+            # ``rewrite_subagent_tool_result`` now patches the matching tool
+            # message with the real findings/plan/applied/critique payload,
+            # making this system block redundant. Re-adding it would double
+            # the same content in the LLM's context.
         ],
         terminating_tool_names=_TERMINATING_TOOL_NAMES,
     )

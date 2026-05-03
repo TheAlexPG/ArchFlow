@@ -305,6 +305,28 @@ def test_langfuse_metadata_full_with_env_returns_dict(
     assert "node:planner" in tags
 
 
+def test_langfuse_metadata_eval_suffix_appears_in_trace_name_and_tags(
+    client: LLMClient, monkeypatch: pytest.MonkeyPatch
+):
+    """``ARCHFLOW_TRACE_NAME_SUFFIX=":eval"`` suffixes trace_name and adds the
+    ``archflow:eval`` tag — used by the golden eval suite to keep its traces
+    filterable in the Langfuse UI."""
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk-test-deadbeef")
+    monkeypatch.setenv("ARCHFLOW_TRACE_NAME_SUFFIX", ":eval")
+    meta = LLMCallMetadata(
+        workspace_id=uuid4(),
+        agent_id="general",
+        session_id=uuid4(),
+        actor_id=uuid4(),
+        analytics_consent="full",
+        node_name="planner",
+    )
+    out = client._build_langfuse_metadata(meta)
+    assert out is not None
+    assert out["trace_name"] == "agent:general:eval"
+    assert "archflow:eval" in out["tags"]
+
+
 def test_langfuse_metadata_full_without_trace_id_omits_key(
     client: LLMClient, monkeypatch: pytest.MonkeyPatch
 ):

@@ -61,6 +61,16 @@ _ENV_PUBLIC_KEY = "LANGFUSE_PUBLIC_KEY"
 _ENV_SECRET_KEY = "LANGFUSE_SECRET_KEY"
 _ENV_HOST = "LANGFUSE_HOST"
 
+# Optional suffix appended to ``agent:<id>`` in Langfuse trace names. Eval
+# suites set this to ``:eval`` so their traces are easy to filter out from
+# real workspace activity in the Langfuse UI.
+_ENV_TRACE_NAME_SUFFIX = "ARCHFLOW_TRACE_NAME_SUFFIX"
+
+
+def trace_name_suffix() -> str:
+    """Return the optional trace-name suffix from the environment, or ``""``."""
+    return os.environ.get(_ENV_TRACE_NAME_SUFFIX, "") or ""
+
 
 def is_langfuse_configured() -> bool:
     """Return True iff all three Langfuse env-loaded settings are present.
@@ -275,13 +285,17 @@ class AgentTracer:
         self._spans: dict[str, Any] = {}
         if self._client is None:
             return
+        suffix = trace_name_suffix()
+        trace_tags = list(tags or [])
+        if suffix and "archflow:eval" not in trace_tags and suffix == ":eval":
+            trace_tags.append("archflow:eval")
         try:
             self._trace = self._client.trace(
                 id=trace_id,
-                name=f"agent:{agent_id}",
+                name=f"agent:{agent_id}{suffix}",
                 session_id=session_id,
                 user_id=user_id,
-                tags=tags or [],
+                tags=trace_tags,
                 input={"message": chat_input} if chat_input else None,
             )
         except Exception as exc:  # pragma: no cover — defensive

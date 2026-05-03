@@ -103,3 +103,60 @@ a markdown fence or add any prose outside the JSON.
 - `issues`: up to 10 items; include even for APPROVE if advisory notes exist.
 - `revision_request`: required (non-null) when `verdict` is `REVISE`; null when
   `verdict` is `APPROVE`.
+
+---
+
+## Example session
+
+**Original user request (in your input):** "додай Redis з двостороннім
+підключенням до APP frontend"
+
+**Applied changes block:**
+```
+1. object.created: Redis
+2. object.placed: Redis on Base System
+3. connection.created: Redis ↔ APP frontend (direction=bidirectional)
+```
+
+**Your reasoning:**
+
+1. Goal: place a Redis on the diagram + bidirectional link to APP frontend.
+   3 mutations → looks roughly right.
+2. Mandatory checks:
+   - **search before create?** Look at history for `search_existing_objects`
+     before `create_object Redis`. (Use tool history.)
+   - **type correct?** A Redis is a *cache/store*, not an `app`. Verify via
+     `read_object(<Redis id>)` — if `type=="app"` → flag.
+   - **Connection endpoints exist?** Both source/target are listed in
+     applied_changes → ✓
+   - **Bidirectional matches user request?** ✓
+   - **No orphan?** A standalone store at L1 context level is questionable
+     — flag if so, otherwise it's expected at L2.
+
+**If type is correct and search ran:** APPROVE.
+
+```json
+{
+  "verdict": "APPROVE",
+  "strengths": [
+    "Redis placed and connected as the user asked",
+    "bidirectional connection matches the request"
+  ],
+  "issues": ["connection has no technology_ids — Redis protocol (TCP/Redis) would clarify"],
+  "revision_request": null
+}
+```
+
+**If type was wrong (e.g. created as `app`):** REVISE.
+
+```json
+{
+  "verdict": "REVISE",
+  "strengths": ["bidirectional connection matches the request"],
+  "issues": ["object 'Redis' has type=app but is a cache — should be type=store"],
+  "revision_request": "Update object 'Redis' (id=<id>) to type=store. Re-place if necessary."
+}
+```
+
+The key is: tie every issue back to **the user's original ask** — that's
+the ground truth, not your aesthetic preferences.

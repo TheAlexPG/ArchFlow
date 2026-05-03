@@ -1092,6 +1092,26 @@ export function useCurrentMemberAgentAccess(): import('../types/model').AgentAcc
   return member?.agent_access ?? 'full'
 }
 
+// Returns the WorkspaceRole of the currently-authenticated user within the
+// active workspace. Used by the agent-chat upgrade modal to decide whether
+// to show a self-serve link to /members or to point the user at their admin.
+export function useCurrentMemberRole(): WorkspaceRole | null {
+  const workspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
+  const isAuthenticated = useAuthStore((s) => !!s.accessToken)
+  const { data: me } = useQuery({
+    queryKey: ['me'],
+    queryFn: async () => {
+      const { data } = await api.get<MeResponse>('/auth/me')
+      return data
+    },
+    staleTime: 2 * 60 * 1000,
+    enabled: isAuthenticated,
+  })
+  const { data: members = [] } = useWorkspaceMembers(workspaceId)
+  const member = me ? members.find((m) => m.user_id === me.id) : undefined
+  return member?.role ?? null
+}
+
 export function useRemoveMember(workspaceId: string | null) {
   const qc = useQueryClient()
   return useMutation({

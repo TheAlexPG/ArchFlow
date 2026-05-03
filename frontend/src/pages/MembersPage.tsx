@@ -254,8 +254,12 @@ export function MembersPage() {
               )}
               {members.map((m) => {
                 const effectiveAccess: AgentAccess = m.agent_access ?? 'full'
-                const isCurrentUser = me?.id === m.user_id
-                const canEdit = canEditAgentAccess && !isCurrentUser
+                // Owners and admins can edit any row, including their own.
+                // The backend's last-owner guard prevents lockouts on the
+                // role column; agent_access has no equivalent risk (an owner
+                // who locks themselves out of agent_access can flip it back
+                // any time).
+                const canEdit = canEditAgentAccess
                 return (
                   <tr key={m.user_id} className="border-b border-neutral-800 last:border-0">
                     <td className="px-4 py-2">{m.name}</td>

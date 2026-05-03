@@ -247,9 +247,11 @@ def test_make_supervisor_config_sets_expected_knobs():
         "web_fetch",
         "list_active_drafts",
     } <= tool_names
-    # Four additional system blocks: scratchpad, resources, applied changes,
-    # sub-agent results.
-    assert len(cfg.additional_system_blocks) == 4
+    # Three additional system blocks: scratchpad, resources, applied changes.
+    # ``render_subagent_results_block`` was retired once the graph started
+    # rewriting the matching delegate_to_* tool result with the actual
+    # findings/plan/applied/critique payload.
+    assert len(cfg.additional_system_blocks) == 3
 
 
 def test_load_supervisor_prompt_returns_real_content():

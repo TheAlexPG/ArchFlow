@@ -339,10 +339,17 @@ async def execute_tool(call: dict, ctx: ToolContext) -> ToolExecutionResult:
         return _denied_result(tool_call_id, name, str(exc))
     except AgentError as exc:
         logger.warning("agent error in tool=%s: %s", name, exc)
+        await _safe_rollback(ctx)
         return _err_result(tool_call_id, name, str(exc))
     except Exception as exc:
         # Log full traceback locally, return only the message to the LLM.
         logger.error("tool %s raised: %s\n%s", name, exc, traceback.format_exc())
+        # Without rollback, asyncpg leaves the transaction in 'aborted'
+        # state and every subsequent query in this runtime fails with
+        # InFailedSQLTransactionError — including the runtime's own
+        # session.flush at the end, which silently drops the assistant
+        # message. Always rollback on tool error.
+        await _safe_rollback(ctx)
         return _err_result(tool_call_id, name, f"tool execution failed: {exc}")
 
     if not isinstance(result_dict, dict):
@@ -457,6 +464,25 @@ def _err_result(tool_call_id: str, name: str, message: str) -> ToolExecutionResu
         raw={"error": message},
         structured={},
     )
+
+
+async def _safe_rollback(ctx: ToolContext) -> None:
+    """Roll back the SQLAlchemy session after a tool failure.
+
+    Mandatory after any tool exception that hit the DB — without it, asyncpg
+    leaves the underlying transaction in an aborted state and every
+    subsequent query in this session (other tools, runtime's own flush,
+    even the agent_chat_message INSERT) fails with
+    ``InFailedSQLTransactionError``. Logs but does not re-raise — rollback
+    is best-effort cleanup.
+    """
+    db = getattr(ctx, "db", None)
+    if db is None:
+        return
+    try:
+        await db.rollback()
+    except Exception:  # noqa: BLE001 — never let rollback mask the real error
+        logger.debug("safe rollback failed", exc_info=True)
 
 
 def _denied_result(tool_call_id: str, name: str, message: str) -> ToolExecutionResult:

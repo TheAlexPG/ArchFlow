@@ -462,29 +462,37 @@ class LLMClient:
             return None
         if not os.environ.get(_LANGFUSE_PUBLIC_KEY_ENV):
             return None
+        # Optional suffix (e.g. ":eval") so eval runs are filterable in the
+        # Langfuse UI. Read lazily here so tests can flip it via monkeypatch.
+        from app.agents.tracing import trace_name_suffix
+
+        name_suffix = trace_name_suffix()
         # LiteLLM Langfuse integration recognises these top-level metadata keys
         # (see https://docs.litellm.ai/docs/observability/langfuse_integration):
         #   trace_id, session_id, trace_name, generation_name, tags, user_id,
         #   trace_user_id. Setting trace_id groups every LLM call in this
         #   invocation under one Langfuse trace; session_id groups multiple
         #   chat rounds under one Langfuse session.
+        tags = [
+            f"agent:{call_meta.agent_id}",
+            f"workspace:{call_meta.workspace_id}",
+            f"context:{call_meta.context_kind or 'none'}",
+            f"analytics_mode:{call_meta.analytics_consent}",
+            f"model:{self.model}",
+            f"prompt_version:{call_meta.prompt_version or 'n/a'}",
+            f"node:{call_meta.node_name or 'n/a'}",
+        ]
+        if name_suffix == ":eval":
+            tags.append("archflow:eval")
         meta: dict[str, Any] = {
             "session_id": str(call_meta.session_id),
-            "trace_name": f"agent:{call_meta.agent_id}",
+            "trace_name": f"agent:{call_meta.agent_id}{name_suffix}",
             "generation_name": call_meta.node_name or "llm_call",
             "user_id": str(call_meta.actor_id),
             # Kept for back-compat with earlier docs/recipes that read these.
             "trace_user_id": str(call_meta.actor_id),
             "trace_session_id": str(call_meta.session_id),
-            "tags": [
-                f"agent:{call_meta.agent_id}",
-                f"workspace:{call_meta.workspace_id}",
-                f"context:{call_meta.context_kind or 'none'}",
-                f"analytics_mode:{call_meta.analytics_consent}",
-                f"model:{self.model}",
-                f"prompt_version:{call_meta.prompt_version or 'n/a'}",
-                f"node:{call_meta.node_name or 'n/a'}",
-            ],
+            "tags": tags,
         }
         if call_meta.trace_id is not None:
             meta["trace_id"] = call_meta.trace_id

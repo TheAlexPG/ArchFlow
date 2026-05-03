@@ -134,13 +134,14 @@ describe('MembersPage — Agent access column', () => {
     expect(viewerSelect).toBeInTheDocument()
   })
 
-  it('admin sees their own agent_access as a read-only badge (not editable)', () => {
+  it('admin sees their own agent_access as an editable select (self-edit allowed)', () => {
+    // Owners and admins can change their own agent_access — there is no
+    // last-owner risk on this column (an owner can always flip it back).
     renderPage()
 
-    // The current user (u-admin) should see a badge, not a select
-    const adminBadge = screen.getByTestId('agent-access-badge-u-admin')
-    expect(adminBadge).toBeInTheDocument()
-    expect(screen.queryByTestId('agent-access-select-u-admin')).not.toBeInTheDocument()
+    const adminSelect = screen.getByTestId('agent-access-select-u-admin')
+    expect(adminSelect).toBeInTheDocument()
+    expect(screen.queryByTestId('agent-access-badge-u-admin')).not.toBeInTheDocument()
   })
 
   it('editor (non-admin) sees read-only badges for all agent_access values', () => {

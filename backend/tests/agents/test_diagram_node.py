@@ -677,11 +677,7 @@ async def test_run_tool_error_does_not_crash_assistant_continues():
 
 @pytest.mark.asyncio
 async def test_run_long_path_reaches_max_steps_cleanly():
-    """Every step asks for a tool — never terminal → max_steps=10 trips.
-
-    Verifies the diagram node doesn't crash on long runs and that
-    applied_changes still accumulates whatever ran before the limit.
-    """
+    """Every step asks for a tool — never terminal → max_steps=10 trips."""
     forever_call = {
         "id": "loop",
         "name": "read_diagram",

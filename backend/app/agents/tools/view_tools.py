@@ -260,8 +260,11 @@ async def _resolve_position(
         result = await layout_engine.incremental_place(
             diagram_id=diagram_id, object_id=object_id, db=ctx.db
         )
-        # Engine returns (x, y, w, h). Honor the position only.
-        return float(result[0]), float(result[1])
+        # Engine returns a PlacementResult dataclass (x, y, w, h). Honor the
+        # position only — width/height come from the tool args. Earlier the
+        # engine returned a tuple and we indexed [0]/[1]; the dataclass
+        # rewrite broke that with "PlacementResult is not subscriptable".
+        return float(result.x), float(result.y)
     except NotImplementedError:
         logger.debug(
             "layout engine not yet implemented (task 053); using grid fallback "
@@ -299,13 +302,45 @@ async def _resolve_position(
     mutating=True,
 )
 async def place_on_diagram(args: PlaceOnDiagramInput, ctx: ToolContext) -> dict:
-    """Create a DiagramObject row at the given (or computed) position."""
+    """Create a DiagramObject row at the given (or computed) position.
+
+    Idempotent: if the (diagram_id, object_id) pair is already placed,
+    returns the existing placement instead of raising a UniqueViolation.
+    Without this guard, a re-delegated diagram-agent that tried to place
+    the same object twice would crash the entire transaction (cascade
+    rollback dropped the agent_chat_session row, the runtime then died
+    with a ForeignKeyViolationError on the next message INSERT).
+    """
     from app.schemas.diagram import DiagramObjectCreate
     from app.services import diagram_service, object_service
 
     obj = await object_service.get_object(ctx.db, args.object_id)
     if obj is None:
         raise ToolDenied(f"object {args.object_id} not found")
+
+    # ── Dedupe pre-check ──────────────────────────────────────────────
+    existing_placements = await diagram_service.get_diagram_objects(
+        ctx.db, args.diagram_id
+    )
+    reused = next(
+        (p for p in existing_placements if p.object_id == args.object_id), None
+    )
+    if reused is not None:
+        return {
+            "action": "object.placed",  # keep verb so UI pill renders
+            "status": "reused",
+            "target_type": "object",
+            "target_id": args.object_id,
+            "diagram_id": args.diagram_id,
+            "name": obj.name,
+            "placement": {
+                "x": reused.position_x,
+                "y": reused.position_y,
+                "w": reused.width,
+                "h": reused.height,
+            },
+            "preview": short_preview("Already placed", "object", obj.name),
+        }
 
     width = float(args.width) if args.width is not None else float(_DEFAULT_NODE_WIDTH)
     height = float(args.height) if args.height is not None else float(_DEFAULT_NODE_HEIGHT)
@@ -327,6 +362,15 @@ async def place_on_diagram(args: PlaceOnDiagramInput, ctx: ToolContext) -> dict:
             width=width,
             height=height,
         ),
+    )
+    from app.agents.tools._realtime import publish_placement_event
+
+    await publish_placement_event(
+        db=ctx.db,
+        diagram_id=args.diagram_id,
+        placement=placement,
+        event_type="diagram_object.added",
+        draft_id=ctx.active_draft_id,
     )
 
     return {
@@ -369,6 +413,15 @@ async def move_on_diagram(args: MoveOnDiagramInput, ctx: ToolContext) -> dict:
         raise ToolDenied(
             f"object {args.object_id} is not placed on diagram {args.diagram_id}"
         )
+    from app.agents.tools._realtime import publish_placement_event
+
+    await publish_placement_event(
+        db=ctx.db,
+        diagram_id=args.diagram_id,
+        placement=placement,
+        event_type="diagram_object.updated",
+        draft_id=ctx.active_draft_id,
+    )
 
     return {
         "action": "object.moved",
@@ -440,6 +493,16 @@ async def unplace_from_diagram(args: UnplaceFromDiagramInput, ctx: ToolContext) 
         raise ToolDenied(
             f"object {args.object_id} is not placed on diagram {args.diagram_id}"
         )
+    from app.agents.tools._realtime import publish_placement_event
+
+    await publish_placement_event(
+        db=ctx.db,
+        diagram_id=args.diagram_id,
+        placement=None,
+        event_type="diagram_object.removed",
+        object_id=args.object_id,
+        draft_id=ctx.active_draft_id,
+    )
 
     return {
         "action": "object.unplaced",
@@ -485,6 +548,13 @@ async def create_diagram(args: CreateDiagramInput, ctx: ToolContext) -> dict:
     diagram = await diagram_service.create_diagram(
         ctx.db, create_data, workspace_id=ctx.workspace_id
     )
+    from app.agents.tools._realtime import publish_diagram_event
+
+    publish_diagram_event(
+        diagram=diagram,
+        event_type="diagram.created",
+        draft_id=ctx.active_draft_id,
+    )
 
     record: dict[str, Any] = {
         "action": "diagram.created",
@@ -522,6 +592,13 @@ async def update_diagram(args: UpdateDiagramInput, ctx: ToolContext) -> dict:
 
     update_data = DiagramUpdate(**patch)
     updated = await diagram_service.update_diagram(ctx.db, diagram, update_data)
+    from app.agents.tools._realtime import publish_diagram_event
+
+    publish_diagram_event(
+        diagram=updated,
+        event_type="diagram.updated",
+        draft_id=getattr(updated, "draft_id", None),
+    )
 
     record: dict[str, Any] = {
         "action": "diagram.updated",
@@ -580,7 +657,24 @@ async def delete_diagram(args: DeleteDiagramInput, ctx: ToolContext) -> dict:
 
     name = diagram.name
     target_id = diagram.id
+    snapshot_workspace = getattr(diagram, "workspace_id", None)
+    snapshot_draft = getattr(diagram, "draft_id", None)
     await diagram_service.delete_diagram(ctx.db, diagram)
+    from app.agents.tools._realtime import publish_diagram_event
+
+    publish_diagram_event(
+        diagram=type(
+            "_DStub",
+            (),
+            {
+                "id": target_id,
+                "workspace_id": snapshot_workspace,
+                "draft_id": snapshot_draft,
+            },
+        )(),
+        event_type="diagram.deleted",
+        draft_id=snapshot_draft,
+    )
     return {
         "action": "diagram.deleted",
         "target_type": "diagram",
@@ -623,6 +717,13 @@ async def link_object_to_child_diagram(
 
     updated = await diagram_service.update_diagram(
         ctx.db, diagram, DiagramUpdate(scope_object_id=args.object_id)
+    )
+    from app.agents.tools._realtime import publish_diagram_event
+
+    publish_diagram_event(
+        diagram=updated,
+        event_type="diagram.updated",
+        draft_id=getattr(updated, "draft_id", None),
     )
 
     return {
@@ -713,6 +814,13 @@ async def create_child_diagram_for_object(
         ),
         workspace_id=ctx.workspace_id,
     )
+    from app.agents.tools._realtime import publish_diagram_event
+
+    publish_diagram_event(
+        diagram=diagram,
+        event_type="diagram.created",
+        draft_id=ctx.active_draft_id,
+    )
 
     record: dict[str, Any] = {
         "action": "diagram.created",
@@ -795,6 +903,8 @@ async def _handle_auto_layout_diagram(args: AutoLayoutDiagramInput, ctx: ToolCon
         }
 
     # Apply the moves.
+    from app.agents.tools._realtime import publish_placement_event
+
     applied = 0
     for object_id, x, y in plan.moves:
         updated = await diagram_service.update_diagram_object(
@@ -805,6 +915,13 @@ async def _handle_auto_layout_diagram(args: AutoLayoutDiagramInput, ctx: ToolCon
         )
         if updated is not None:
             applied += 1
+            await publish_placement_event(
+                db=ctx.db,
+                diagram_id=args.diagram_id,
+                placement=updated,
+                event_type="diagram_object.updated",
+                draft_id=ctx.active_draft_id,
+            )
 
     return {
         "action": "diagram.relayouted",

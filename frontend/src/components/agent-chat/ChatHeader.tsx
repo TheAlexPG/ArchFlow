@@ -1,6 +1,9 @@
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useDraftsForDiagram } from '../../hooks/use-api'
+import { useCurrentMemberAgentAccess, useDraftsForDiagram } from '../../hooks/use-api'
+import type { AgentAccess } from '../../types/model'
 import { cn } from '../../utils/cn'
+import { AgentAccessUpgradeModal } from './AgentAccessUpgradeModal'
 import { useChatContext } from './hooks/use-chat-context'
 import { type ChatMode, useAgentChatStore } from './store'
 import { SessionPicker } from './SessionPicker'
@@ -10,29 +13,54 @@ import { SessionPicker } from './SessionPicker'
 interface ModeToggleProps {
   value: ChatMode
   onChange: (mode: ChatMode) => void
+  /** Effective workspace agent_access — used to disable Full when membership
+   *  doesn't allow it. */
+  agentAccess: AgentAccess
+  /** Called when the user clicks a mode they don't have permission for. */
+  onUpgradeRequest: () => void
 }
 
-function ModeToggle({ value, onChange }: ModeToggleProps) {
+function ModeToggle({ value, onChange, agentAccess, onUpgradeRequest }: ModeToggleProps) {
+  // Read-only membership: Full is disabled and clicking it opens the upgrade
+  // modal instead of silently letting the user think they're in Full mode.
+  const fullDisabled = agentAccess !== 'full'
+
   return (
     <div className="flex items-center gap-0.5 mt-0.5" role="radiogroup" aria-label="Chat mode">
       {(['full', 'read_only'] as const).map((m) => {
         const label = m === 'full' ? 'Full' : 'Read-only'
         const active = value === m
+        const disabled = m === 'full' && fullDisabled
+        const handleClick = () => {
+          if (disabled) {
+            onUpgradeRequest()
+            return
+          }
+          onChange(m)
+        }
         return (
           <button
             key={m}
             role="radio"
             aria-checked={active}
+            aria-disabled={disabled}
             data-testid={`mode-toggle-${m}`}
-            onClick={() => onChange(m)}
+            onClick={handleClick}
+            title={
+              disabled
+                ? 'Full mode потребує agent_access=full на membership'
+                : undefined
+            }
             className={cn(
               'px-1.5 py-0.5 rounded text-[10px] font-mono transition-all duration-100',
               active
                 ? 'bg-coral/20 text-coral border border-coral/30'
-                : 'text-text-3 hover:text-text-2 border border-transparent hover:border-border-base',
+                : disabled
+                  ? 'text-text-3/50 border border-transparent cursor-not-allowed hover:bg-surface-hi/50'
+                  : 'text-text-3 hover:text-text-2 border border-transparent hover:border-border-base',
             )}
           >
-            {active ? '◉' : '○'} {label}
+            {active ? '◉' : disabled ? '🔒' : '○'} {label}
           </button>
         )
       })}
@@ -141,6 +169,17 @@ function WorkingInDropdown() {
 
 export function ChatHeader() {
   const { mode, setMode, expand, open, close, bubbleState } = useAgentChatStore()
+  const agentAccess = useCurrentMemberAgentAccess()
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false)
+
+  // Sync local store with effective access. The store defaults to 'full' but
+  // backend `_clamp_mode` would silently downgrade — without this the user
+  // sees a "Full" badge while every mutation gets refused as "read-only".
+  useEffect(() => {
+    if (agentAccess !== 'full' && mode !== 'read_only') {
+      setMode('read_only')
+    }
+  }, [agentAccess, mode, setMode])
 
   return (
     <div
@@ -159,9 +198,19 @@ export function ChatHeader() {
           ArchFlow Agent
           <SessionPicker />
         </h3>
-        <ModeToggle value={mode} onChange={setMode} />
+        <ModeToggle
+          value={mode}
+          onChange={setMode}
+          agentAccess={agentAccess}
+          onUpgradeRequest={() => setShowUpgradeModal(true)}
+        />
         <WorkingInDropdown />
       </div>
+
+      <AgentAccessUpgradeModal
+        open={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+      />
 
       {/* Right: window controls */}
       <div className="flex items-center gap-0.5">

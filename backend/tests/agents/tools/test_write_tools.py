@@ -209,6 +209,66 @@ async def test_create_object_happy(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_create_object_publishes_ws_event(monkeypatch):
+    """Live-canvas update path: ``create_object`` must publish to the
+    workspace WS channel so open canvases refresh without waiting for the
+    SSE applied_change → REST refetch round-trip."""
+    _patch_acl_pass(monkeypatch)
+
+    new_obj = _make_object_row(name="Order Service")
+    monkeypatch.setattr(
+        "app.services.object_service.create_object",
+        AsyncMock(return_value=new_obj),
+    )
+
+    # Stub the response schema so MagicMock fixtures don't fail Pydantic's
+    # field validation — we care that publish runs, not what it serialises.
+    class _StubResponse:
+        def __init__(self, name: str, obj_id: Any) -> None:
+            self._body = {"id": str(obj_id), "name": name}
+
+        def model_dump(self, **_kw: Any) -> dict:
+            return dict(self._body)
+
+    monkeypatch.setattr(
+        "app.schemas.object.ObjectResponse.from_model",
+        classmethod(lambda cls, o: _StubResponse(o.name, o.id)),
+    )
+
+    captured: list[tuple] = []
+    monkeypatch.setattr(
+        "app.agents.tools._realtime.fire_and_forget_publish",
+        lambda ws_id, event_type, payload: captured.append(
+            ("publish", ws_id, event_type, payload)
+        ),
+    )
+    monkeypatch.setattr(
+        "app.agents.tools._realtime.fire_and_forget_emit",
+        lambda event_type, body: captured.append(("emit", event_type, body)),
+    )
+
+    ctx = _ctx()
+    out = await execute_tool(
+        {
+            "id": "c1",
+            "name": "create_object",
+            "arguments": {"name": "Order Service", "type": "app"},
+        },
+        ctx,
+    )
+    assert out.status == "ok", out.content
+
+    publish_calls = [c for c in captured if c[0] == "publish"]
+    emit_calls = [c for c in captured if c[0] == "emit"]
+    assert len(publish_calls) == 1
+    assert publish_calls[0][2] == "object.created"
+    assert "object" in publish_calls[0][3]
+    assert publish_calls[0][3]["object"]["name"] == "Order Service"
+    assert len(emit_calls) == 1
+    assert emit_calls[0][1] == "object.created"
+
+
+@pytest.mark.asyncio
 async def test_create_object_validation_missing_name(monkeypatch):
     _patch_acl_pass(monkeypatch)
 
@@ -452,8 +512,19 @@ async def test_place_on_diagram_with_xy_uses_provided_coords(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_place_on_diagram_without_xy_uses_grid_fallback(monkeypatch):
-    """Layout engine raises NotImplementedError → grid fallback at (64, 64)."""
+    """Layout engine raises NotImplementedError → grid fallback at (64, 64).
+
+    Force the engine to raise so we exercise the fallback path even when the
+    real implementation is wired up.
+    """
     _patch_acl_pass(monkeypatch)
+
+    async def _engine_raises(**_kwargs):
+        raise NotImplementedError("force fallback in test")
+
+    monkeypatch.setattr(
+        "app.agents.layout.engine.incremental_place", _engine_raises
+    )
 
     obj = _make_object_row(name="API GW")
     placement = _make_placement(object_id=obj.id, position_x=64, position_y=64)
@@ -462,7 +533,9 @@ async def test_place_on_diagram_without_xy_uses_grid_fallback(monkeypatch):
         "app.services.object_service.get_object",
         AsyncMock(return_value=obj),
     )
-    # Empty diagram → first cell at (64, 64).
+    # Empty diagram → first cell at (64, 64). Two callers in the new
+    # place_on_diagram (dedupe pre-check + grid fallback) — return [] for
+    # both so we hit the empty-grid path.
     monkeypatch.setattr(
         "app.services.diagram_service.get_diagram_objects",
         AsyncMock(return_value=[]),

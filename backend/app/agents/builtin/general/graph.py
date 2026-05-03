@@ -249,6 +249,41 @@ def _strip_subagent_messages(patch: dict) -> dict:
     return patch
 
 
+def _rewrite_supervisor_tool_result(
+    state: AgentState,
+    *,
+    kind: str,
+    findings: Any | None = None,
+    plan: Any | None = None,
+    applied_changes: list[dict] | None = None,
+    critique: Any | None = None,
+) -> list[dict] | None:
+    """Walk the supervisor's history and rewrite the matching ``delegate_to_<kind>``
+    tool result message so it carries the sub-agent's actual output.
+
+    Returns the rewritten ``messages`` list, or ``None`` when there's nothing
+    to overwrite (no matching delegate call, no artefact). Caller writes the
+    result into ``patch['messages']`` so LangGraph commits it to global state.
+    """
+    from app.agents.nodes.base import rewrite_subagent_tool_result
+
+    parent_messages = state.get("messages") or []
+    if not parent_messages:
+        return None
+    rewritten = rewrite_subagent_tool_result(
+        parent_messages,
+        kind=kind,
+        findings=findings,
+        plan=plan,
+        applied_changes=applied_changes,
+        critique=critique,
+    )
+    # Avoid spurious patch when nothing changed (no matching tool result).
+    if rewritten == list(parent_messages):
+        return None
+    return rewritten
+
+
 async def _drain_with_tracing(
     *,
     node_run,
@@ -398,6 +433,11 @@ async def planner_node(state: AgentState, config: Optional[RunnableConfig] = Non
         patch["plan"] = output.structured
     if forced and "forced_finalize" not in patch:
         patch["forced_finalize"] = forced
+    rewritten = _rewrite_supervisor_tool_result(
+        state, kind="planner", plan=patch.get("plan")
+    )
+    if rewritten is not None:
+        patch["messages"] = rewritten
     return patch
 
 
@@ -429,6 +469,18 @@ async def diagram_node(state: AgentState, config: Optional[RunnableConfig] = Non
     logger.warning("graph: diagram_node EXIT forced=%s applied=%d", forced, len(patch.get("applied_changes") or []))
     if forced and "forced_finalize" not in patch:
         patch["forced_finalize"] = forced
+    # Rewrite supervisor's delegate_to_diagram tool result so it carries the
+    # actual applied_changes the diagram-agent produced.  ``patch[applied]``
+    # is already the merged list (pre-existing + new) — see
+    # ``diagram._augment_state_patch_after_run``.
+    applied_for_render = patch.get("applied_changes")
+    if applied_for_render is None:
+        applied_for_render = state.get("applied_changes") or []
+    rewritten = _rewrite_supervisor_tool_result(
+        state, kind="diagram", applied_changes=applied_for_render
+    )
+    if rewritten is not None:
+        patch["messages"] = rewritten
     return patch
 
 
@@ -464,6 +516,11 @@ async def researcher_node(state: AgentState, config: Optional[RunnableConfig] = 
     )
     if forced and "forced_finalize" not in patch:
         patch["forced_finalize"] = forced
+    rewritten = _rewrite_supervisor_tool_result(
+        state, kind="researcher", findings=patch.get("findings")
+    )
+    if rewritten is not None:
+        patch["messages"] = rewritten
     return patch
 
 
@@ -524,6 +581,11 @@ async def critic_node(state: AgentState, config: Optional[RunnableConfig] = None
         if not isinstance(patch.get("critique"), dict)
         else (patch.get("critique") or {}).get("verdict"),
     )
+    rewritten = _rewrite_supervisor_tool_result(
+        state, kind="critic", critique=patch.get("critique") or state.get("critique")
+    )
+    if rewritten is not None:
+        patch["messages"] = rewritten
     return patch
 
 

@@ -22,6 +22,7 @@ cd backend && make -C evals slow              # Requires EVAL_LLM_KEY env
 | `eval-release` | `make -C evals eval-release` | `fast` + `slow` + release report |
 | `eval-baseline` | `make -C evals eval-baseline` | Save new baseline snapshots |
 | `eval-quick` | `make -C evals eval-quick` | Smoke run across all evals |
+| `eval-golden` | `make -C evals eval-golden` | Live supervisor+sub-agents run against local Qwen (mocked DB) |
 
 ## Environment variables
 
@@ -31,6 +32,46 @@ cd backend && make -C evals slow              # Requires EVAL_LLM_KEY env
 | `EVAL_LLM_KEY` | Judge LLM API key |
 | `EVAL_LLM_BASE_URL` | Optional custom base URL for the judge model |
 | `EVAL_THRESHOLD_PROFILE` | `lenient` (default, CI) or `strict` (release gate) |
+
+## Golden suite (live local Qwen)
+
+The `eval-golden` target exercises the full general-agent graph
+(supervisor → planner / researcher / diagram → finalize) against a **real**
+local Qwen / LM Studio endpoint while **mocking** every database and
+service-layer call. The LLM is the only live dependency — the whole point is
+to catch when our prompts or graph cause Qwen to misbehave.
+
+Skipped by default. Enable explicitly:
+
+```bash
+cd backend
+RUN_GOLDEN_EVALS=1 make -C evals eval-golden
+```
+
+Files:
+
+- `evals/test_golden_investigate.py` — read-only "explain the diagram" cases.
+- `evals/test_golden_create_basic.py` — basic creation cases (new store + place
+  + connect).
+- `evals/golden_runtime.py` — shared scaffolding: seeded in-memory workspace,
+  `FakeSession`, monkeypatch helpers for object/diagram/connection services +
+  access service + layout engine.
+
+Configuration via environment variables:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `RUN_GOLDEN_EVALS` | _(unset)_ | Must be `1` (or `true`) to enable. |
+| `GOLDEN_EVAL_BASE_URL` | `http://192.168.0.146:11434/v1` | LM Studio / Ollama endpoint. |
+| `GOLDEN_EVAL_MODEL` | `qwen/qwen3.6-35b-a3b` | Model id served at the endpoint. |
+
+Each case finishes in ~30-90s on a healthy LM Studio instance. Assertions are
+intentionally lenient on wording (Qwen rephrases on every run) and strict on
+structure (a researcher delegation happened, the right tools were called,
+applied_changes counts match). Cases that consistently flake on Qwen quirks
+(e.g. picking 'unidirectional' when the prompt says 'bidirectional') are
+marked `xfail` with a clear reason — that flake itself is signal we want to
+keep visible.
 
 ## CI
 

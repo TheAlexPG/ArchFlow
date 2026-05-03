@@ -6,11 +6,11 @@ import contextlib
 from difflib import SequenceMatcher
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, or_, select
 
 from app.agents.tools.base import ToolContext, tool
-from app.models.object import ModelObject
+from app.models.object import ModelObject, ObjectType
 from app.models.technology import TechCategory, Technology
 
 # ---------------------------------------------------------------------------
@@ -18,11 +18,82 @@ from app.models.technology import TechCategory, Technology
 # ---------------------------------------------------------------------------
 
 
+# C4 PascalCase aliases ("SoftwareSystem", "Container") that local models love
+# to invent → snake_case enum values used by the DB. Anything else is dropped
+# silently rather than raising — the LLM gets an empty result it can recover
+# from instead of a 500 that aborts the whole transaction.
+_TYPE_ALIASES: dict[str, str] = {
+    "system": "system",
+    "softwaresystem": "system",
+    "software_system": "system",
+    "actor": "actor",
+    "user": "actor",
+    "person": "actor",
+    "external_system": "external_system",
+    "externalsystem": "external_system",
+    "external": "external_system",
+    "group": "group",
+    "boundary": "group",
+    "container": "app",
+    "containerinstance": "app",
+    "app": "app",
+    "application": "app",
+    "service": "app",
+    "microservice": "app",
+    "store": "store",
+    "database": "store",
+    "queue": "store",
+    "cache": "store",
+    "topic": "store",
+    "component": "component",
+    "module": "component",
+    "node": "app",
+    "code": "component",
+}
+
+_VALID_TYPES = frozenset(t.value for t in ObjectType)
+
+
+def _normalise_types(raw: list[str]) -> list[str]:
+    """Map free-form type strings to valid ObjectType enum values.
+
+    Returns a deduped list of enum-valid strings. Unknown aliases are
+    silently dropped — preferable to crashing the whole tool call.
+    """
+    seen: list[str] = []
+    for v in raw or []:
+        if not isinstance(v, str):
+            continue
+        key = v.strip().lower().replace("-", "_").replace(" ", "_")
+        mapped = _TYPE_ALIASES.get(key)
+        if mapped is None and key in _VALID_TYPES:
+            mapped = key
+        if mapped is not None and mapped not in seen:
+            seen.append(mapped)
+    return seen
+
+
 class SearchExistingObjectsInput(BaseModel):
     query: str
-    types: list[str] = Field(default_factory=list)  # filter by object type
+    types: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Optional filter. Valid values: 'system', 'actor', 'external_system', "
+            "'group', 'app', 'store', 'component'. PascalCase aliases like "
+            "'SoftwareSystem' or 'Container' are accepted; unknown values are dropped."
+        ),
+    )
     scope: Literal["workspace", "diagram"] = "workspace"
     limit: int = Field(20, ge=1, le=50)
+
+    @field_validator("types", mode="before")
+    @classmethod
+    def _normalise_types(cls, v):  # noqa: D401
+        if v is None:
+            return []
+        if isinstance(v, str):
+            v = [v]
+        return _normalise_types(list(v))
 
 
 class SearchExistingTechnologiesInput(BaseModel):
