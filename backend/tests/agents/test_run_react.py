@@ -27,6 +27,7 @@ from app.agents.nodes.base import (
     NodeOutput,
     NodeStreamEvent,
     compose_messages_for_llm,
+    isolated_state_for_subagent,
     rewrite_subagent_tool_result,
     run_react,
 )
@@ -338,6 +339,47 @@ def test_rewrite_subagent_tool_result_no_artefact_is_noop():
     history = _supervisor_history_with_delegate(kind="researcher")
     out = rewrite_subagent_tool_result(history, kind="researcher")
     assert out == history
+
+
+def _state_with_user_and_brief() -> dict:
+    return {
+        "messages": [
+            {"role": "user", "content": "BIG VAGUE USER REQUEST IN UKRAINIAN"},
+            {"role": "assistant", "content": "", "tool_calls": [
+                {"id": "x", "function": {"name": "delegate_to_researcher",
+                                          "arguments": "{}"}}
+            ]},
+        ],
+        "delegate_brief": {
+            "kind": "researcher",
+            "instruction": "List objects on diagram d-1.",
+            "reason": None,
+        },
+    }
+
+
+def test_isolated_state_omits_user_request_by_default():
+    """Default path strips the original user message — the sub-agent gets
+    only the supervisor's distilled brief."""
+    state = _state_with_user_and_brief()
+    iso = isolated_state_for_subagent(state)
+    msgs = iso["messages"]
+    assert len(msgs) == 1
+    body = msgs[0]["content"]
+    assert "BIG VAGUE USER REQUEST" not in body
+    assert "Original user request" not in body
+    assert "List objects on diagram d-1." in body
+    assert "## Your specific task" in body
+
+
+def test_isolated_state_includes_user_request_when_opted_in():
+    """Critic-style path opts in via include_original_request=True."""
+    state = _state_with_user_and_brief()
+    iso = isolated_state_for_subagent(state, include_original_request=True)
+    body = iso["messages"][0]["content"]
+    assert "BIG VAGUE USER REQUEST" in body
+    assert "## Original user request" in body
+    assert "## Your specific task" in body
 
 
 def test_compose_messages_skips_first_user_prepend_when_tail_includes_it():

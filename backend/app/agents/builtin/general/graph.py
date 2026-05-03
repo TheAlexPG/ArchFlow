@@ -542,7 +542,10 @@ async def critic_node(state: AgentState, config: Optional[RunnableConfig] = None
     enforcer, cm, tool_executor, call_meta = _extract_deps(config)
     tracer = _get_tracer(config)
     logger.warning("graph: critic_node ENTER")
-    iso_state = isolated_state_for_subagent(state)
+    # Critic verifies the work against the user's stated goal — it MUST see
+    # the original user request, unlike research / plan / diagram which
+    # operate purely off the supervisor's distilled brief.
+    iso_state = isolated_state_for_subagent(state, include_original_request=True)
 
     output, forced = await _drain_with_tracing(
         node_run=lambda meta: critic.run(

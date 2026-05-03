@@ -588,26 +588,33 @@ def render_delegation_brief_block(state: AgentState) -> str:
 
 
 def isolated_state_for_subagent(
-    state: AgentState, *, fallback_user_message: str | None = None
+    state: AgentState,
+    *,
+    fallback_user_message: str | None = None,
+    include_original_request: bool = False,
 ) -> AgentState:
     """Return a shallow copy of ``state`` with ``messages`` replaced by an
     isolated, **fully-contextualised** single user message.
 
     Sub-agents (researcher / planner / diagram / critic) run as *tools* of
     the supervisor — they don't see its ReAct chatter, its delegate tool
-    calls, or its scratchpad. But they **do** need:
+    calls, or its scratchpad. They get:
 
-      1. The user's original ask, verbatim — so the critic can verify
-         the work against it, the diagram-agent can re-read intent if the
-         brief is ambiguous, etc.
-      2. The supervisor's specific brief for this delegation — what
+      1. The supervisor's specific brief for this delegation — what
          exactly the supervisor wants this sub-agent to do.
-      3. Optional reason / hint that supervisor passed along.
+      2. Optional reason / hint that supervisor passed along.
+      3. Only when ``include_original_request=True``: the user's verbatim
+         ask. By default this is **omitted** — research / plan /
+         diagram-execute sub-agents work better when they read the
+         supervisor's distilled brief than when they re-interpret the
+         raw user text (which often paraphrases, mentions things outside
+         the current sub-task, or argues with itself). Critic (and any
+         future validator) MUST set ``include_original_request=True``
+         since their job is to verify the work against the original goal.
 
     All of the above is packed into ONE user message so the model sees a
-    clean conversation: system prompt → context blocks → user (full
-    context) → its own ReAct turns. Without this, the critic in
-    particular was operating without ever seeing the user's original goal.
+    clean conversation: system prompt → context blocks → user (brief) →
+    its own ReAct turns.
 
     Wrappers must NOT propagate ``patch['messages']`` back into global
     state — only structured outputs (findings / plan / applied_changes /
@@ -625,22 +632,24 @@ def isolated_state_for_subagent(
             reason = raw_r.strip()
 
     # The original user request is the FIRST user-role message in the
-    # supervisor's history. We track it separately from the brief so the
-    # sub-agent always knows the broader goal.
-    original_user = None
-    for msg in (state.get("messages") or []):
-        if msg.get("role") == "user" and isinstance(msg.get("content"), str):
-            content = msg["content"].strip()
-            if content:
-                original_user = content
-                break
+    # supervisor's history. Surfaced only when the caller explicitly opted
+    # in via ``include_original_request`` — used by the critic to verify
+    # the work against the user's stated goal.
+    original_user: str | None = None
+    if include_original_request:
+        for msg in (state.get("messages") or []):
+            if msg.get("role") == "user" and isinstance(msg.get("content"), str):
+                content = msg["content"].strip()
+                if content:
+                    original_user = content
+                    break
 
     if not instruction and fallback_user_message:
         instruction = fallback_user_message.strip()
 
-    # Compose the unified user message. We use Markdown headings so local
-    # models can clearly distinguish "what the user asked" from "what
-    # supervisor wants from me".
+    # Compose the unified user message. Markdown headings let local models
+    # cleanly distinguish "user goal" from "what supervisor wants from me"
+    # when both are present.
     parts: list[str] = []
     if original_user:
         parts.append(f"## Original user request\n{original_user}")

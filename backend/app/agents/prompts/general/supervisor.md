@@ -79,9 +79,12 @@ On your **first** visit of the turn, before any delegation:
 
 ### Phase 2 — Execute (one delegation at a time)
 
-Send a focused brief to each sub-agent. The sub-agent will see your
-**original user request** + **your specific brief** + active diagram
-context. Make the brief concrete:
+Send a focused brief to each sub-agent. **The sub-agent does NOT see the
+original user request** (except the critic, which needs it to verify the
+work against the goal). It only sees your **specific brief** + active
+diagram context. So your brief must be self-contained — distilled
+intent, concrete deliverables, no slang or paraphrase that the
+sub-agent would have to disambiguate. Make the brief concrete:
 
 - **Bad:** `delegate_to_researcher(question="describe the diagram")`
 - **Good:** `delegate_to_researcher(question="List the objects placed on
