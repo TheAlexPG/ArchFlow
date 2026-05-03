@@ -1,0 +1,75 @@
+name: Agent Evals (slow, costed)
+
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: 'Suite to run (fast/slow/all/single-test)'
+        required: true
+        default: 'slow'
+        type: choice
+        options:
+          - fast
+          - slow
+          - all
+          - single-test
+      test_path:
+        description: 'For single-test: relative path like evals/test_planner.py::TestX::test_y'
+        required: false
+        default: ''
+      profile:
+        description: 'Threshold profile (lenient/strict)'
+        required: false
+        default: 'lenient'
+        type: choice
+        options:
+          - lenient
+          - strict
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    environment: eval-llm-keys
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: latest
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install deps
+        run: uv sync --frozen --extra agents --extra dev --extra evals
+
+      - name: Run eval suite
+        env:
+          EVAL_MODEL: ${{ secrets.EVAL_MODEL }}
+          EVAL_LLM_KEY: ${{ secrets.EVAL_LLM_KEY }}
+          EVAL_LLM_BASE_URL: ${{ secrets.EVAL_LLM_BASE_URL }}
+          EVAL_THRESHOLD_PROFILE: ${{ inputs.profile }}
+        run: |
+          case "${{ inputs.suite }}" in
+            fast)        make -C evals fast ;;
+            slow)        make -C evals slow ;;
+            all)         make -C evals fast slow ;;
+            single-test) uv run --extra agents --extra dev --extra evals pytest "${{ inputs.test_path }}" -v ;;
+          esac
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-reports-${{ github.run_id }}
+          path: backend/evals/reports/
+
+      - name: Comment on PR with results (if applicable)
+        if: always()
+        run: |
+          echo "TODO: gh pr comment with eval-summary diff"

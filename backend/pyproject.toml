@@ -27,16 +27,35 @@ dev = [
     "pytest-asyncio>=0.25",
     "httpx>=0.28",
     "ruff>=0.9",
+    "fakeredis>=2.26",
+    "respx>=0.23.1",
+    "beautifulsoup4>=4.14.3",
+]
+agents = [
+    "langgraph>=0.2.50",
+    # Pinned to <3: LiteLLM (≤1.55) reads langfuse.version which v3 renamed
+    # to _version, breaking trace registration. Bump together when LiteLLM
+    # ships a v3-compatible release.
+    "langfuse>=2.50,<3",
+    "litellm>=1.55",
+    "cryptography>=44",
+    "networkx>=3.3",
+]
+evals = [
+    "deepeval>=2.0",
 ]
 
 [tool.ruff]
 target-version = "py312"
 line-length = 100
-extend-exclude = ["alembic/versions"]
+extend-exclude = ["alembic/versions", "evals/golden"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
 ignore = ["B008", "UP042"]
+
+[tool.ruff.lint.per-file-ignores]
+"evals/golden/*.json" = ["B018", "E501", "F821"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

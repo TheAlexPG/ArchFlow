@@ -1,0 +1,33 @@
+name: Tests & Fast Evals
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: latest
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install deps
+        run: uv sync --frozen --extra agents --extra dev --extra evals
+
+      - name: Unit tests
+        run: uv run pytest tests/ -v
+
+      - name: Fast eval suite (deterministic, no LLM cost)
+        run: make -C evals fast

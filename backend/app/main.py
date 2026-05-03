@@ -4,6 +4,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.activity import router as activity_router
+from app.api.v1.agent_sessions import router as agent_sessions_router
+from app.api.v1.agent_settings import router as agent_settings_router
+from app.api.v1.agents import router as agents_router
 from app.api.v1.api_keys import router as api_keys_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.comments import router as comments_router
@@ -34,6 +37,18 @@ from app.realtime.manager import manager as ws_manager
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Register Langfuse callbacks on litellm exactly once at startup.
+    # No-op if LANGFUSE_* env vars are missing — agents work without tracing.
+    # Imported lazily so non-agents test paths don't pull in litellm.
+    from app.agents.builtin import register_builtin_agents
+    from app.agents.tracing import setup_litellm_callbacks, teardown_litellm_callbacks
+
+    setup_litellm_callbacks()
+
+    # Register builtin agents (general, researcher, diagram-explainer) so
+    # /agents/* endpoints can resolve descriptors and graphs at request time.
+    register_builtin_agents()
+
     # Redis subscriber starts lazily on first WS join too, but kicking it
     # off at app boot means REST endpoints that publish events don't
     # race the subscriber's first iteration.
@@ -41,6 +56,7 @@ async def lifespan(app: FastAPI):
     yield
     await ws_manager.stop()
     await engine.dispose()
+    teardown_litellm_callbacks()
 
 
 def create_app() -> FastAPI:
@@ -82,6 +98,12 @@ def create_app() -> FastAPI:
     app.include_router(versions_router, prefix="/api/v1")
     app.include_router(websocket_router, prefix="/api/v1")
     app.include_router(notifications_router, prefix="/api/v1")
+    app.include_router(agent_settings_router, prefix="/api/v1")
+    # NOTE: agent_sessions_router MUST be registered before agents_router so
+    # its more-specific ``/agents/sessions`` route wins over the
+    # ``/agents/{agent_id}`` catch-all from the discovery router.
+    app.include_router(agent_sessions_router, prefix="/api/v1")
+    app.include_router(agents_router, prefix="/api/v1")
 
     @app.get("/health")
     async def health():

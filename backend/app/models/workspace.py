@@ -1,11 +1,25 @@
 import enum
 import uuid
+from datetime import datetime
 
-from sqlalchemy import Enum, ForeignKey, String, UniqueConstraint
+from sqlalchemy import DateTime, Enum, ForeignKey, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
+
+
+class AgentAccessLevel(str, enum.Enum):
+    """Per-user agent access policy for a workspace member.
+
+    none       AI agent features are hidden for this member.
+    read_only  Agent can read workspace data but cannot make edits (default).
+    full       Agent can read and write on behalf of this member.
+    """
+
+    NONE = "none"
+    READ_ONLY = "read_only"
+    FULL = "full"
 
 
 class Role(str, enum.Enum):
@@ -74,8 +88,28 @@ class WorkspaceMember(Base, UUIDMixin, TimestampMixin):
         )
     )
 
+    agent_access: Mapped[AgentAccessLevel] = mapped_column(
+        Enum(
+            AgentAccessLevel,
+            name="agent_access_level",
+            values_callable=lambda e: [v.value for v in e],
+        ),
+        nullable=False,
+        default=AgentAccessLevel.READ_ONLY,
+        server_default="read_only",
+    )
+    agent_access_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
+    agent_access_updated_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        default=None,
+    )
+
     workspace = relationship("Workspace", back_populates="members")
-    user = relationship("User")
+    user = relationship("User", foreign_keys=[user_id])
 
     __table_args__ = (
         UniqueConstraint("workspace_id", "user_id", name="uq_member_per_workspace"),

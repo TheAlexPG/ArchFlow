@@ -30,7 +30,7 @@ api.interceptors.request.use((config) => {
 // which would fail because refresh tokens rotate on every call.
 let refreshInFlight: Promise<string | null> | null = null
 
-async function refreshAccessToken(): Promise<string | null> {
+export async function refreshAccessToken(): Promise<string | null> {
   if (refreshInFlight) return refreshInFlight
   const refreshToken = useAuthStore.getState().refreshToken
   if (!refreshToken) return null

@@ -381,11 +381,16 @@ export interface Workspace {
   created_at: string
 }
 
+export type AgentAccess = 'full' | 'read_only' | 'none'
+
 export interface WorkspaceMember {
   user_id: string
   email: string
   name: string
   role: WorkspaceRole
+  /** Controls whether AI agent features are visible to this member.
+   *  Defaults to 'full' when absent (graceful degradation for older API responses). */
+  agent_access?: AgentAccess
 }
 
 export interface WorkspaceInvite {

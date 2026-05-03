@@ -1,0 +1,80 @@
+[
+  {
+    "id": "apikey-insufficient-scope-denied",
+    "description": "ApiKey with only agents:read scope calling create_object → status=denied",
+    "actor_kind": "api_key",
+    "actor_scopes": ["agents:read"],
+    "tool_name": "create_object",
+    "tool_args": {"name": "OrderService", "type": "app", "description": ""},
+    "agent_runtime_mode": "full",
+    "expected_status": "denied"
+  },
+  {
+    "id": "apikey-invoke-scope-denied-write-tool",
+    "description": "ApiKey with agents:invoke (not agents:write) calling update_object → denied",
+    "actor_kind": "api_key",
+    "actor_scopes": ["agents:invoke"],
+    "tool_name": "update_object",
+    "tool_args": {"object_id": "11111111-1111-1111-1111-111111111111", "name": "NewName"},
+    "agent_runtime_mode": "full",
+    "expected_status": "denied"
+  },
+  {
+    "id": "user-none-access-clamped-mode-denied",
+    "description": "read_only mode + mutating tool (create_object) → status=denied",
+    "actor_kind": "user",
+    "actor_scopes": [],
+    "actor_agent_access": "read_only",
+    "tool_name": "create_object",
+    "tool_args": {"name": "OrderService", "type": "app", "description": ""},
+    "agent_runtime_mode": "read_only",
+    "expected_status": "denied"
+  },
+  {
+    "id": "read-only-mode-delete-denied",
+    "description": "read_only mode + delete_object (mutating+admin) → denied immediately",
+    "actor_kind": "user",
+    "actor_scopes": [],
+    "actor_agent_access": "full",
+    "tool_name": "delete_object",
+    "tool_args": {"object_id": "11111111-1111-1111-1111-111111111111", "confirmed": false},
+    "agent_runtime_mode": "read_only",
+    "expected_status": "denied"
+  },
+  {
+    "id": "apikey-admin-scope-write-tool-scope-ok",
+    "description": "ApiKey with agents:admin calling create_object → scope satisfied (not denied by scope)",
+    "actor_kind": "api_key",
+    "actor_scopes": ["agents:admin"],
+    "tool_name": "create_object",
+    "tool_args": {"name": "OrderService", "type": "app", "description": ""},
+    "agent_runtime_mode": "full",
+    "expected_status_not": "denied"
+  },
+  {
+    "id": "apikey-insufficient-scope-admin-tool",
+    "description": "ApiKey with agents:write trying delete_object (needs agents:admin) → denied",
+    "actor_kind": "api_key",
+    "actor_scopes": ["agents:write"],
+    "tool_name": "delete_object",
+    "tool_args": {"object_id": "11111111-1111-1111-1111-111111111111", "confirmed": false},
+    "agent_runtime_mode": "full",
+    "expected_status": "denied"
+  },
+  {
+    "id": "filter-tools-read-only-hides-mutating",
+    "description": "filter_tools with mode=read_only must exclude mutating tools",
+    "test_type": "filter_tools",
+    "scope": "agents:admin",
+    "mode": "read_only",
+    "expected_no_mutating": true
+  },
+  {
+    "id": "filter-tools-invoke-scope-hides-write-tools",
+    "description": "filter_tools with scope=agents:invoke must not include agents:write tools",
+    "test_type": "filter_tools",
+    "scope": "agents:invoke",
+    "mode": "full",
+    "expected_max_scope": "agents:invoke"
+  }
+]

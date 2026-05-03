@@ -30,3 +30,4 @@ Example: `https://api.archflow.tools/api/v1`
 - [Webhooks](./webhooks.md)
 - [Realtime (WebSocket)](./realtime.md)
 - [Other endpoints](./misc.md)
+- [Agents](./agents.md)

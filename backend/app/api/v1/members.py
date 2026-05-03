@@ -8,7 +8,7 @@ from app.api.deps import get_current_user
 from app.api.permissions_dep import require_role
 from app.core.database import get_db
 from app.models.user import User
-from app.models.workspace import Role
+from app.models.workspace import AgentAccessLevel, Role
 from app.services import member_service
 
 router = APIRouter(prefix="/workspaces/{workspace_id}", tags=["workspace-members"])
@@ -19,11 +19,14 @@ class MemberResponse(BaseModel):
     email: str
     name: str
     role: str
+    agent_access: AgentAccessLevel
 
 
 class InviteCreateRequest(BaseModel):
     email: EmailStr
     role: Role
+    # Agent access level granted on invite acceptance. Defaults to read_only.
+    agent_access: AgentAccessLevel = AgentAccessLevel.READ_ONLY
     # Teams to auto-add the user to on acceptance. Ignored entries (wrong
     # workspace, deleted team) are silently skipped.
     team_ids: list[UUID] = []
@@ -43,6 +46,7 @@ class AcceptInviteRequest(BaseModel):
 
 class RoleUpdateRequest(BaseModel):
     role: Role
+    agent_access: AgentAccessLevel | None = None
 
 
 @router.get("/members", response_model=list[MemberResponse])
@@ -54,7 +58,11 @@ async def list_members(
     rows = await member_service.list_members(db, workspace_id)
     return [
         MemberResponse(
-            user_id=user.id, email=user.email, name=user.name, role=member.role.value
+            user_id=user.id,
+            email=user.email,
+            name=user.name,
+            role=member.role.value,
+            agent_access=member.agent_access,
         )
         for member, user in rows
     ]
@@ -148,7 +156,11 @@ async def update_member_role(
     ).scalar_one_or_none()
     assert user is not None
     return MemberResponse(
-        user_id=user.id, email=user.email, name=user.name, role=member.role.value
+        user_id=user.id,
+        email=user.email,
+        name=user.name,
+        role=member.role.value,
+        agent_access=member.agent_access,
     )
 
 

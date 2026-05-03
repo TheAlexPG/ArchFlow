@@ -1,130 +1,106 @@
-"""AI-assisted analysis for model objects.
+"""AI insights — Phase 1 wrapper that delegates to the diagram-explainer agent.
+Preserves the existing {summary, observations, recommendations} response shape for back-compat.
 
-Wraps the Anthropic SDK to produce structured insights (summary +
-recommendations) for a ModelObject, given its neighborhood of connections.
-Disabled gracefully when ANTHROPIC_API_KEY is not configured.
+Phase 2: deprecate this entirely; frontend should call the agent directly via
+/api/v1/agents/diagram-explainer/invoke.
 """
 
+import re
 import uuid
-from typing import Any
 
-from anthropic import AsyncAnthropic
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
-from app.services import object_service
-
-_SYSTEM_PROMPT = (
-    "You are an architecture assistant helping a software architect understand a "
-    "C4 model object. Given structured facts about the object and its neighbors, "
-    "you produce:\n"
-    "  1) a 1-2 sentence summary of what this component is and where it sits,\n"
-    "  2) 3-5 observations about gaps, risks, or inaccuracies to double-check,\n"
-    "  3) 2-4 concrete recommendations to improve the model or the system.\n\n"
-    "Be specific and concise. Don't invent facts; if something is unknown, say so."
-)
+from app.agents.runtime import ActorRef, ChatContext, InvokeRequest, invoke
 
 
 def is_available() -> bool:
-    return bool(settings.anthropic_api_key)
+    """True if the diagram-explainer agent is registered."""
+    from app.agents import registry
+    try:
+        registry.get("diagram-explainer")
+        return True
+    except KeyError:
+        return False
 
 
-async def _build_context(
-    db: AsyncSession, object_id: uuid.UUID
-) -> dict[str, Any]:
-    obj = await object_service.get_object(db, object_id)
-    if not obj:
-        return {}
-    deps = await object_service.get_dependencies(db, object_id)
+async def get_insights(
+    db: AsyncSession, object_id: uuid.UUID, *, actor: ActorRef | None = None
+) -> dict:
+    """Delegate to diagram-explainer agent. Map its output to the legacy shape.
 
-    def edge_summary(c: Any, side: str) -> dict:
-        other = c.source if side == "upstream" else c.target
-        return {
-            "direction": side,
-            "label": c.label,
-            "protocol_ids": [str(p) for p in (c.protocol_ids or [])],
-            "other": {
-                "name": other.name,
-                "type": other.type.value if hasattr(other.type, "value") else str(other.type),
-            },
-        }
-
-    return {
-        "object": {
-            "name": obj.name,
-            "type": obj.type.value if hasattr(obj.type, "value") else str(obj.type),
-            "scope": obj.scope.value if hasattr(obj.scope, "value") else str(obj.scope),
-            "status": obj.status.value if hasattr(obj.status, "value") else str(obj.status),
-            "description_html": obj.description,
-            "technology_ids": [str(t) for t in (obj.technology_ids or [])],
-            "tags": obj.tags,
-            "owner_team": obj.owner_team,
-        },
-        "upstream": [edge_summary(c, "upstream") for c in deps["upstream"]],
-        "downstream": [edge_summary(c, "downstream") for c in deps["downstream"]],
-    }
-
-
-async def get_insights(db: AsyncSession, object_id: uuid.UUID) -> dict:
-    """Return {"summary": str, "observations": [...], "recommendations": [...]}.
-
-    Raises RuntimeError if the API key is not configured — the caller should
-    translate that into an HTTP 503.
+    If actor not provided (legacy callers without auth context), use a synthetic
+    system actor. Phase 1 simplification: legacy endpoint will still need real
+    auth — caller should pass actor.
     """
     if not is_available():
-        raise RuntimeError("Anthropic API key not configured")
+        raise RuntimeError("diagram-explainer agent not registered")
 
-    context = await _build_context(db, object_id)
-    if not context:
-        raise RuntimeError("Object not found")
-
-    client = AsyncAnthropic(api_key=settings.anthropic_api_key)
-
-    user_prompt = (
-        "Analyze this C4 object and its neighbors. Reply as JSON matching this shape:\n"
-        '{"summary": "...", "observations": ["..."], "recommendations": ["..."]}\n\n'
-        "Object data:\n"
-        f"{context}"
+    # The legacy prompt asked for: 1-2 sentence summary + 3-5 observations + 2-4 recommendations.
+    # Pass that style as the user message to diagram-explainer:
+    message = (
+        "Provide insights for this C4 model object. Reply in three sections: "
+        "1) Summary (1-2 sentences). "
+        "2) Observations (3-5 bullets about gaps, risks, inaccuracies). "
+        "3) Recommendations (2-4 concrete improvements). "
+        "Keep responses concise and grounded in the object's actual data."
     )
 
-    message = await client.messages.create(
-        model=settings.anthropic_model,
-        max_tokens=1024,
-        system=_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_prompt}],
+    resolved_actor = actor or _system_actor()
+    req = InvokeRequest(
+        agent_id="diagram-explainer",
+        actor=resolved_actor,
+        workspace_id=resolved_actor.workspace_id,
+        chat_context=ChatContext(kind="object", id=object_id),
+        message=message,
+        mode="read_only",
     )
 
-    # Claude returns a list of content blocks; we only sent text so take first.
-    raw_text = "".join(
-        block.text for block in message.content if getattr(block, "type", None) == "text"
+    result = await invoke(req, db=db)
+    return _parse_legacy_shape(result.final_message)
+
+
+def _system_actor() -> ActorRef:
+    """Synthetic actor for legacy callers without auth (e.g., API key with insights perm).
+    Use a special user_id indicating 'system insights' for audit clarity."""
+    return ActorRef(
+        kind="user",
+        id=uuid.UUID(int=0),
+        workspace_id=uuid.UUID(int=0),
+        agent_access="read_only",
     )
-    return _parse_insights(raw_text)
 
 
-def _parse_insights(raw: str) -> dict:
-    """Parse the model's JSON reply, tolerating surrounding prose/fences."""
-    import json
-    import re
+def _parse_legacy_shape(markdown_text: str) -> dict:
+    """Parse the LLM markdown sections into {summary, observations, recommendations}.
 
-    cleaned = raw.strip()
-    # Strip ```json ... ``` fences if present.
-    if cleaned.startswith("```"):
-        cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", cleaned, flags=re.DOTALL)
+    Heuristic: look for headers like '## Summary' / '**Observations**' / '1. ' etc.
+    Best-effort. If parsing fails, fall back to
+    {summary: full_text, observations: [], recommendations: []}.
+    """
+    summary, observations, recommendations = "", [], []
 
-    # Last-ditch extraction: grab the first JSON object substring.
-    try:
-        return json.loads(cleaned)
-    except json.JSONDecodeError:
-        match = re.search(r"\{.*\}", cleaned, flags=re.DOTALL)
-        if match:
-            try:
-                return json.loads(match.group(0))
-            except json.JSONDecodeError:
-                pass
+    # Look for 'Summary'/'Observations'/'Recommendations' sections case-insensitive.
+    sections = re.split(
+        r"(?im)^\s*(?:#+\s*|\*\*\s*)?(summary|observations|recommendations)(?:\s*:|\s*\*\*)?\s*$",
+        markdown_text,
+    )
 
-    # Fallback: surface the raw text so the UI can still show something.
-    return {
-        "summary": cleaned[:500],
-        "observations": [],
-        "recommendations": [],
-    }
+    # Walk pairs (header, content). Bullet points start with '-', '*', '•', or '1.'/'2.'.
+    bullet_re = re.compile(r"^\s*(?:[-*•]|\d+\.)\s+(.+)$", re.MULTILINE)
+
+    if len(sections) >= 3:
+        for i in range(1, len(sections), 2):
+            header = sections[i].lower()
+            body = sections[i + 1] if i + 1 < len(sections) else ""
+            if "summary" in header:
+                summary = body.strip()[:500]
+            elif "observation" in header:
+                observations = [m.group(1).strip() for m in bullet_re.finditer(body)][:5]
+            elif "recommend" in header:
+                recommendations = [m.group(1).strip() for m in bullet_re.finditer(body)][:4]
+
+    if not summary and not observations and not recommendations:
+        # Fallback: entire response as summary, no parsed lists.
+        summary = markdown_text.strip()[:500]
+
+    return {"summary": summary, "observations": observations, "recommendations": recommendations}

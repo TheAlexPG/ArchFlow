@@ -19,12 +19,14 @@ import { TechnologiesPage } from './pages/TechnologiesPage'
 import { OverviewPage } from './pages/OverviewPage'
 import { PrivacyPage } from './pages/PrivacyPage'
 import { SettingsPage } from './pages/SettingsPage'
+import { AgentsSettingsPage } from './pages/AgentsSettingsPage'
 import { TermsPage } from './pages/TermsPage'
 import { TeamsPage } from './pages/TeamsPage'
 import { VersionsPage } from './pages/VersionsPage'
 import { useAuthStore } from './stores/auth-store'
 import { useWorkspaceStore } from './stores/workspace-store'
 import { useWorkspaceSocket } from './hooks/use-realtime'
+import { ChatBubble } from './components/agent-chat/ChatBubble'
 import './index.css'
 
 const queryClient = new QueryClient({
@@ -194,6 +196,14 @@ function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/agents-settings"
+            element={
+              <ProtectedRoute>
+                <AgentsSettingsPage />
+              </ProtectedRoute>
+            }
+          />
           {/* DEV-only design gallery — redirect to / in production */}
           <Route
             path="/design"
@@ -204,6 +214,9 @@ function App() {
             }
           />
         </Routes>
+        {/* Agent chat bubble — floats over all workspace pages, outside route
+            layout but inside the Router so useNavigate() (in useViewChange) works. */}
+        {isAuthenticated && <ChatBubble />}
       </BrowserRouter>
     </QueryClientProvider>
   )

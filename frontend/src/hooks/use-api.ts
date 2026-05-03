@@ -939,6 +939,7 @@ export function useInviteMember(workspaceId: string | null) {
       email: string
       role: WorkspaceRole
       team_ids?: string[]
+      agent_access?: import('../types/model').AgentAccess
     }) => {
       const { data } = await api.post(`/workspaces/${workspaceId}/invites`, payload)
       return data as { type: 'invite_created'; invite: WorkspaceInvite }
@@ -1018,16 +1019,77 @@ export function useDeclineMyInvite() {
 export function useUpdateMemberRole(workspaceId: string | null) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async ({ userId, role }: { userId: string; role: WorkspaceRole }) => {
+    mutationFn: async ({
+      userId,
+      role,
+      agent_access,
+    }: {
+      userId: string
+      role?: WorkspaceRole
+      agent_access?: import('../types/model').AgentAccess
+    }) => {
+      const body: Record<string, unknown> = {}
+      if (role !== undefined) body.role = role
+      if (agent_access !== undefined) body.agent_access = agent_access
       const { data } = await api.patch<WorkspaceMember>(
         `/workspaces/${workspaceId}/members/${userId}`,
-        { role },
+        body,
       )
       return data
+    },
+    onMutate: async ({ userId, role, agent_access }) => {
+      await qc.cancelQueries({ queryKey: ['workspaces', workspaceId, 'members'] })
+      const prev = qc.getQueryData<WorkspaceMember[]>([
+        'workspaces',
+        workspaceId,
+        'members',
+      ])
+      qc.setQueryData<WorkspaceMember[]>(
+        ['workspaces', workspaceId, 'members'],
+        (rows) =>
+          rows
+            ? rows.map((m) =>
+                m.user_id === userId
+                  ? {
+                      ...m,
+                      ...(role !== undefined ? { role } : {}),
+                      ...(agent_access !== undefined ? { agent_access } : {}),
+                    }
+                  : m,
+              )
+            : rows,
+      )
+      return { prev }
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.prev)
+        qc.setQueryData(['workspaces', workspaceId, 'members'], context.prev)
     },
     onSuccess: () =>
       qc.invalidateQueries({ queryKey: ['workspaces', workspaceId, 'members'] }),
   })
+}
+
+// ─── Current member agent access ─────────────────────────────────────────────
+//
+// Returns the agent_access value for the currently-authenticated user within
+// the active workspace. Defaults to 'full' while loading (graceful degradation).
+
+export function useCurrentMemberAgentAccess(): import('../types/model').AgentAccess {
+  const workspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
+  const isAuthenticated = useAuthStore((s) => !!s.accessToken)
+  const { data: me } = useQuery({
+    queryKey: ['me'],
+    queryFn: async () => {
+      const { data } = await api.get<MeResponse>('/auth/me')
+      return data
+    },
+    staleTime: 2 * 60 * 1000,
+    enabled: isAuthenticated,
+  })
+  const { data: members = [] } = useWorkspaceMembers(workspaceId)
+  const member = me ? members.find((m) => m.user_id === me.id) : undefined
+  return member?.agent_access ?? 'full'
 }
 
 export function useRemoveMember(workspaceId: string | null) {

@@ -2,11 +2,10 @@ FROM python:3.12-slim AS builder
 
 WORKDIR /app
 COPY pyproject.toml .
+COPY . .
 
 RUN pip install uv && \
-    uv pip install --system -r pyproject.toml
-
-COPY . .
+    uv pip install --system ".[agents]"
 
 FROM python:3.12-slim
 
