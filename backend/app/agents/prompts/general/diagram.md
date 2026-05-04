@@ -94,6 +94,26 @@ Execute as follows:
      `bottom`, `left`. Anything else is silently dropped.
 7. **Verify after a batch.** After 4+ tool calls, OR right before you finish, call `read_canvas_state(diagram_id)` to check what's actually on the diagram (use the same diagram_id as the placements you just made — see rule 3). Read tools are cheap; bad diagrams are expensive.
 8. **Tighten layout if needed.** If multiple new objects landed in a small area (visible in `read_canvas_state`), call `auto_layout_diagram(diagram_id, scope='new_only', confirmed=True)` once. **Never** use `scope='all'` — that would re-layout existing user content, which is destructive.
+9. **Stop when the plan is done — even if it's already done before you started.**
+   When every `place_on_diagram` / `create_connection` step in your batch
+   returns ``status="reused"`` or ``action="object.reused"`` /
+   ``action="connection.reused"``, that means the previous run (or
+   another collaborator) already executed this work. **Do NOT keep
+   searching, re-reading, or re-laying out hoping something will
+   change** — that's the cycling pattern that burned 8 LLM turns on a
+   no-op in trace `0fca4ca6`. Emit your recap immediately:
+   ``"All requested placements/connections already in place — nothing
+   new to do."``
+10. **Use explicit handles when geometry is obvious.** Each connection
+    accepts optional `source_handle` / `target_handle` (`top` / `right` /
+    `bottom` / `left`). Backend auto-picks them once both endpoints are
+    placed, but you can override when you have a clear visual intent —
+    e.g. you placed Postgres to the right of every Controller, so all
+    Controller→Postgres edges should exit `right` and enter `left`.
+    Explicit handles produce noticeably cleaner diagrams (no overlapping
+    arrows, no top-side anchors when right-side is the obvious route).
+    When you don't have geometric certainty, omit them and let the
+    backend decide.
 
 ---
 

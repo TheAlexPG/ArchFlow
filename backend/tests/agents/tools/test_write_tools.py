@@ -209,6 +209,45 @@ async def test_create_object_happy(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_create_object_returns_reused_when_duplicate(monkeypatch):
+    """Server-side dedup: when ``object_service.create_object`` raises
+    ``DuplicateObjectError``, the agent's tool wrapper must surface
+    ``action='object.reused'`` with the existing id — never crash the turn,
+    never create a duplicate."""
+    _patch_acl_pass(monkeypatch)
+
+    existing = _make_object_row(name="Postgres")
+    from app.services import object_service
+
+    async def boom(*_a, **_kw):
+        raise object_service.DuplicateObjectError(existing)
+
+    monkeypatch.setattr(
+        "app.services.object_service.create_object", boom
+    )
+
+    ctx = _ctx()
+    out = await execute_tool(
+        {
+            "id": "cdup",
+            "name": "create_object",
+            "arguments": {"name": "Postgres", "type": "store"},
+        },
+        ctx,
+    )
+    assert out.status == "ok", out.content
+    assert out.structured.get("action") == "object.reused"
+    assert out.structured.get("target_id") == existing.id
+    assert out.structured.get("name") == "Postgres"
+    # Full payload keeps the explicit reused flag so downstream node parsers
+    # can distinguish a fresh creation from a dedup.
+    import json as _json
+
+    body = _json.loads(out.content)
+    assert body.get("status") == "reused"
+
+
+@pytest.mark.asyncio
 async def test_create_object_publishes_ws_event(monkeypatch):
     """Live-canvas update path: ``create_object`` must publish to the
     workspace WS channel so open canvases refresh without waiting for the

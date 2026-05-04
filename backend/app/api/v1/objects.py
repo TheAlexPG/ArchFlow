@@ -93,9 +93,22 @@ async def create_object(
             )
             if ws is not None:
                 workspace_id = ws.id
-    obj = await object_service.create_object(
-        db, data, draft_id=draft_id, workspace_id=workspace_id
-    )
+    try:
+        obj = await object_service.create_object(
+            db, data, draft_id=draft_id, workspace_id=workspace_id
+        )
+    except object_service.DuplicateObjectError as exc:
+        existing = exc.existing
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "duplicate_object",
+                "message": str(exc),
+                "existing_id": str(existing.id),
+                "existing_name": existing.name,
+                "type": getattr(existing.type, "value", existing.type),
+            },
+        ) from exc
     response = ObjectResponse.from_model(obj)
     if draft_id is None:
         body = response.model_dump(mode="json")

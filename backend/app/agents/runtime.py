@@ -686,14 +686,18 @@ async def stream(
                 )
 
     # Close out the Langfuse trace before flushing DB writes so the trace
-    # always finishes even if a flush failure raises.
+    # always finishes even if a flush failure raises. Output is the plain
+    # final assistant text — matches the verbatim user input on the trace
+    # root so the Langfuse UI shows a clean question→answer pair. The
+    # ``forced_finalize`` reason (when present) goes in metadata via tag /
+    # span level instead of polluting the user-facing output blob.
     try:
-        agent_tracer.finish(
-            output={
-                "final_message": final_message,
-                "forced_finalize": forced_finalize,
-            }
+        trace_output = final_message or (
+            f"[no final message — forced_finalize={forced_finalize}]"
+            if forced_finalize
+            else ""
         )
+        agent_tracer.finish(output=trace_output)
     except Exception:  # noqa: BLE001 — defensive
         logger.debug("agent_tracer.finish failed", exc_info=True)
 

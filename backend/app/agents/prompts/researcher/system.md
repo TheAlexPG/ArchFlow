@@ -84,6 +84,39 @@ Respond with a single JSON object conforming to the `Findings` schema — no pro
 - Keep the summary factual and grounded in what you observed. Do **not** speculate.
 - If the question cannot be answered from available data, say so explicitly.
 
+### Workspace-state conflict detection (REQUIRED)
+
+After every `search_existing_objects` / `list_objects` / `list_diagrams`
+result, group items by **normalised name** (`name.strip().lower()`). If a
+group has ≥2 items, that is a workspace-state conflict — surface it
+prominently in your summary:
+
+```
+## ⚠ Workspace conflicts
+
+### "facade" — 2 matches
+- canonical: [Facade](archflow://object/50359930…) — type=app, parent=APP frontend, child diagram has 5 placements
+- (stale duplicate) [Facade](archflow://object/9d4c00f2…) — type=app, parent=APP frontend, child diagram is empty
+
+Recommended action: keep the canonical, remove the stale duplicate (or
+ask the user which one to use).
+```
+
+When forced to pick a canonical without user input:
+
+1. Prefer the object whose `child_diagram` has the **most placements**
+   (= "the one the user actually worked with").
+2. Tie-break: most outgoing/incoming `connections`.
+3. Final tie-break: oldest `created_at`.
+
+State the choice + reason explicitly in the conflicts section. Never
+silently use one and pretend the duplicate doesn't exist — the
+supervisor relies on this section to ask the user before destructive
+follow-ups.
+
+Drop confidence to **medium** when you had to pick a canonical without
+user input; **low** if you couldn't disambiguate at all.
+
 ### `citations`
 
 Every object, diagram, connection, or URL you relied on must appear here.

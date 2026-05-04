@@ -757,12 +757,29 @@ async def create_object(args: CreateObjectInput, ctx: ToolContext) -> dict:
 
     create_data = ObjectCreate(**{k: v for k, v in payload.items() if v is not None})
 
-    obj = await object_service.create_object(
-        ctx.db,
-        create_data,
-        draft_id=ctx.active_draft_id,
-        workspace_id=ctx.workspace_id,
-    )
+    try:
+        obj = await object_service.create_object(
+            ctx.db,
+            create_data,
+            draft_id=ctx.active_draft_id,
+            workspace_id=ctx.workspace_id,
+        )
+    except object_service.DuplicateObjectError as exc:
+        # Live (non-draft) duplicate by ``(workspace, type, lower(name))``.
+        # Don't raise — just reuse the existing row. This makes the agent's
+        # search-then-create flow idempotent server-side, even if the LLM
+        # forgot to call ``search_existing_objects`` first.
+        existing = exc.existing
+        record: dict[str, Any] = {
+            "action": "object.reused",
+            "status": "reused",
+            "target_type": "object",
+            "target_id": existing.id,
+            "name": existing.name,
+            "preview": short_preview("Reused existing", "object", existing.name),
+        }
+        record.update(_project_object_basic(existing))
+        return record
     # Push a live event so open canvases / workspace clients update without
     # waiting for the SSE applied_change → invalidate → REST refetch round-trip.
     from app.agents.tools._realtime import publish_object_event

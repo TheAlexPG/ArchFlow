@@ -73,6 +73,23 @@ async def get_object(db: AsyncSession, object_id: uuid.UUID) -> ModelObject | No
     return result.scalar_one_or_none()
 
 
+class DuplicateObjectError(ValueError):
+    """Raised by :func:`create_object` when a live (non-draft) object with the
+    same ``(workspace_id, type, lower(name))`` already exists.
+
+    Carries the existing :class:`ModelObject` so callers (e.g. the agent's
+    ``create_object`` tool wrapper) can return its id instead of failing the
+    whole turn — the right behaviour for "reuse, don't duplicate" semantics.
+    """
+
+    def __init__(self, existing: ModelObject) -> None:
+        super().__init__(
+            f"object already exists: name={existing.name!r} type={getattr(existing.type, 'value', existing.type)!r} "
+            f"id={existing.id} (use that id with place_on_diagram instead)"
+        )
+        self.existing = existing
+
+
 async def create_object(
     db: AsyncSession,
     data: ObjectCreate,
@@ -80,6 +97,27 @@ async def create_object(
     workspace_id: uuid.UUID | None = None,
 ) -> ModelObject:
     await validate_technology_ids(db, workspace_id, data.technology_ids)
+
+    # Refuse silent duplicates on the live (non-draft) model. Drafts are
+    # private workspaces; same-name copies there are intentional. For live
+    # creates we look for ``(workspace_id, type, lower(name))`` and raise
+    # :class:`DuplicateObjectError` carrying the existing row so the caller
+    # can reuse it.
+    if draft_id is None and data.name and data.name.strip():
+        type_value = getattr(data.type, "value", data.type)
+        from sqlalchemy import func as _func
+
+        existing_q = select(ModelObject).where(
+            ModelObject.draft_id.is_(None),
+            ModelObject.type == type_value,
+            _func.lower(ModelObject.name) == data.name.strip().lower(),
+        )
+        if workspace_id is not None:
+            existing_q = existing_q.where(ModelObject.workspace_id == workspace_id)
+        existing_row = (await db.execute(existing_q.limit(1))).scalar_one_or_none()
+        if existing_row is not None:
+            raise DuplicateObjectError(existing_row)
+
     obj = ModelObject(
         name=data.name,
         type=data.type,

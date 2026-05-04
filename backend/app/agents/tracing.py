@@ -296,7 +296,12 @@ class AgentTracer:
                 session_id=session_id,
                 user_id=user_id,
                 tags=trace_tags,
-                input={"message": chat_input} if chat_input else None,
+                # Plain string at the trace root so the Langfuse UI shows
+                # the user's verbatim message side-by-side with the final
+                # assistant text (matches the standard "input/output" pair
+                # most observability dashboards expect — see e.g.
+                # ``langfuse.set_current_trace_io(input=..., output=...)``).
+                input=chat_input or None,
             )
         except Exception as exc:  # pragma: no cover — defensive
             logger.warning("AgentTracer: failed to open trace: %s", exc)
