@@ -7,6 +7,7 @@ from app.models.connection import Connection
 from app.models.object import ModelObject
 from app.models.technology import Technology
 from app.schemas.connection import ConnectionCreate, ConnectionUpdate
+from app.services import activity_service
 
 
 async def _validate_protocol_ids(
@@ -86,7 +87,13 @@ async def get_connections_between(
 
 
 async def create_connection(
-    db: AsyncSession, data: ConnectionCreate, draft_id: uuid.UUID | None = None
+    db: AsyncSession,
+    data: ConnectionCreate,
+    draft_id: uuid.UUID | None = None,
+    *,
+    actor_user=None,
+    from_diagram_id: uuid.UUID | None = None,
+    from_draft_id: uuid.UUID | None = None,
 ) -> Connection:
     ws_id = await _source_workspace_id(db, data.source_id)
     await _validate_protocol_ids(db, ws_id, data.protocol_ids)
@@ -108,32 +115,175 @@ async def create_connection(
     db.add(conn)
     await db.flush()
     await db.refresh(conn)
+
+    # Undo recording — only for live connections with full context
+    if (
+        actor_user is not None
+        and from_diagram_id is not None
+        and ws_id is not None
+        and draft_id is None
+    ):
+        from app.models.undo_entry import UndoAction, UndoTargetType
+        from app.services import undo_service
+
+        await undo_service.record(
+            db,
+            user_id=actor_user.id,
+            workspace_id=ws_id,
+            diagram_id=from_diagram_id,
+            draft_id=from_draft_id,
+            target_type=UndoTargetType.CONNECTION,
+            target_id=conn.id,
+            action=UndoAction.CREATE,
+            forward_summary=f"Created connection {str(conn.id)[:8]}"[:80],
+            inverse_payload={"target_id": str(conn.id)},
+            after_state=activity_service.snapshot(conn),
+            coalesce_key=f"connection:{conn.id}:create",
+        )
+
     return conn
 
 
 async def update_connection(
-    db: AsyncSession, conn: Connection, data: ConnectionUpdate
+    db: AsyncSession,
+    conn: Connection,
+    data: ConnectionUpdate,
+    *,
+    actor_user=None,
+    from_diagram_id: uuid.UUID | None = None,
+    from_draft_id: uuid.UUID | None = None,
 ) -> Connection:
     if "protocol_ids" in data.model_fields_set:
         ws_id = await _source_workspace_id(db, conn.source_id)
         await _validate_protocol_ids(db, ws_id, data.protocol_ids)
 
+    before = activity_service.snapshot(conn)
     update_data = data.model_dump(exclude_unset=True)
+    # Strip undo-context fields that are not connection attributes
+    update_data.pop("from_diagram_id", None)
+    update_data.pop("from_draft_id", None)
     for field, value in update_data.items():
         setattr(conn, field, value)
     await db.flush()
     await db.refresh(conn)
+    after = activity_service.snapshot(conn)
+
+    # Undo recording
+    if (
+        actor_user is not None
+        and from_diagram_id is not None
+    ):
+        diff = activity_service.diff_snapshots(before, after)
+        if diff:
+            ws_id = await _source_workspace_id(db, conn.source_id)
+            if ws_id is not None:
+                from app.models.undo_entry import UndoAction, UndoTargetType
+                from app.services import undo_service
+
+                await undo_service.record(
+                    db,
+                    user_id=actor_user.id,
+                    workspace_id=ws_id,
+                    diagram_id=from_diagram_id,
+                    draft_id=from_draft_id,
+                    target_type=UndoTargetType.CONNECTION,
+                    target_id=conn.id,
+                    action=UndoAction.UPDATE,
+                    forward_summary=_summarise_connection_diff(conn, diff),
+                    inverse_payload={"before": {k: v["before"] for k, v in diff.items()}},
+                    after_state={k: v["after"] for k, v in diff.items()},
+                    coalesce_key=f"connection:{conn.id}:{','.join(sorted(diff.keys()))}",
+                )
+
     return conn
 
 
-async def flip_connection(db: AsyncSession, conn: Connection) -> Connection:
+async def flip_connection(
+    db: AsyncSession,
+    conn: Connection,
+    *,
+    actor_user=None,
+    from_diagram_id: uuid.UUID | None = None,
+    from_draft_id: uuid.UUID | None = None,
+) -> Connection:
     conn.source_id, conn.target_id = conn.target_id, conn.source_id
     conn.source_handle, conn.target_handle = conn.target_handle, conn.source_handle
     await db.flush()
     await db.refresh(conn)
+
+    # Undo recording — flip is its own inverse, so inverse_payload is empty
+    if (
+        actor_user is not None
+        and from_diagram_id is not None
+    ):
+        ws_id = await _source_workspace_id(db, conn.source_id)
+        if ws_id is not None:
+            from app.models.undo_entry import UndoAction, UndoTargetType
+            from app.services import undo_service
+
+            await undo_service.record(
+                db,
+                user_id=actor_user.id,
+                workspace_id=ws_id,
+                diagram_id=from_diagram_id,
+                draft_id=from_draft_id,
+                target_type=UndoTargetType.CONNECTION,
+                target_id=conn.id,
+                action=UndoAction.UPDATE,
+                forward_summary=f"Flipped connection {str(conn.id)[:8]}"[:80],
+                inverse_payload={},
+                after_state=activity_service.snapshot(conn),
+                coalesce_key=f"connection:{conn.id}:flip",
+            )
+
     return conn
 
 
-async def delete_connection(db: AsyncSession, conn: Connection) -> None:
+async def delete_connection(
+    db: AsyncSession,
+    conn: Connection,
+    *,
+    actor_user=None,
+    from_diagram_id: uuid.UUID | None = None,
+    from_draft_id: uuid.UUID | None = None,
+) -> None:
+    # Capture snapshot BEFORE delete
+    snapshot = activity_service.snapshot(conn)
+    conn_id = conn.id
+
+    # Undo recording — need workspace before deleting (derive from source)
+    ws_id: uuid.UUID | None = None
+    if actor_user is not None and from_diagram_id is not None:
+        ws_id = await _source_workspace_id(db, conn.source_id)
+
     await db.delete(conn)
     await db.flush()
+
+    if (
+        actor_user is not None
+        and from_diagram_id is not None
+        and ws_id is not None
+    ):
+        from app.models.undo_entry import UndoAction, UndoTargetType
+        from app.services import undo_service
+
+        await undo_service.record(
+            db,
+            user_id=actor_user.id,
+            workspace_id=ws_id,
+            diagram_id=from_diagram_id,
+            draft_id=from_draft_id,
+            target_type=UndoTargetType.CONNECTION,
+            target_id=conn_id,
+            action=UndoAction.DELETE,
+            forward_summary=f"Deleted connection {str(conn_id)[:8]}"[:80],
+            inverse_payload={"snapshot": snapshot, "id": str(conn_id)},
+            after_state=None,
+            coalesce_key=f"connection:{conn_id}:delete",
+        )
+
+
+def _summarise_connection_diff(conn: Connection, diff: dict) -> str:
+    """Human-readable label for the history popover. Max ~80 chars."""
+    fields = ", ".join(sorted(diff.keys()))
+    return f"Edited connection — {fields}"[:80]

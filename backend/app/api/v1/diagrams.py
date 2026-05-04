@@ -171,11 +171,18 @@ async def add_object_to_diagram(
     diagram_id: uuid.UUID,
     data: DiagramObjectCreate,
     db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_optional_user),
+    workspace_id: uuid.UUID | None = Depends(get_current_workspace_id),
 ):
     diagram = await diagram_service.get_diagram(db, diagram_id)
     if not diagram:
         raise HTTPException(status_code=404, detail="Diagram not found")
-    obj = await diagram_service.add_object_to_diagram(db, diagram_id, data)
+    obj = await diagram_service.add_object_to_diagram(
+        db, diagram_id, data,
+        actor_user=current_user,
+        workspace_id=getattr(diagram, "workspace_id", None),
+        from_draft_id=data.from_draft_id,
+    )
     body = DiagramObjectResponse.model_validate(obj).model_dump(mode="json")
     payload = {"diagram_id": str(diagram_id), "diagram_object": body}
     fire_and_forget_publish(
@@ -196,15 +203,20 @@ async def update_diagram_object(
     object_id: uuid.UUID,
     data: DiagramObjectUpdate,
     db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_optional_user),
+    workspace_id: uuid.UUID | None = Depends(get_current_workspace_id),
 ):
+    diagram = await diagram_service.get_diagram(db, diagram_id)
     obj = await diagram_service.update_diagram_object(
-        db, diagram_id, object_id, data
+        db, diagram_id, object_id, data,
+        actor_user=current_user,
+        workspace_id=getattr(diagram, "workspace_id", None) if diagram else None,
+        from_draft_id=data.from_draft_id,
     )
     if not obj:
         raise HTTPException(
             status_code=404, detail="Object not found in diagram"
         )
-    diagram = await diagram_service.get_diagram(db, diagram_id)
     body = DiagramObjectResponse.model_validate(obj).model_dump(mode="json")
     payload = {"diagram_id": str(diagram_id), "diagram_object": body}
     fire_and_forget_publish(
@@ -220,11 +232,17 @@ async def update_diagram_object(
 async def remove_object_from_diagram(
     diagram_id: uuid.UUID,
     object_id: uuid.UUID,
+    from_draft_id: uuid.UUID | None = Query(None),
     db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_optional_user),
+    workspace_id: uuid.UUID | None = Depends(get_current_workspace_id),
 ):
     diagram = await diagram_service.get_diagram(db, diagram_id)
     removed = await diagram_service.remove_object_from_diagram(
-        db, diagram_id, object_id
+        db, diagram_id, object_id,
+        actor_user=current_user,
+        workspace_id=getattr(diagram, "workspace_id", None) if diagram else None,
+        from_draft_id=from_draft_id,
     )
     if not removed:
         raise HTTPException(

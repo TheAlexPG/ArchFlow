@@ -6,6 +6,7 @@ from sqlalchemy.orm import selectinload
 
 from app.models.activity_log import ActivityTargetType
 from app.models.connection import Connection
+from app.models.diagram import DiagramObject
 from app.models.object import ModelObject
 from app.models.technology import Technology
 from app.schemas.object import ObjectCreate, ObjectUpdate
@@ -78,6 +79,10 @@ async def create_object(
     data: ObjectCreate,
     draft_id: uuid.UUID | None = None,
     workspace_id: uuid.UUID | None = None,
+    *,
+    actor_user=None,
+    from_diagram_id: uuid.UUID | None = None,
+    from_draft_id: uuid.UUID | None = None,
 ) -> ModelObject:
     await validate_technology_ids(db, workspace_id, data.technology_ids)
     obj = ModelObject(
@@ -105,16 +110,51 @@ async def create_object(
         await activity_service.log_created(
             db, ActivityTargetType.OBJECT, obj, workspace_id=workspace_id
         )
+
+    # Undo recording — only for live objects with full context
+    if (
+        actor_user is not None
+        and from_diagram_id is not None
+        and obj.workspace_id is not None
+        and draft_id is None
+    ):
+        from app.models.undo_entry import UndoAction, UndoTargetType
+        from app.services import undo_service
+
+        await undo_service.record(
+            db,
+            user_id=actor_user.id,
+            workspace_id=obj.workspace_id,
+            diagram_id=from_diagram_id,
+            draft_id=from_draft_id,
+            target_type=UndoTargetType.OBJECT,
+            target_id=obj.id,
+            action=UndoAction.CREATE,
+            forward_summary=f"Created {(obj.name or '?')[:60]}"[:80],
+            inverse_payload={"target_id": str(obj.id)},
+            after_state=activity_service.snapshot(obj),
+            coalesce_key=f"object:{obj.id}:create",
+        )
+
     return obj
 
 
 async def update_object(
-    db: AsyncSession, obj: ModelObject, data: ObjectUpdate
+    db: AsyncSession,
+    obj: ModelObject,
+    data: ObjectUpdate,
+    *,
+    actor_user=None,
+    from_diagram_id: uuid.UUID | None = None,
+    from_draft_id: uuid.UUID | None = None,
 ) -> ModelObject:
     if "technology_ids" in data.model_fields_set:
         await validate_technology_ids(db, obj.workspace_id, data.technology_ids)
     before = activity_service.snapshot(obj)
     update_data = data.model_dump(exclude_unset=True)
+    # Strip undo-context fields that are not object attributes
+    update_data.pop("from_diagram_id", None)
+    update_data.pop("from_draft_id", None)
     for field, value in update_data.items():
         if field == "metadata_" and value and obj.metadata_:
             # Merge metadata instead of replacing
@@ -129,15 +169,88 @@ async def update_object(
         db, ActivityTargetType.OBJECT, obj.id, before, after,
         workspace_id=obj.workspace_id,
     )
+
+    # Undo recording
+    if (
+        actor_user is not None
+        and from_diagram_id is not None
+        and obj.workspace_id is not None
+    ):
+        diff = activity_service.diff_snapshots(before, after)
+        if diff:
+            from app.models.undo_entry import UndoAction, UndoTargetType
+            from app.services import undo_service
+
+            await undo_service.record(
+                db,
+                user_id=actor_user.id,
+                workspace_id=obj.workspace_id,
+                diagram_id=from_diagram_id,
+                draft_id=from_draft_id,
+                target_type=UndoTargetType.OBJECT,
+                target_id=obj.id,
+                action=UndoAction.UPDATE,
+                forward_summary=_summarise_object_diff(obj, diff),
+                inverse_payload={"before": {k: v["before"] for k, v in diff.items()}},
+                after_state={k: v["after"] for k, v in diff.items()},
+                coalesce_key=f"object:{obj.id}:{','.join(sorted(diff.keys()))}",
+            )
+
     return obj
 
 
-async def delete_object(db: AsyncSession, obj: ModelObject) -> None:
+async def delete_object(
+    db: AsyncSession,
+    obj: ModelObject,
+    *,
+    actor_user=None,
+    from_diagram_id: uuid.UUID | None = None,
+    from_draft_id: uuid.UUID | None = None,
+) -> None:
+    # Capture snapshot and placements BEFORE delete
+    snapshot = activity_service.snapshot(obj)
+    obj_id = obj.id
+    obj_ws_id = obj.workspace_id
+
+    # Capture DiagramObject placements so restore_service can replay them
+    placements_result = await db.execute(
+        select(DiagramObject).where(DiagramObject.object_id == obj_id)
+    )
+    placements = list(placements_result.scalars().all())
+    if placements:
+        snapshot["_placements"] = [
+            activity_service.snapshot(p) for p in placements
+        ]
+
     await activity_service.log_deleted(
-        db, ActivityTargetType.OBJECT, obj, workspace_id=obj.workspace_id
+        db, ActivityTargetType.OBJECT, obj, workspace_id=obj_ws_id
     )
     await db.delete(obj)
     await db.flush()
+
+    # Undo recording
+    if (
+        actor_user is not None
+        and from_diagram_id is not None
+        and obj_ws_id is not None
+    ):
+        from app.models.undo_entry import UndoAction, UndoTargetType
+        from app.services import undo_service
+
+        await undo_service.record(
+            db,
+            user_id=actor_user.id,
+            workspace_id=obj_ws_id,
+            diagram_id=from_diagram_id,
+            draft_id=from_draft_id,
+            target_type=UndoTargetType.OBJECT,
+            target_id=obj_id,
+            action=UndoAction.DELETE,
+            forward_summary=f"Deleted {(snapshot.get('name') or '?')[:60]}"[:80],
+            inverse_payload={"snapshot": snapshot, "id": str(obj_id)},
+            after_state=None,
+            coalesce_key=f"object:{obj_id}:delete",
+        )
 
 
 async def get_children(db: AsyncSession, object_id: uuid.UUID) -> list[ModelObject]:
@@ -167,3 +280,10 @@ async def get_dependencies(
         "upstream": list(upstream_q.scalars().all()),
         "downstream": list(downstream_q.scalars().all()),
     }
+
+
+def _summarise_object_diff(obj: ModelObject, diff: dict) -> str:
+    """Human-readable label for the history popover. Max ~80 chars."""
+    fields = ", ".join(sorted(diff.keys()))
+    name = (obj.name or "?")[:40]
+    return f"Edited {name} — {fields}"[:80]

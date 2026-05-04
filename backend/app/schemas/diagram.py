@@ -45,6 +45,7 @@ class DiagramObjectCreate(BaseModel):
     position_y: float = 0.0
     width: float | None = None
     height: float | None = None
+    from_draft_id: uuid.UUID | None = None  # for per-user undo context
 
 
 class DiagramObjectUpdate(BaseModel):
@@ -52,6 +53,7 @@ class DiagramObjectUpdate(BaseModel):
     position_y: float | None = None
     width: float | None = None
     height: float | None = None
+    from_draft_id: uuid.UUID | None = None  # for per-user undo context
 
 
 class DiagramObjectResponse(BaseModel):

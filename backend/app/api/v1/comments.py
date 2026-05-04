@@ -3,7 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_optional_user
+from app.api.deps import get_current_workspace_id, get_optional_user
 from app.core.database import get_db
 from app.models.comment import CommentTargetType
 from app.models.user import User
@@ -27,11 +27,18 @@ async def create_comment(
     data: CommentCreate,
     db: AsyncSession = Depends(get_db),
     user: User | None = Depends(get_optional_user),
+    workspace_id: uuid.UUID | None = Depends(get_current_workspace_id),
 ):
     from app.services import notification_service
 
     author_id = user.id if user else None
-    comment = await comment_service.create_comment(db, data, author_id=author_id)
+    comment = await comment_service.create_comment(
+        db, data, author_id=author_id,
+        actor_user=user,
+        from_diagram_id=data.from_diagram_id,
+        from_draft_id=data.from_draft_id,
+        workspace_id=workspace_id,
+    )
     # Best-effort — don't fail the whole request if a mention resolution
     # blows up.
     try:
@@ -66,19 +73,37 @@ async def update_comment(
     comment_id: uuid.UUID,
     data: CommentUpdate,
     db: AsyncSession = Depends(get_db),
+    user: User | None = Depends(get_optional_user),
+    workspace_id: uuid.UUID | None = Depends(get_current_workspace_id),
 ):
     comment = await comment_service.get_comment(db, comment_id)
     if not comment:
         raise HTTPException(status_code=404, detail="Comment not found")
-    return await comment_service.update_comment(db, comment, data)
+    return await comment_service.update_comment(
+        db, comment, data,
+        actor_user=user,
+        from_diagram_id=data.from_diagram_id,
+        from_draft_id=data.from_draft_id,
+        workspace_id=workspace_id,
+    )
 
 
 @router.delete("/{comment_id}", status_code=204)
 async def delete_comment(
     comment_id: uuid.UUID,
+    from_diagram_id: uuid.UUID | None = Query(None),
+    from_draft_id: uuid.UUID | None = Query(None),
     db: AsyncSession = Depends(get_db),
+    user: User | None = Depends(get_optional_user),
+    workspace_id: uuid.UUID | None = Depends(get_current_workspace_id),
 ):
     comment = await comment_service.get_comment(db, comment_id)
     if not comment:
         raise HTTPException(status_code=404, detail="Comment not found")
-    await comment_service.delete_comment(db, comment)
+    await comment_service.delete_comment(
+        db, comment,
+        actor_user=user,
+        from_diagram_id=from_diagram_id,
+        from_draft_id=from_draft_id,
+        workspace_id=workspace_id,
+    )
