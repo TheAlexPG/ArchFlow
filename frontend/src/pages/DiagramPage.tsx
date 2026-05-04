@@ -189,6 +189,21 @@ export function DiagramPage() {
 
   const toggleSearch = useCallback(() => setSearchOpen((v) => !v), [])
 
+  // Parent diagram for the back button — second-to-last entry in the
+  // breadcrumb chain (last entry is the current diagram). When this is
+  // null the diagram is a top-level diagram or the chain hasn't loaded,
+  // so we fall back to the workspace overview.
+  const parentDiagramId =
+    breadcrumbs.length >= 2 ? breadcrumbs[breadcrumbs.length - 2].id : null
+
+  const handleBack = useCallback(() => {
+    if (parentDiagramId) {
+      navigate(`/diagram/${parentDiagramId}`)
+    } else {
+      navigate('/')
+    }
+  }, [navigate, parentDiagramId])
+
   // Breadcrumb segments: prepend a synthetic "workspace" root if the C4
   // parent chain didn't already expose one, so the mono breadcrumb always
   // has at least two segments to separate with a chevron.
@@ -218,9 +233,9 @@ export function DiagramPage() {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => navigate('/')}
-              title="Back to workspace"
-              aria-label="Back to workspace"
+              onClick={handleBack}
+              title={parentDiagramId ? 'Back to parent diagram' : 'Back to workspace'}
+              aria-label={parentDiagramId ? 'Back to parent diagram' : 'Back to workspace'}
             >
               <ArrowLeftIcon />
             </Button>
