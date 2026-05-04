@@ -66,6 +66,26 @@ class DeleteVerdict(BaseModel):
     rationale: str = Field(default="", max_length=2000)
 
 
+def _pydantic_response_format(model: type[BaseModel]) -> dict:
+    """Build an OpenAI-style ``json_schema`` response_format from a Pydantic
+    model. Works with LM Studio / qwen / OpenAI alike — they all expect the
+    same shape for ``response_format.type == "json_schema"``.
+
+    ``strict: True`` would force the server to constrain decoding to the
+    schema, but it requires ``additionalProperties: false`` on every nested
+    object — Pydantic v2 doesn't always emit that. We leave ``strict`` off
+    so the server treats the schema as an advisory hint and we keep the
+    parse fallback below as a safety net.
+    """
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": model.__name__,
+            "schema": model.model_json_schema(),
+        },
+    }
+
+
 def _short(obj: Any, n: int = 600) -> str:
     try:
         s = json.dumps(obj, default=str, ensure_ascii=False)
@@ -166,25 +186,37 @@ async def review_destructive_op(
     # Mark reviewer node so it shows up cleanly in Langfuse.
     reviewer_meta = _replace(call_meta, node_name="destructive_review")
 
+    # Prefer JSON-Schema constrained decoding when the server supports it
+    # (LM Studio + OpenAI both do). Fall through to plain ``text`` if the
+    # provider rejects ``json_schema`` for any reason.
+    response_format_schema = _pydantic_response_format(DeleteVerdict)
     try:
         result = await llm.acompletion(
             messages,
             metadata=reviewer_meta,
-            # ``json_object`` is not universally supported on OpenAI-compatible
-            # servers (LM Studio's qwen rejects with HTTP 400 — only ``text``
-            # and ``json_schema`` are accepted there). Use ``text`` and rely on
-            # the prompt + a manual JSON parse below; the reviewer system
-            # prompt already pins the output to a single JSON object.
-            response_format={"type": "text"},
+            response_format=response_format_schema,
             temperature=0.0,
             max_tokens=400,
         )
-    except Exception as exc:  # pragma: no cover — defensive
-        logger.warning("destructive-op reviewer call failed: %s", exc)
-        return DeleteVerdict(
-            verdict="APPROVE",
-            rationale=f"reviewer call failed: {exc}",
+    except Exception as schema_exc:
+        logger.warning(
+            "destructive-op reviewer json_schema rejected (%s); retrying as text",
+            schema_exc,
         )
+        try:
+            result = await llm.acompletion(
+                messages,
+                metadata=reviewer_meta,
+                response_format={"type": "text"},
+                temperature=0.0,
+                max_tokens=400,
+            )
+        except Exception as exc:  # pragma: no cover — defensive
+            logger.warning("destructive-op reviewer call failed: %s", exc)
+            return DeleteVerdict(
+                verdict="APPROVE",
+                rationale=f"reviewer call failed: {exc}",
+            )
 
     text = (result.text or "").strip()
     if not text:

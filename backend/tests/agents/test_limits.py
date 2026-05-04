@@ -442,9 +442,12 @@ async def test_health_check_uses_health_check_model(patch_pricing):
     first_call = llm.acompletion.await_args_list[0]
     kwargs = first_call.kwargs
     assert kwargs.get("model_override") == "openai/gpt-4o-mini"
-    # ``json_object`` was rejected by LM Studio's qwen with HTTP 400 — we
-    # now request ``text`` and parse JSON manually out of the response body.
-    assert kwargs.get("response_format") == {"type": "text"}
+    # We prefer constrained ``json_schema`` decoding (OpenAI / LM Studio
+    # both accept it), and fall back to ``text`` only if the provider
+    # rejects the schema. The first call must therefore carry json_schema.
+    rf = kwargs.get("response_format")
+    assert isinstance(rf, dict) and rf.get("type") == "json_schema"
+    assert rf["json_schema"]["name"] == "_HealthCheckResponse"
     # The main call must NOT carry a model_override (we didn't pass one).
     second_call = llm.acompletion.await_args_list[1]
     assert second_call.kwargs.get("model_override") is None

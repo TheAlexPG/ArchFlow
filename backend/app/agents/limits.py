@@ -37,11 +37,44 @@ from decimal import Decimal
 from typing import Any, Literal
 from uuid import UUID
 
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.errors import AgentError, BudgetExhausted, TurnLimitReached
 from app.agents.llm import LLMCallMetadata, LLMClient, LLMResult
 from app.agents.pricing import get_pricing
+
+
+class _HealthCheckResponse(BaseModel):
+    """Pydantic shape for the health-check LLM's JSON response.
+
+    Used to drive the ``response_format={"type": "json_schema", ...}``
+    constrained-decoding path on LM Studio / OpenAI. The dataclass
+    :class:`HealthCheckResult` keeps the runtime-internal shape; this
+    model only exists to derive a JSON Schema for the API call.
+    """
+
+    verdict: Literal["progressing", "stuck"]
+    reason: str = Field(default="", max_length=500)
+    should_extend: bool | None = None
+
+
+def _json_schema_response_format(model: type[BaseModel]) -> dict:
+    """Build OpenAI-style ``json_schema`` response_format from a Pydantic model.
+
+    Same shape works on OpenAI, LM Studio, and other OpenAI-compat servers
+    that support structured outputs. We do not pass ``strict: True`` because
+    Pydantic v2's auto-generated schemas don't always carry
+    ``additionalProperties: false`` at every nested level — the parse
+    fallback in the caller handles minor schema drift.
+    """
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": model.__name__,
+            "schema": model.model_json_schema(),
+        },
+    }
 
 logger = logging.getLogger(__name__)
 
@@ -377,28 +410,46 @@ class LimitsEnforcer:
             checks.
           * Account for the cost in :attr:`counters.cost_usd` so the health-
             check eats the same budget as the agent it is policing.
-          * Use ``response_format={"type": "text"}`` and parse a best-effort
-            verdict out of the response text. (``json_object`` is not
-            universally supported — LM Studio's qwen rejects it with HTTP 400.)
+          * Use ``response_format={"type": "json_schema", ...}`` derived from
+            :class:`_HealthCheckResponse` so the server constrains decoding
+            to a known shape. Fall back to ``text`` if the provider rejects
+            the schema; a manual JSON parse below handles either case.
+            (``json_object`` is not universally supported — LM Studio's qwen
+            rejects it with HTTP 400.)
         """
         compact_prompt = self._build_health_check_prompt(messages)
 
+        response_format_schema = _json_schema_response_format(_HealthCheckResponse)
         try:
             result = await self.llm.acompletion(
                 compact_prompt,
-                response_format={"type": "text"},
+                response_format=response_format_schema,
                 metadata=call_metadata,
                 model_override=self.limits.health_check_model,
             )
-        except Exception as e:  # pragma: no cover — defensive
-            # If even the cheap probe fails we treat that as "stuck" — better
-            # to terminate than spin further.
-            logger.warning("health-check call failed: %s — defaulting to stuck", e)
-            return HealthCheckResult(
-                verdict="stuck",
-                reason=f"health-check call failed: {e}",
-                should_extend=False,
+        except Exception as schema_exc:
+            logger.warning(
+                "health-check json_schema rejected (%s); retrying as text",
+                schema_exc,
             )
+            try:
+                result = await self.llm.acompletion(
+                    compact_prompt,
+                    response_format={"type": "text"},
+                    metadata=call_metadata,
+                    model_override=self.limits.health_check_model,
+                )
+            except Exception as e:  # pragma: no cover — defensive
+                # If even the cheap probe fails we treat that as "stuck" —
+                # better to terminate than spin further.
+                logger.warning(
+                    "health-check call failed: %s — defaulting to stuck", e
+                )
+                return HealthCheckResult(
+                    verdict="stuck",
+                    reason=f"health-check call failed: {e}",
+                    should_extend=False,
+                )
 
         # Account for the health-check's cost in the same budget.
         if result.cost_usd is not None:
