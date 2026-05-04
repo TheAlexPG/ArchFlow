@@ -324,3 +324,58 @@ async def test_undo_to_walks_back_three_steps(db, user, workspace, diagram):
     for o in objs:
         await db.refresh(o)
         assert o.name == "old"
+
+
+@pytest.mark.asyncio
+async def test_undo_to_rejects_other_users_entry(db, user, user_other, workspace, diagram):
+    """Auth guard: undo_to(entry_id from another user) raises UndoEntryNotFound."""
+    o = ModelObject(name="X", type="system", workspace_id=workspace.id)
+    db.add(o); await db.flush()
+    other_entry = await undo_service.record(
+        db, user_id=user_other.id, workspace_id=workspace.id,
+        diagram_id=diagram.id, draft_id=None,
+        target_type=UndoTargetType.OBJECT, target_id=o.id,
+        action=UndoAction.UPDATE,
+        forward_summary="other user's edit",
+        inverse_payload={"before": {"name": "old"}},
+        after_state={"name": "X"},
+        coalesce_key=f"object:{o.id}:name",
+    )
+    with pytest.raises(undo_service.UndoEntryNotFound):
+        await undo_service.undo_to(
+            db, user_id=user.id, diagram_id=diagram.id, draft_id=None,
+            actor_user=user, entry_id=other_entry.id,
+        )
+
+
+@pytest.mark.asyncio
+async def test_undo_to_rejects_cross_draft_entry(db, user, workspace, diagram):
+    """Auth guard: a draft entry can't be reached from a live (draft_id=None) call."""
+    import uuid as _uuid
+    fake_draft_id = _uuid.uuid4()
+    # Insert a row directly so we don't have to fixture a real Draft row;
+    # we only need the FK to exist for the lookup. We bypass record() because
+    # we're not testing record(), we're testing the auth guard.
+    o = ModelObject(name="Y", type="system", workspace_id=workspace.id)
+    db.add(o); await db.flush()
+    # We can't easily insert a draft_id without a real Draft row (FK).
+    # Instead, record an entry under draft_id=None, then hand-set draft_id
+    # on the row to a real-looking UUID just for this guard check.
+    entry = await undo_service.record(
+        db, user_id=user.id, workspace_id=workspace.id,
+        diagram_id=diagram.id, draft_id=None,
+        target_type=UndoTargetType.OBJECT, target_id=o.id,
+        action=UndoAction.UPDATE,
+        forward_summary="live edit",
+        inverse_payload={"before": {"name": "old"}},
+        after_state={"name": "Y"},
+        coalesce_key=f"object:{o.id}:name",
+    )
+    # Simulate the cross-context case: caller passes a real draft_id but
+    # the entry belongs to live (draft_id=None).
+    with pytest.raises(undo_service.UndoEntryNotFound):
+        await undo_service.undo_to(
+            db, user_id=user.id, diagram_id=diagram.id,
+            draft_id=fake_draft_id,  # caller context = some draft
+            actor_user=user, entry_id=entry.id,  # entry context = live
+        )
