@@ -950,6 +950,25 @@ async def test_delete_object_rejected_by_destructive_reviewer(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_delete_object_missing_reason_validation_error(monkeypatch):
+    """`reason` is required by the Pydantic schema — calls without it must
+    fail validation, not silently auto-approve. The destructive-op safety
+    hook depends on the model writing a reason."""
+    _patch_acl_pass(monkeypatch)
+    ctx = _ctx()
+    out = await execute_tool(
+        {
+            "id": "cmissreason",
+            "name": "delete_object",
+            "arguments": {"object_id": str(uuid4()), "confirmed": True},
+        },
+        ctx,
+    )
+    assert out.status == "error"
+    assert "reason" in out.content.lower()
+
+
+@pytest.mark.asyncio
 async def test_delete_diagram_preview_then_confirmed(monkeypatch):
     _patch_acl_pass(monkeypatch)
 

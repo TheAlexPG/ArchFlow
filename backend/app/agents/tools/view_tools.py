@@ -89,15 +89,16 @@ class UnplaceFromDiagramInput(BaseModel):
     object_id: UUID
     confirmed: bool = False
     reason: str = Field(
-        default="",
+        ...,
+        min_length=10,
         max_length=1000,
         description=(
-            "Justify why removing this placement is correct. Optional but "
-            "strongly recommended — the destructive-op reviewer LLM reads "
-            "it verbatim. Cite specifics: 'duplicate placement on same "
-            "diagram', 'user asked to remove X from this view', "
-            "'placement belongs on child diagram'. When omitted, the "
-            "reviewer falls back to recent activity, which is weaker."
+            "REQUIRED. ≥10 chars. Justify why removing this placement is "
+            "correct — the destructive-op reviewer LLM reads this "
+            "verbatim and rejects vague reasons. Good examples: "
+            "'duplicate placement on same diagram', 'user asked to "
+            "remove X from this view', 'placement belongs on child "
+            "diagram, not here'."
         ),
     )
 
@@ -124,15 +125,15 @@ class DeleteDiagramInput(BaseModel):
     diagram_id: UUID
     confirmed: bool = False
     reason: str = Field(
-        default="",
+        ...,
+        min_length=10,
         max_length=1000,
         description=(
-            "Justify why deleting this diagram is correct. Optional but "
-            "strongly recommended — the destructive-op reviewer LLM reads "
-            "it verbatim. Cite specifics: 'duplicate of diagram X for "
-            "the same scope object', 'user asked to drop empty draft', "
-            "'replaced by new layout in Y'. When omitted, the reviewer "
-            "falls back to recent activity, which is weaker."
+            "REQUIRED. ≥10 chars. Justify why deleting this diagram is "
+            "correct — the destructive-op reviewer LLM reads this "
+            "verbatim and rejects vague reasons. Good examples: "
+            "'duplicate of diagram X for the same scope object', 'user "
+            "asked to drop empty draft', 'replaced by new layout in Y'."
         ),
     )
 
@@ -509,12 +510,15 @@ async def move_on_diagram(args: MoveOnDiagramInput, ctx: ToolContext) -> dict:
 @tool(
     name="unplace_from_diagram",
     description=(
-        "Remove an object's visual placement from a diagram (does not delete the "
-        "object). First call without confirmed=True returns a preview of orphaned "
-        "connections on this diagram. Re-call with confirmed=True to execute. "
-        "Pass a `reason` string (specific, e.g. 'duplicate placement', 'user asked "
-        "to remove from this view') so the destructive-op reviewer can sanity-"
-        "check the delete; vague reasons get rejected."
+        "Remove an object's visual placement from a diagram (does NOT delete "
+        "the object itself). "
+        "REQUIRED arguments: diagram_id, object_id, confirmed=True, reason "
+        "(≥10 chars). Two-step protocol: first call WITHOUT confirmed "
+        "returns a preview of orphaned connections; second call with "
+        "confirmed=True AND a specific reason executes. Example: "
+        "unplace_from_diagram(diagram_id='…', object_id='…', confirmed=True, "
+        "reason='user asked to remove from this view, keeping in model'). "
+        "The reason is reviewed by an LLM safety net; vague reasons get rejected."
     ),
     input_schema=UnplaceFromDiagramInput,
     permission="diagram:manage",
@@ -712,13 +716,14 @@ async def update_diagram(args: UpdateDiagramInput, ctx: ToolContext) -> dict:
 @tool(
     name="delete_diagram",
     description=(
-        "Delete a diagram. First call returns impact preview (placements + "
-        "child-diagram-of-object linkage). Re-call with confirmed=True to "
-        "execute. Pass a `reason` string (specific, e.g. 'duplicate diagram', "
-        "'user asked to drop empty draft') so the destructive-op reviewer can "
-        "sanity-check the delete; vague reasons get rejected. The model "
-        "objects themselves are NOT deleted, only the diagram and its "
-        "placements."
+        "Delete a diagram (NOT the model objects — only the diagram and its "
+        "placements). "
+        "REQUIRED arguments: diagram_id, confirmed=True, reason (≥10 chars). "
+        "Two-step protocol: first call WITHOUT confirmed returns impact "
+        "preview; second call with confirmed=True AND a specific reason "
+        "executes. Example: delete_diagram(diagram_id='…', confirmed=True, "
+        "reason='duplicate of diagram X for the same scope object'). "
+        "The reason is reviewed by an LLM safety net; vague reasons get rejected."
     ),
     input_schema=DeleteDiagramInput,
     permission="diagram:manage",

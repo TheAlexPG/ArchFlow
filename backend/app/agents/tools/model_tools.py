@@ -80,16 +80,16 @@ class DeleteObjectInput(BaseModel):
     object_id: UUID
     confirmed: bool = False
     reason: str = Field(
-        default="",
+        ...,
+        min_length=10,
         max_length=1000,
         description=(
-            "Justify why this delete is correct. Optional but strongly "
-            "recommended — the destructive-op reviewer LLM reads it "
-            "verbatim. Good reasons cite specifics: 'duplicate of "
-            "canonical id=…', 'user explicitly asked to remove X', "
-            "'orphan placement after layout refactor'. When omitted, the "
-            "reviewer falls back to inspecting the agent's recent "
-            "activity, which is weaker."
+            "REQUIRED. ≥10 chars. Justify why this delete is correct — the "
+            "destructive-op reviewer LLM reads this verbatim and rejects "
+            "vague reasons like 'cleanup' or 'no longer needed'. Good "
+            "examples: 'duplicate of canonical id=abc123', 'user "
+            "explicitly asked to remove X in their last message', 'orphan "
+            "placement after layout refactor'."
         ),
     )
 
@@ -124,15 +124,16 @@ class DeleteConnectionInput(BaseModel):
     connection_id: UUID
     confirmed: bool = False
     reason: str = Field(
-        default="",
+        ...,
+        min_length=10,
         max_length=1000,
         description=(
-            "Justify why this delete is correct. Optional but strongly "
-            "recommended — the destructive-op reviewer LLM reads it "
-            "verbatim. Good reasons cite specifics: 'duplicate edge — "
-            "same source/target as X', 'user removed link in their last "
-            "message', 'wrong direction, replaced by Y'. When omitted, "
-            "the reviewer falls back to recent activity, which is weaker."
+            "REQUIRED. ≥10 chars. Justify why this delete is correct — "
+            "the destructive-op reviewer LLM reads this verbatim and "
+            "rejects vague reasons. Good examples: 'duplicate edge — "
+            "same source/target as connection abc123', 'user removed "
+            "link in their last message', 'wrong direction, replaced by "
+            "new connection Y'."
         ),
     )
 
@@ -876,12 +877,15 @@ async def update_object(args: UpdateObjectInput, ctx: ToolContext) -> dict:
 @tool(
     name="delete_object",
     description=(
-        "Delete a model object. Will cascade to its connections + placements. "
-        "First call without confirmed=True returns a preview with impact. "
-        "Call again with confirmed=True to execute. Pass a `reason` string "
-        "(specific, e.g. 'duplicate of X', 'user explicitly asked to remove') "
-        "so the destructive-op reviewer can sanity-check the delete; vague "
-        "reasons get rejected."
+        "Delete a model object (cascades to its connections + placements). "
+        "REQUIRED arguments: object_id, confirmed=True, reason (≥10 chars). "
+        "Two-step protocol: first call WITHOUT confirmed returns a preview "
+        "with impact; second call with confirmed=True AND a specific reason "
+        "executes. Example: "
+        "delete_object(object_id='…', confirmed=True, reason='duplicate of "
+        "canonical Auth Service id=abc123 — user asked to consolidate'). "
+        "The reason is reviewed by an LLM safety net; vague reasons "
+        "('cleanup', 'no longer needed') get rejected."
     ),
     input_schema=DeleteObjectInput,
     permission="diagram:manage",
@@ -1161,11 +1165,13 @@ async def update_connection(args: UpdateConnectionInput, ctx: ToolContext) -> di
 @tool(
     name="delete_connection",
     description=(
-        "Delete a connection. First call without confirmed returns preview. "
-        "Re-call with confirmed=True to execute. Pass a `reason` string "
-        "(specific, e.g. 'duplicate edge', 'user removed this link') so the "
-        "destructive-op reviewer can sanity-check the delete; vague reasons "
-        "get rejected."
+        "Delete a connection. "
+        "REQUIRED arguments: connection_id, confirmed=True, reason (≥10 chars). "
+        "Two-step protocol: first call WITHOUT confirmed returns preview; "
+        "second call with confirmed=True AND a specific reason executes. "
+        "Example: delete_connection(connection_id='…', confirmed=True, "
+        "reason='duplicate edge — same User→AuthService as connection xyz789'). "
+        "The reason is reviewed by an LLM safety net; vague reasons get rejected."
     ),
     input_schema=DeleteConnectionInput,
     permission="diagram:manage",
