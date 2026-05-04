@@ -490,6 +490,85 @@ async def sweep_old_entries(db: AsyncSession) -> int:
     return result.rowcount or 0
 
 
+@dataclass
+class UndoToResult:
+    applied: list[dict]
+    cursor_seq: int | None
+
+
+class UndoEntryNotFound(Exception): ...
+
+
+async def undo_to(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    diagram_id: uuid.UUID,
+    draft_id: uuid.UUID | None,
+    actor_user,
+    entry_id: uuid.UUID,
+    expected_path_length: int | None = None,
+) -> UndoToResult:
+    """Undo or redo until `entry_id` is itself the last operation applied
+    (i.e. the target entry is also undone/redone — matching the
+    Figma/Excalidraw history-popover semantic of 'roll back to before X').
+    Atomic — runs in the existing transaction; the caller commits.
+    """
+    target = await db.get(UndoEntry, entry_id)
+    if target is None or target.user_id != user_id or target.diagram_id != diagram_id:
+        raise UndoEntryNotFound()
+
+    if target.state == UndoState.ACTIVE:
+        applied = await _undo_until(db, user_id, diagram_id, draft_id,
+                                     target.seq, actor_user)
+    else:
+        applied = await _redo_until(db, user_id, diagram_id, draft_id,
+                                     target.seq, actor_user)
+
+    if expected_path_length is not None and len(applied) != expected_path_length:
+        raise UndoConcurrencyError(actual_seq=target.seq)
+
+    summary = await _stack_summary(db, user_id, diagram_id, draft_id,
+                                   undone=None, redone=None)
+    return UndoToResult(applied=applied, cursor_seq=summary.cursor_seq)
+
+
+async def _undo_until(db, user_id, diagram_id, draft_id, target_seq, actor_user):
+    """Undo entries from the top of the active stack down to and including
+    target_seq. Stop condition is `top.seq < target_seq` (strict) so that the
+    target entry itself is also undone — see test_undo_to_walks_back_three_steps.
+    This matches the Figma UX of 'click entry X → roll back to state before X'.
+    """
+    applied = []
+    while True:
+        top = await _top_active(db, user_id, diagram_id, draft_id)
+        if top is None or top.seq < target_seq:
+            return applied
+        await undo(
+            db, user_id=user_id, diagram_id=diagram_id, draft_id=draft_id,
+            actor_user=actor_user,
+        )
+        applied.append({"entry_id": str(top.id), "direction": "undo"})
+
+
+async def _redo_until(db, user_id, diagram_id, draft_id, target_seq, actor_user):
+    """Redo undone entries from bottom-up until target_seq is the new active top.
+    `_top_undone` returns the smallest undone seq (= oldest undo, first to redo).
+    Stop when top.seq > target_seq so target ends up ACTIVE at the top of the
+    stack — see test_undo_to_walks_back_three_steps.
+    """
+    applied = []
+    while True:
+        top = await _top_undone(db, user_id, diagram_id, draft_id)
+        if top is None or top.seq > target_seq:
+            return applied
+        await redo(
+            db, user_id=user_id, diagram_id=diagram_id, draft_id=draft_id,
+            actor_user=actor_user,
+        )
+        applied.append({"entry_id": str(top.id), "direction": "redo"})
+
+
 __all__ = [
     "COALESCE_WINDOW_SECONDS",
     "MAX_SKIP_HOPS",
@@ -497,15 +576,18 @@ __all__ = [
     "RETENTION_DAYS",
     "UndoAction",
     "UndoConcurrencyError",
+    "UndoEntryNotFound",
     "UndoHistory",
     "UndoResult",
     "UndoStackEmpty",
     "UndoState",
     "UndoTargetMissing",
     "UndoTargetType",
+    "UndoToResult",
     "history",
     "record",
     "redo",
     "sweep_old_entries",
     "undo",
+    "undo_to",
 ]

@@ -293,3 +293,34 @@ async def test_history_excludes_entries_older_than_retention(
         db, user_id=user.id, diagram_id=diagram.id, draft_id=None, limit=10,
     )
     assert h.entries == []
+
+
+@pytest.mark.asyncio
+async def test_undo_to_walks_back_three_steps(db, user, workspace, diagram):
+    objs = []
+    for n in ("A", "B", "C"):
+        o = ModelObject(name=n, type="system", workspace_id=workspace.id)
+        db.add(o); await db.flush(); objs.append(o)
+        await undo_service.record(
+            db, user_id=user.id, workspace_id=workspace.id,
+            diagram_id=diagram.id, draft_id=None,
+            target_type=UndoTargetType.OBJECT, target_id=o.id,
+            action=UndoAction.UPDATE,
+            forward_summary=f"Renamed something to {n}",
+            inverse_payload={"before": {"name": "old"}},
+            after_state={"name": n},
+            coalesce_key=f"object:{o.id}:name",
+        )
+    # Find the entry that targets `objs[0]` (the "A" entry — oldest).
+    target_entry = (await db.execute(
+        select(UndoEntry).where(UndoEntry.target_id == objs[0].id)
+    )).scalar_one()
+
+    res = await undo_service.undo_to(
+        db, user_id=user.id, diagram_id=diagram.id, draft_id=None,
+        actor_user=user, entry_id=target_entry.id,
+    )
+    assert len(res.applied) == 3
+    for o in objs:
+        await db.refresh(o)
+        assert o.name == "old"
