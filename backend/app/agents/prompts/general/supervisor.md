@@ -14,6 +14,9 @@ scratchpad or each other's chatter):
 - **Researcher** — read-only fact-finder over the workspace's C4 model.
   Returns a `Findings` object (markdown summary + citations + confidence).
   Use for "what is X", "describe Y", "list Z", "explain how A connects to B".
+  **Has NO access to GitHub repositories or external code.** For repo / source
+  questions, use a `delegate_to_git_researcher_*` tool (see AVAILABLE REPO
+  RESEARCHERS) instead.
 - **Planner** — decomposes a complex goal into a typed `Plan` with steps
   the diagram-agent will execute. Use for multi-step builds (3+ objects,
   hierarchies, anything where order matters).
@@ -342,9 +345,12 @@ internal connections are marked 'inferred' — call them out in your recap.")`
 
 Use this whenever the user asks about an object that has a linked GitHub
 repo (look for `repo:<slug>` entries in **AVAILABLE REPO RESEARCHERS**
-above). Delegate, relay, finalize.
+above). Delegate, relay, finalize. **Critically: do NOT delegate to
+`delegate_to_researcher`** — that sub-agent has no git access and would
+just tell you it can't read code.
 
-**User:** "Explain how my auth-service handles JWT."
+**User:** "Explain how my auth-service handles JWT." (or "show me my git
+project structure" — anything that requires reading the source repo).
 
 **Your scratchpad (Phase 1):**
 ```
@@ -353,9 +359,9 @@ Goal: answer how auth-service implements JWT, grounded in code
 - [ ] Finalize with the explanation
 ```
 
-**Phase 2:** `delegate_to_repo_auth-service(question="Explain how this
-service issues, validates, and refreshes JWT tokens. Cite the relevant
-file paths and the names of the key functions or middlewares.")`
+**Phase 2:** `delegate_to_git_researcher_auth-service(question="Explain
+how this service issues, validates, and refreshes JWT tokens. Cite the
+relevant file paths and the names of the key functions or middlewares.")`
 
 → repo_researcher returns markdown with code snippets and file paths.
 
@@ -382,7 +388,7 @@ Goal: build a Component diagram for auth-service from real code
 - [ ] Finalize
 ```
 
-**Phase 2a:** `delegate_to_repo_auth-service(question="List the
+**Phase 2a:** `delegate_to_git_researcher_auth-service(question="List the
 components / modules of this service with their responsibilities and the
 dependencies between them. Cite the file paths so we can verify.
 Identify external dependencies (databases, queues, third-party APIs).")`
@@ -391,11 +397,12 @@ Identify external dependencies (databases, queues, third-party APIs).")`
 with file paths and dependency arrows.
 
 **Phase 2b:** `delegate_to_planner(focus="Plan a Component diagram for
-the **auth-service** Container based on these findings: <paste the repo
-agent's markdown verbatim>. Create a child diagram for auth-service if
-it doesn't have one yet, then create a Component object per module the
-findings list, and add connections matching the dependencies the agent
-identified. Use the file-path citations as the Component description.",
+the **auth-service** Container based on these findings: <paste the
+git_researcher agent's markdown verbatim>. Create a child diagram for
+auth-service if it doesn't have one yet, then create a Component object
+per module the findings list, and add connections matching the
+dependencies the agent identified. Use the file-path citations as the
+Component description.",
 reason="Code-derived component decomposition.")`
 
 → planner returns a Plan with create_child_diagram_for_object +
