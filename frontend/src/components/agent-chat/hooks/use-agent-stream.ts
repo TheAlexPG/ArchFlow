@@ -16,6 +16,7 @@ import {
   respondToChoice,
   streamAgent,
 } from '../../../lib/agent-stream'
+import { refreshAccessToken } from '../../../lib/api-client'
 import { maybeTitleSession } from './use-agent-sessions'
 import { useAuthStore } from '../../../stores/auth-store'
 import { useWorkspaceStore } from '../../../stores/workspace-store'
@@ -95,8 +96,18 @@ interface StreamBag {
    *  triggers reconnect logic. */
   cancelledByUser: boolean
   /** Set after we've asked the backend to LLM-name this session.
-   *  Prevents firing the auto-title call on every reconnect. */
+   *  Prevents firing the auto-title call on reconnects, on follow-up
+   *  turns within the same session, and on resumed history. */
   titleRequested: boolean
+  /** Set by onError when the server returned 401 (token expired). The
+   *  matching onClose checks this and runs a refresh-then-retry once
+   *  before falling into the normal reconnect loop. Cleared after the
+   *  refresh attempt so a follow-up 401 doesn't loop forever. */
+  pendingAuthRefresh: boolean
+  /** True once we've burned the one-shot refresh+replay attempt for the
+   *  current logical request — any further 401 means refresh is dead and
+   *  we should surface connectionLost instead of looping. */
+  authRefreshTried: boolean
   /** Forward-declared so attemptReconnect can call itself across the
    *  startReconnectStream → onClose → attemptReconnect loop without
    *  TDZ pain. */
@@ -113,6 +124,8 @@ function makeBag(): StreamBag {
     reconnectAttempt: 0,
     cancelledByUser: false,
     titleRequested: false,
+    pendingAuthRefresh: false,
+    authRefreshTried: false,
     attemptReconnect: () => undefined,
   }
 }
@@ -173,17 +186,30 @@ function useAgentStreamInstance(): UseAgentStreamResult {
         if (sid && bag.sessionId !== sid) {
           bag.sessionId = sid
           setSessionId(sid)
-          // Fire-and-forget: server will LLM-summarize the first user
-          // message into a 3-6 word title and persist it so the picker
-          // shows something useful instead of "New session". Idempotent
-          // server-side — safe to call on reconnects too.
-          if (!bag.titleRequested) {
-            bag.titleRequested = true
-            maybeTitleSession(sid, () => {
-              queryClient.invalidateQueries({ queryKey: ['agent-sessions'] })
-              queryClient.invalidateQueries({ queryKey: ['agent-session', sid] })
-            })
-          }
+        }
+      }
+
+      // Fire auto-title on `done` rather than on the first `session` frame.
+      // Two reasons:
+      //   1. Race: when the session row is brand-new the SSE generator has
+      //      only `db.flush()`-ed it; the actual commit happens when the
+      //      generator finishes. A POST /auto-title issued at session-frame
+      //      time opens its own DB session and 404s on the uncommitted row.
+      //      By `done` the parent transaction has committed.
+      //   2. Semantics: at `done` there is real assistant output to title
+      //      from, not just an empty placeholder.
+      // Resumed sessions short-circuit via `loadHistory` setting
+      // `titleRequested = true`. Cancellation sets `cancelledByUser` so we
+      // skip the call. Errors never emit `done`, so failed turns aren't
+      // titled either.
+      if (evt.kind === 'done' && !bag.titleRequested && !bag.cancelledByUser) {
+        const sid = bag.sessionId
+        if (sid) {
+          bag.titleRequested = true
+          maybeTitleSession(sid, () => {
+            queryClient.invalidateQueries({ queryKey: ['agent-sessions'] })
+            queryClient.invalidateQueries({ queryKey: ['agent-session', sid] })
+          })
         }
       }
 
@@ -234,6 +260,18 @@ function useAgentStreamInstance(): UseAgentStreamResult {
           bag.cancelledByUser = true // suppress further retries
           return
         }
+        // 401 = token expired. Mark for refresh-and-retry in onClose.
+        // Without this we'd burn through the reconnect budget firing the
+        // same stale Bearer token at the server until connectionLost.
+        if (
+          err instanceof AgentStreamError &&
+          err.code === 'http' &&
+          err.status === 401 &&
+          !bag.authRefreshTried
+        ) {
+          bag.pendingAuthRefresh = true
+          return
+        }
         setLastError(err)
       },
       onClose: () => {
@@ -245,6 +283,22 @@ function useAgentStreamInstance(): UseAgentStreamResult {
         }
         if (bag.lastEventKind === 'done') {
           setIsStreaming(false)
+          return
+        }
+        // Refresh-then-retry once on a fresh 401 before falling into the
+        // exponential reconnect loop. If refresh fails we surface
+        // connectionLost; if it succeeds we replay the resume request.
+        if (bag.pendingAuthRefresh && !bag.authRefreshTried) {
+          bag.pendingAuthRefresh = false
+          bag.authRefreshTried = true
+          void refreshAccessToken().then((fresh) => {
+            if (fresh) {
+              startReconnectStream()
+            } else {
+              setConnectionLost(true)
+              setIsStreaming(false)
+            }
+          })
           return
         }
         // Disconnected mid-stream — try again.
@@ -276,6 +330,83 @@ function useAgentStreamInstance(): UseAgentStreamResult {
     bag.attemptReconnect = attemptReconnect
   }, [bag, attemptReconnect])
 
+  // ── Internal: dispatch the actual SSE POST ───────────────────────────────
+  //
+  // Split out from startStream() so the 401-refresh path in onClose can
+  // re-fire the same fetch without re-pushing the optimistic user message
+  // or clobbering the auth-retry flags. startStream() owns the user-facing
+  // bookkeeping (transcript push, flag reset); _doStreamRequest only owns
+  // the network call + its own onClose lifecycle.
+  const dispatchStreamRequest = useCallback(
+    (agentId: string, body: AgentInvokeBody) => {
+      const ctrl = new AbortController()
+      bag.abort = ctrl
+      setIsStreaming(true)
+
+      const authToken = useAuthStore.getState().accessToken ?? undefined
+      const workspaceId =
+        useWorkspaceStore.getState().currentWorkspaceId ?? undefined
+
+      void streamAgent({
+        url: `/api/v1/agents/${encodeURIComponent(agentId)}/chat`,
+        body,
+        authToken,
+        workspaceId,
+        signal: ctrl.signal,
+        onEvent: handleEvent,
+        onError: (err) => {
+          // 401 path: agent-stream uses raw fetch and bypasses the axios
+          // 401-retry interceptor in lib/api-client.ts. Without this hook
+          // an expired access token would 401 the chat POST, then loop
+          // through the entire reconnect budget firing the same stale
+          // Bearer token until connectionLost. Defer the actual refresh
+          // to onClose so we can re-fire the fetch cleanly afterwards.
+          if (
+            err instanceof AgentStreamError &&
+            err.code === 'http' &&
+            err.status === 401 &&
+            !bag.authRefreshTried
+          ) {
+            bag.pendingAuthRefresh = true
+            return
+          }
+          setLastError(err)
+        },
+        onClose: () => {
+          bag.abort = null
+          if (bag.cancelledByUser) {
+            setIsStreaming(false)
+            return
+          }
+          if (bag.lastEventKind === 'done') {
+            setIsStreaming(false)
+            return
+          }
+          // Refresh-then-retry once on a fresh 401 before falling into
+          // the resume-reconnect loop. If refresh fails we surface
+          // connectionLost; if it succeeds we replay the original POST
+          // (not /stream, because we never got a session id back yet).
+          if (bag.pendingAuthRefresh && !bag.authRefreshTried) {
+            bag.pendingAuthRefresh = false
+            bag.authRefreshTried = true
+            void refreshAccessToken().then((fresh) => {
+              if (fresh) {
+                dispatchStreamRequest(agentId, body)
+              } else {
+                setConnectionLost(true)
+                setIsStreaming(false)
+              }
+            })
+            return
+          }
+          // Stream dropped before 'done' — try resuming.
+          bag.attemptReconnect()
+        },
+      })
+    },
+    [bag, handleEvent],
+  )
+
   // ── Public: startStream ──────────────────────────────────────────────────
   const startStream = useCallback(
     (agentId: string, body: AgentInvokeBody) => {
@@ -297,6 +428,11 @@ function useAgentStreamInstance(): UseAgentStreamResult {
       bag.reconnectAttempt = 0
       bag.cancelledByUser = false
       bag.lastEventKind = null
+      // Fresh user-initiated request: reset the one-shot 401 refresh flag
+      // so a token that expires between turns can be refreshed once per
+      // turn without ever falling through to connectionLost.
+      bag.authRefreshTried = false
+      bag.pendingAuthRefresh = false
 
       // Optimistically push the user's outgoing message so it appears in the
       // transcript immediately. The backend doesn't echo it as an SSE event.
@@ -310,39 +446,9 @@ function useAgentStreamInstance(): UseAgentStreamResult {
         setEvents((prev) => [...prev, userEvt])
       }
 
-      const ctrl = new AbortController()
-      bag.abort = ctrl
-      setIsStreaming(true)
-
-      const authToken = useAuthStore.getState().accessToken ?? undefined
-      const workspaceId = useWorkspaceStore.getState().currentWorkspaceId ?? undefined
-
-      void streamAgent({
-        url: `/api/v1/agents/${encodeURIComponent(agentId)}/chat`,
-        body,
-        authToken,
-        workspaceId,
-        signal: ctrl.signal,
-        onEvent: handleEvent,
-        onError: (err) => {
-          setLastError(err)
-        },
-        onClose: () => {
-          bag.abort = null
-          if (bag.cancelledByUser) {
-            setIsStreaming(false)
-            return
-          }
-          if (bag.lastEventKind === 'done') {
-            setIsStreaming(false)
-            return
-          }
-          // Stream dropped before 'done' — try resuming.
-          bag.attemptReconnect()
-        },
-      })
+      dispatchStreamRequest(agentId, body)
     },
-    [bag, handleEvent],
+    [bag, dispatchStreamRequest],
   )
 
   // ── Public: cancel ───────────────────────────────────────────────────────

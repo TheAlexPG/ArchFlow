@@ -138,24 +138,14 @@ describe('ChatHistory', () => {
     expect(blocks[0]).toHaveTextContent('Streaming response')
   })
 
-  it('renders ToolCallCard for paired tool_call + tool_result', () => {
+  it('does NOT render inline tool-call cards — tool activity is surfaced via NodeIndicator icons only', () => {
     setEvents([
       evt('tool_call', { id: 'tc-1', name: 'create_object', args: { name: 'svc' } }),
       evt('tool_result', { id: 'tc-1', status: 'ok', preview: 'Created Service svc' }),
+      evt('tool_call', { id: 'tc-2', name: 'slow_op', args: {} }),
     ])
     renderHistory()
-    const card = screen.getByTestId('tool-call-card')
-    expect(card).toHaveAttribute('data-tool-status', 'ok')
-    expect(within(card).getByTestId('tool-call-card-preview')).toHaveTextContent(
-      'Created Service svc',
-    )
-  })
-
-  it('shows ToolCallCard in pending state when only tool_call (no result)', () => {
-    setEvents([evt('tool_call', { id: 'tc-2', name: 'slow_op', args: {} })])
-    renderHistory()
-    const card = screen.getByTestId('tool-call-card')
-    expect(card).toHaveAttribute('data-tool-status', 'pending')
+    expect(screen.queryByTestId('tool-call-card')).toBeNull()
   })
 
   it('renders AppliedChangePill from applied_change event', () => {

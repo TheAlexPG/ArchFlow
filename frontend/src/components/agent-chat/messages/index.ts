@@ -5,6 +5,7 @@
 export { UserMessage } from './UserMessage'
 export { AssistantText } from './AssistantText'
 export { NodeIndicator } from './NodeIndicator'
+export type { NodeToolEntry } from './NodeIndicator'
 export { ToolCallCard } from './ToolCallCard'
 export type { ToolStatus } from './ToolCallCard'
 export { AppliedChangePill } from './AppliedChangePill'

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { buildRenderItems, type RenderItem } from './build-render-items'
 import { useAgentStream } from './hooks/use-agent-stream'
+import { MagicPromptButtons } from './MagicPromptButtons'
 import {
   AppliedChangePill,
   AssistantText,
@@ -9,10 +10,9 @@ import {
   ErrorBubble,
   NodeIndicator,
   RequiresChoiceCard,
-  ToolCallCard,
   UsageFootnote,
   UserMessage,
-  type ToolStatus,
+  type NodeToolEntry,
 } from './messages'
 import type { AgentSSEEvent } from './types'
 
@@ -31,12 +31,32 @@ export function ChatHistory() {
   const stream = useAgentStream()
   const renderItems = useMemo(() => buildRenderItems(stream.events), [stream.events])
 
+  // Group tool_call items under the most recent preceding ``node`` item so
+  // each NodeIndicator can render an icon row with the agent's tool
+  // activity. Computed here (not in build-render-items) because it's a
+  // pure derived view over the same array — keeps the renderer
+  // self-contained without growing the RenderItem schema.
+  const toolsByNodeIdx = useMemo(() => groupToolsByNode(renderItems), [renderItems])
+
+  // Empty fresh session → show the magic-prompt starters centered in the
+  // history area. The starters use the SAME submit path as ChatComposer
+  // (stream.startStream('general', …)) so clicking one is indistinguishable
+  // from typing the prompt manually. Hides the moment the stream pushes
+  // its optimistic user-message echo, transitioning into the live transcript.
+  const isEmpty = stream.events.length === 0 && !stream.isStreaming
+
   return (
-    <div data-testid="chat-history" className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
+    <div data-testid="chat-history" className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0 flex flex-col">
+      {isEmpty && <MagicPromptButtons />}
       {/* Phase 1: only events from the current run are rendered.
           Persistence via GET /sessions/{id} comes in a later task. */}
       {renderItems.map((item, i) => (
-        <RenderItem key={`${item.kind}-${i}`} item={item} onRetry={stream.retry} />
+        <RenderItem
+          key={`${item.kind}-${i}`}
+          item={item}
+          tools={item.kind === 'node' ? toolsByNodeIdx.get(i) : undefined}
+          onRetry={stream.retry}
+        />
       ))}
       {stream.isStreaming && shouldShowThinking(renderItems) && <ThinkingIndicator />}
       <BottomScroller events={stream.events} />
@@ -44,31 +64,68 @@ export function ChatHistory() {
   )
 }
 
+// ─── Tool grouping ──────────────────────────────────────────────────────────
+//
+// Walks the projected RenderItems once and assigns every ``tool_call``
+// item to the closest preceding ``node`` item, building a Map keyed by
+// the node's index in ``renderItems``. Tool calls before any node go
+// unassigned (the existing chronological cards still render them).
+//
+// We rely on the runtime emitting a ``node`` SSE event each time the
+// LangGraph supervisor enters a sub-graph (researcher / planner / …),
+// which is what build-render-items already projects as ``kind === 'node'``.
+
+function groupToolsByNode(items: RenderItem[]): Map<number, NodeToolEntry[]> {
+  const groups = new Map<number, NodeToolEntry[]>()
+  let currentNodeIdx: number | null = null
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i]
+    if (it.kind === 'node') {
+      currentNodeIdx = i
+      continue
+    }
+    if (it.kind !== 'tool_call' || currentNodeIdx === null) continue
+    const list = groups.get(currentNodeIdx) ?? []
+    // ``args`` is the canonical key in the projected RenderItem (set by
+    // build-render-items), but the raw SSE payload uses ``arguments`` when
+    // the backend forwards LangGraph's openai-shape tool call. Read both
+    // so we don't lose the args preview if the projection ever changes.
+    const args = it.payload?.args ?? it.payload?.arguments
+    list.push({
+      id: String(it.payload?.id ?? `tc-${i}`),
+      name: String(it.payload?.name ?? 'tool'),
+      args,
+      status: it.pairedToolResult?.status as string | undefined,
+    })
+    groups.set(currentNodeIdx, list)
+  }
+  return groups
+}
+
 // ─── RenderItem dispatch ───────────────────────────────────────────────────
 
-function RenderItem({ item, onRetry }: { item: RenderItem; onRetry: () => void }) {
+function RenderItem({
+  item,
+  tools,
+  onRetry,
+}: {
+  item: RenderItem
+  tools?: NodeToolEntry[]
+  onRetry: () => void
+}) {
   switch (item.kind) {
     case 'user_message':
       return <UserMessage text={item.payload.text} />
     case 'assistant_text':
       return <AssistantText text={item.payload.text} />
     case 'node':
-      return <NodeIndicator node={item.payload.node} />
-    case 'tool_call': {
-      const status = deriveToolStatus(item.pairedToolResult)
-      const preview = item.pairedToolResult?.preview as string | undefined
-      const result = item.pairedToolResult?.result ?? item.pairedToolResult?.content
-      return (
-        <ToolCallCard
-          id={item.payload.id}
-          name={item.payload.name}
-          args={item.payload.args}
-          status={status}
-          preview={preview}
-          result={result}
-        />
-      )
-    }
+      return <NodeIndicator node={item.payload.node} tools={tools} />
+    case 'tool_call':
+      // Tool calls render as compact icons inside the parent NodeIndicator's
+      // tool-badge row (see groupToolsByNode above + NodeToolBadges popover).
+      // We deliberately do NOT render an inline ToolCallCard here — the icon
+      // row is the only surface for tool activity in the transcript.
+      return null
     case 'applied_change':
       return (
         <AppliedChangePill
@@ -122,31 +179,6 @@ function RenderItem({ item, onRetry }: { item: RenderItem; onRetry: () => void }
           duration_ms={item.payload.duration_ms}
         />
       )
-  }
-}
-
-// ─── Tool status derivation ────────────────────────────────────────────────
-//
-// The server's `tool_result.status` field is the source of truth. When the
-// result hasn't arrived yet we show the pending spinner.
-
-function deriveToolStatus(result: { status?: string } | undefined): ToolStatus {
-  if (!result) return 'pending'
-  switch (result.status) {
-    case 'ok':
-    case 'success':
-      return 'ok'
-    case 'error':
-    case 'failed':
-      return 'error'
-    case 'denied':
-    case 'forbidden':
-      return 'denied'
-    case 'awaiting_confirmation':
-    case 'requires_confirmation':
-      return 'awaiting_confirmation'
-    default:
-      return 'pending'
   }
 }
 
