@@ -1,4 +1,4 @@
-.PHONY: dev dev-deps dev-infra dev-backend dev-frontend setup test test-backend test-frontend build up down db-migrate db-upgrade db-downgrade api-codegen lint
+.PHONY: dev dev-deps dev-infra dev-backend dev-frontend setup test test-backend test-frontend build up down db-migrate db-upgrade db-downgrade db-sweep-undo api-codegen lint
 
 # ─── Development ───────────────────────────────────────────────
 
@@ -61,6 +61,9 @@ db-upgrade:
 
 db-downgrade:
 	cd backend && uv run alembic downgrade -1
+
+db-sweep-undo:
+	cd backend && uv run python -m app.jobs.undo_sweeper
 
 # ─── Code Generation ──────────────────────────────────────────
 
