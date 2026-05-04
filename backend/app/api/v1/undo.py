@@ -24,6 +24,7 @@ from app.schemas.undo import (
     UndoToRequest,
     UndoToResponse,
 )
+from app.realtime.manager import fire_and_forget_publish_user
 from app.services import undo_service
 from app.services.undo_service import (
     UndoConcurrencyError,
@@ -91,6 +92,13 @@ async def undo_endpoint(
         )
 
     await db.commit()
+    fire_and_forget_publish_user(user.id, "user.undo", {
+        "diagram_id": str(diagram_id),
+        "draft_id": str(draft_id) if draft_id else None,
+        "entry_id": str(result.undone_entry.id) if result.undone_entry else None,
+        "cursor_seq": result.cursor_seq,
+        "redo_count": result.redo_count,
+    })
     return UndoActionResponse(
         undone_entry=(
             UndoEntryRead.model_validate(result.undone_entry)
@@ -133,6 +141,13 @@ async def redo_endpoint(
         )
 
     await db.commit()
+    fire_and_forget_publish_user(user.id, "user.redo", {
+        "diagram_id": str(diagram_id),
+        "draft_id": str(draft_id) if draft_id else None,
+        "entry_id": str(result.redone_entry.id) if result.redone_entry else None,
+        "cursor_seq": result.cursor_seq,
+        "redo_count": result.redo_count,
+    })
     return UndoActionResponse(
         undone_entry=None,
         redone_entry=(
@@ -203,4 +218,10 @@ async def undo_to_endpoint(
         )
 
     await db.commit()
+    fire_and_forget_publish_user(user.id, "user.undo_to", {
+        "diagram_id": str(diagram_id),
+        "draft_id": str(draft_id) if draft_id else None,
+        "applied": res.applied,
+        "cursor_seq": res.cursor_seq,
+    })
     return UndoToResponse(applied=res.applied, cursor_seq=res.cursor_seq)
