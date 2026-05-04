@@ -136,24 +136,65 @@ export function ChatComposer() {
           )}
         />
 
-        <button
-          data-testid="composer-send-btn"
-          onClick={send}
-          disabled={!draft.trim() || stream.isStreaming || ctx.kind === 'none'}
-          aria-label="Send message"
-          className={cn(
-            'flex-shrink-0',
-            'w-8 h-8 rounded-md',
-            'bg-coral text-white text-base font-bold',
-            'flex items-center justify-center',
-            'hover:bg-coral/80',
-            'disabled:opacity-30 disabled:cursor-not-allowed',
-            'transition-colors duration-100',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-coral/50',
-          )}
-        >
-          ↑
-        </button>
+        {stream.isStreaming ? (
+          <button
+            data-testid="composer-cancel-btn"
+            onClick={() => {
+              void stream.cancel()
+            }}
+            aria-label="Cancel generation"
+            title="Cancel generation"
+            className={cn(
+              'relative flex-shrink-0',
+              'w-9 h-9 rounded-full',
+              'bg-red-500 text-white',
+              'flex items-center justify-center',
+              'hover:bg-red-600',
+              'transition-colors duration-100',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/60',
+            )}
+          >
+            {/* Pulsing ring around the button — "processing" indicator */}
+            <span
+              aria-hidden
+              className="absolute inset-0 rounded-full ring-2 ring-red-500/40 animate-ping"
+            />
+            {/* Filled square = stop */}
+            <svg
+              viewBox="0 0 16 16"
+              className="relative w-3 h-3 fill-current"
+              aria-hidden
+            >
+              <rect x="3" y="3" width="10" height="10" rx="1" />
+            </svg>
+          </button>
+        ) : (
+          <button
+            data-testid="composer-send-btn"
+            onClick={send}
+            disabled={!draft.trim() || ctx.kind === 'none'}
+            aria-label="Send message"
+            title="Send (⌘+Enter)"
+            className={cn(
+              'flex-shrink-0',
+              'w-9 h-9 rounded-full',
+              'bg-coral text-white',
+              'flex items-center justify-center',
+              'hover:bg-coral/80',
+              'disabled:opacity-30 disabled:cursor-not-allowed',
+              'transition-colors duration-100',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-coral/50',
+            )}
+          >
+            <svg
+              viewBox="0 0 16 16"
+              className="w-4 h-4 fill-current"
+              aria-hidden
+            >
+              <path d="M8 2.5l5 5h-3.25v6h-3.5v-6H3l5-5z" />
+            </svg>
+          </button>
+        )}
       </div>
     </div>
   )

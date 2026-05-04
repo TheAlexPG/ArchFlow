@@ -148,4 +148,17 @@ describe('ChatComposer', () => {
     expect(mockStartStream).not.toHaveBeenCalled()
     expect(textarea).toHaveValue('')
   })
+
+  it('shows red round cancel button while streaming and dispatches cancel on click', () => {
+    mockStreamState.isStreaming = true
+
+    render(<ChatComposer />)
+
+    const cancelBtn = screen.getByTestId('composer-cancel-btn')
+    expect(cancelBtn).toBeInTheDocument()
+    expect(screen.queryByTestId('composer-send-btn')).not.toBeInTheDocument()
+
+    fireEvent.click(cancelBtn)
+    expect(mockStreamState.cancel).toHaveBeenCalledOnce()
+  })
 })
