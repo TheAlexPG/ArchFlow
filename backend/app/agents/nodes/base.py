@@ -892,6 +892,15 @@ async def run_react(
     _MAX_EMPTY_RETRIES = 2
     empty_retries = 0
 
+    # Tool-loop detector: when the agent makes the same (name, args) call
+    # _LOOP_THRESHOLD times in a row we abort early. Trace d885971d showed
+    # delete_object retried 6× with the identical incomplete arg-set even
+    # though every call returned the same validation error — the agent
+    # wasn't going to escape on its own. Tracks the last N call signatures
+    # across steps; resets on any differing call.
+    _LOOP_THRESHOLD = 4
+    recent_tool_sigs: list[str] = []
+
     for step in range(cfg.max_steps):
         prompt = compose_messages_for_llm(working_state, cfg)
 
@@ -1115,6 +1124,7 @@ async def run_react(
 
         terminate_after_tools = False
         last_terminating_tool: str | None = None
+        loop_break_signature: str | None = None
         for tc in result.tool_calls:
             tool_call_evt: ToolCall = {
                 "id": tc.get("id"),
@@ -1164,6 +1174,34 @@ async def run_react(
 
             messages.append(_build_tool_result_message(tool_call_evt, tool_result))
 
+            # Tool-loop signature — concat name + canonicalised args. We
+            # don't dedup arg dict keys that differ only by ordering: in
+            # practice the LLM emits the same JSON shape on each repeat,
+            # and any meaningful change resets the streak below.
+            tc_args = tool_call_evt.get("arguments")
+            if isinstance(tc_args, dict):
+                try:
+                    args_repr = json.dumps(tc_args, sort_keys=True, default=str)
+                except Exception:  # pragma: no cover — defensive
+                    args_repr = repr(tc_args)
+            else:
+                args_repr = str(tc_args) if tc_args is not None else ""
+            sig = f"{tool_call_evt.get('name')}::{args_repr}"
+            if recent_tool_sigs and recent_tool_sigs[-1] == sig:
+                recent_tool_sigs.append(sig)
+            else:
+                recent_tool_sigs = [sig]
+            if len(recent_tool_sigs) >= _LOOP_THRESHOLD:
+                loop_break_signature = sig
+                logger.warning(
+                    "run_react[%s] step=%d tool-loop detected: %s repeated %d×",
+                    cfg.name,
+                    step,
+                    tool_call_evt.get("name"),
+                    len(recent_tool_sigs),
+                )
+                break
+
             # Terminating tool? Exit the ReAct loop without re-prompting the
             # LLM. The next LLM turn (if any) belongs to a downstream node or
             # a follow-up graph visit — calling the LLM again here would burn
@@ -1194,6 +1232,30 @@ async def run_react(
                 },
                 tool_calls_made=tool_calls_made,
                 forced_finalize=None,
+            )
+            yield NodeStreamEvent(kind="finished", payload={"output": output})
+            return
+
+        if loop_break_signature is not None:
+            output = NodeOutput(
+                text=None,
+                state_patch={
+                    "messages": messages,
+                    "compaction_stage": compaction_stage,
+                },
+                tool_calls_made=tool_calls_made,
+                forced_finalize="stuck",
+            )
+            yield NodeStreamEvent(
+                kind="forced_finalize",
+                payload={
+                    "reason": "stuck",
+                    "node": cfg.name,
+                    "detail": (
+                        f"tool-loop: same call repeated {_LOOP_THRESHOLD}× "
+                        f"({loop_break_signature[:200]})"
+                    ),
+                },
             )
             yield NodeStreamEvent(kind="finished", payload={"output": output})
             return

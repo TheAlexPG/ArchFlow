@@ -700,25 +700,31 @@ async def test_run_long_path_reaches_max_steps_cleanly(monkeypatch):
         diagram_node, "make_diagram_config", small_ceiling_config
     )
 
-    forever_call = {
-        "id": "loop",
-        "name": "read_diagram",
-        "arguments": json.dumps({"diagram_id": str(uuid4())}),
-    }
+    # Vary diagram_id per step so the tool-loop detector (4 identical calls
+    # in a row → forced_finalize="stuck") doesn't fire — this test exercises
+    # the max_steps ceiling, not the cycle break.
+    forever_calls = [
+        {
+            "id": f"loop-{i}",
+            "name": "read_diagram",
+            "arguments": json.dumps({"diagram_id": str(uuid4())}),
+        }
+        for i in range(12)
+    ]
     # 12 successive tool-call results — patched max_steps=10 traps the loop.
-    results = [_llm_result(text=None, tool_calls=[forever_call]) for _ in range(12)]
+    results = [_llm_result(text=None, tool_calls=[fc]) for fc in forever_calls]
     enforcer = _make_enforcer(results=results)
     cm = _make_context_manager()
 
     executor = _make_tool_executor(
         results=[
             {
-                "tool_call_id": "loop",
+                "tool_call_id": fc["id"],
                 "status": "ok",
                 "content": json.dumps({"ok": True, "echo": True}),
                 "preview": "ok",
             }
-            for _ in range(12)
+            for fc in forever_calls
         ]
     )
 
@@ -745,3 +751,64 @@ async def test_run_long_path_reaches_max_steps_cleanly(monkeypatch):
     kinds = [ev.kind for ev in events]
     assert "forced_finalize" in kinds
     assert kinds[-1] == "finished"
+
+
+@pytest.mark.asyncio
+async def test_run_breaks_out_of_identical_tool_call_cycle(monkeypatch):
+    """Same (name, args) repeated 4× → forced_finalize='stuck'.
+
+    Trace d885971d showed delete_object retried 6× with identical incomplete
+    args; without a cycle detector the agent burns the entire max_steps
+    ceiling on a non-progressing loop. The detector should fire on the
+    fourth identical call and surface ``forced_finalize='stuck'`` with a
+    tool-loop detail.
+    """
+    from app.agents.builtin.general.nodes import diagram as diagram_node
+
+    real_make = diagram_node.make_diagram_config
+
+    def small_ceiling_config(*args, **kwargs):
+        cfg = real_make(*args, **kwargs)
+        from dataclasses import replace as _replace
+
+        return _replace(cfg, max_steps=10)
+
+    monkeypatch.setattr(diagram_node, "make_diagram_config", small_ceiling_config)
+
+    fixed_args = json.dumps({"diagram_id": str(uuid4())})
+    same_call = {"id": "same", "name": "read_diagram", "arguments": fixed_args}
+    results = [_llm_result(text=None, tool_calls=[same_call]) for _ in range(8)]
+    enforcer = _make_enforcer(results=results)
+    cm = _make_context_manager()
+
+    executor = _make_tool_executor(
+        results=[
+            {
+                "tool_call_id": "same",
+                "status": "ok",
+                "content": json.dumps({"ok": True}),
+                "preview": "ok",
+            }
+            for _ in range(8)
+        ]
+    )
+
+    state = _make_state(messages=[{"role": "user", "content": "loop"}])
+
+    events = await _collect(
+        run(
+            state,
+            enforcer=enforcer,
+            context_manager=cm,
+            tool_executor=executor,
+            call_metadata_base=_make_call_meta(),
+        )
+    )
+
+    output = _terminal_output(events)
+    assert output.forced_finalize == "stuck"
+    assert output.tool_calls_made == 4
+
+    forced = [ev for ev in events if ev.kind == "forced_finalize"]
+    assert forced and forced[0].payload.get("reason") == "stuck"
+    assert "tool-loop" in (forced[0].payload.get("detail") or "")
