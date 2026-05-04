@@ -159,15 +159,20 @@ function isRetriableCode(code: string | undefined): boolean {
 
 // ─── ThinkingIndicator ─────────────────────────────────────────────────────
 //
-// Bottom-of-history "agent is working" badge. Shown only while a stream is
-// active and the latest render item isn't itself an in-flight signal
-// (NodeIndicator or a pending tool card already convey activity). Ensures
-// the user never sees a silent panel between SSE frames.
+// Bottom-of-history "agent is working" badge. We deliberately keep a
+// single focal motion in the chat at any time:
+//   - in-flight tool card → its own top-edge progress sweep is the focus
+//   - active node indicator → its heartbeat glow is the focus
+//   - otherwise → this pill (a single breathing dot + label)
+// ``shouldShowThinking`` enforces that hierarchy so the user is never
+// looking at three things pulsing at once.
 
 function shouldShowThinking(items: RenderItem[]): boolean {
   if (items.length === 0) return true
   const last = items[items.length - 1]
+  // Node indicator already carries the activity affordance.
   if (last.kind === 'node') return false
+  // In-flight tool card has its own top-edge progress sweep.
   if (last.kind === 'tool_call' && !last.pairedToolResult) return false
   return true
 }
@@ -175,13 +180,17 @@ function shouldShowThinking(items: RenderItem[]): boolean {
 function ThinkingIndicator() {
   return (
     <div className="flex justify-start" data-testid="thinking-indicator">
-      <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface border border-coral/30 text-[11px] text-text-2 font-mono">
-        <span className="inline-flex items-center gap-0.5" aria-hidden>
-          <span className="w-1 h-1 rounded-full bg-coral animate-pulse" />
-          <span className="w-1 h-1 rounded-full bg-coral animate-pulse [animation-delay:120ms]" />
-          <span className="w-1 h-1 rounded-full bg-coral animate-pulse [animation-delay:240ms]" />
-        </span>
-        Agent thinking
+      <div
+        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface border border-coral/30 text-[11px] text-text-2 font-mono"
+        style={{
+          animation: 'archflow-heartbeat 1.6s cubic-bezier(0.16, 1, 0.3, 1) infinite',
+        }}
+      >
+        <span
+          aria-hidden
+          className="inline-block w-1.5 h-1.5 rounded-full bg-coral shadow-[0_0_6px_var(--color-coral)]"
+        />
+        <span>Agent thinking</span>
       </div>
     </div>
   )
