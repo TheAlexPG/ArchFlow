@@ -63,7 +63,12 @@ _DELEGATE_TO_NODE: dict[str, str] = {
 # Per-turn dynamic delegation tools follow this prefix. Routing maps any
 # matching name to the ``repo_researcher`` node; the node wrapper resolves
 # the slug → repo_context just before invoking the node's ``run``.
-_DELEGATE_REPO_PREFIX = "delegate_to_repo_"
+#
+# Renamed from ``delegate_to_repo_`` to make the routing intent explicit
+# to the supervisor LLM — ``delegate_to_researcher`` has NO git access,
+# so the repo path uses a distinct prefix the LLM can't confuse with the
+# generic researcher.
+_DELEGATE_REPO_PREFIX = "delegate_to_git_researcher_"
 
 
 # ---------------------------------------------------------------------------
@@ -863,8 +868,8 @@ async def repo_researcher_node(
     runs the node with the resolved context overlaid into the state.
     The node's free-form text response is surfaced on
     ``state_patch['repo_response']`` and rewritten into the supervisor's
-    ``delegate_to_repo_<slug>`` tool result so the supervisor can read
-    it like any other delegated answer.
+    ``delegate_to_git_researcher_<slug>`` tool result so the supervisor
+    can read it like any other delegated answer.
     """
     from app.agents.builtin.general.nodes import repo_researcher
     from app.agents.nodes.base import isolated_state_for_subagent
@@ -926,7 +931,7 @@ async def repo_researcher_node(
     response = patch.get("repo_response") or (output.text if output else "")
     if response:
         patch["repo_response"] = response
-    # Rewrite supervisor's matching delegate_to_repo_<slug> tool result so
+    # Rewrite supervisor's matching delegate_to_git_researcher_<slug> tool result so
     # the next supervisor visit reads the actual answer instead of the
     # echo of the input args.
     rewritten = _rewrite_subagent_repo_result(
@@ -945,10 +950,10 @@ async def repo_researcher_node(
 def _rewrite_subagent_repo_result(
     state: AgentState, *, slug: str, response: str
 ) -> list[dict] | None:
-    """Find the most recent ``delegate_to_repo_<slug>`` assistant tool call
-    and rewrite its tool-result message ``content`` to the repo agent's
-    free-form reply. Without this the supervisor's next visit only sees
-    its own tool-call args echoed back, never the real answer.
+    """Find the most recent ``delegate_to_git_researcher_<slug>`` assistant
+    tool call and rewrite its tool-result message ``content`` to the repo
+    agent's free-form reply. Without this the supervisor's next visit
+    only sees its own tool-call args echoed back, never the real answer.
     """
     if not slug:
         return None
@@ -956,7 +961,7 @@ def _rewrite_subagent_repo_result(
     if not parent_messages:
         return None
     target_call_id: str | None = None
-    expected_tool = f"delegate_to_repo_{slug}"
+    expected_tool = f"{_DELEGATE_REPO_PREFIX}{slug}"
     rewritten = list(parent_messages)
     for idx in range(len(rewritten) - 1, -1, -1):
         msg = rewritten[idx]

@@ -2,9 +2,20 @@
 
 When the supervisor visits at the start of a turn, the runtime calls
 ``collect_repo_manifest`` on the active diagram and renders the result
-as a system block ("AVAILABLE REPO RESEARCHERS"). Each entry becomes a
-``delegate_to_repo_<slug>`` tool the supervisor can invoke to delegate
-to ``repo_researcher`` with the right runtime context.
+as a system block ("AVAILABLE REPO RESEARCHERS"). Each unique repo URL
+becomes a ``delegate_to_git_researcher_<slug>`` tool the supervisor can
+invoke to delegate to ``repo_researcher`` with the right runtime context.
+
+Slug derivation: kebab-case of the repo NAME (the ``<name>`` part of
+``<owner>/<name>`` in the canonical github URL). When two manifest
+entries reference different-owner repos that happen to share a name
+(e.g. ``my-org/auth-service`` and ``other-org/auth-service``), the slug
+includes the owner: ``my-org-auth-service`` / ``other-org-auth-service``.
+When two entries point to the SAME repo URL (e.g. one repo linked from
+two diagram nodes), the manifest still carries one ``RepoLink`` per
+node — :mod:`supervisor` aggregates by repo URL when building the tool
+list so the supervisor sees one tool per repo (with each linked
+component listed in the description).
 
 D3: recursive descendant walk. Starts from the active diagram, then
 walks each scope-object's child diagram (relationship:
@@ -24,7 +35,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -65,8 +76,11 @@ class RepoLink(BaseModel):
         ...,
         description=(
             "Kebab-cased identifier the supervisor uses to address this "
-            "repo (``delegate_to_repo_<slug>``). Collision-suffixed when "
-            "two nodes share a name."
+            "repo (``delegate_to_git_researcher_<slug>``). Derived from "
+            "the repo NAME (the ``<name>`` part of ``<owner>/<name>``). "
+            "When two different-owner repos share a name, the slug is "
+            "owner-prefixed (``<owner>-<name>``) so the LLM can tell "
+            "them apart at routing time."
         ),
     )
     depth: int = Field(
@@ -83,24 +97,50 @@ _KEBAB_RE = re.compile(r"[^a-z0-9]+")
 
 
 def _slugify(name: str) -> str:
-    """Lower-case kebab-case slug derived from a node name. Falls back to
+    """Lower-case kebab-case slug derived from a string. Falls back to
     ``"repo"`` when ``name`` has no usable characters (the caller appends
-    a uuid suffix for uniqueness anyway).
+    an owner prefix or uuid suffix for uniqueness if needed).
     """
     base = _KEBAB_RE.sub("-", (name or "").strip().lower()).strip("-")
     return base or "repo"
 
 
+def _parse_owner_repo(repo_url: str) -> tuple[str, str] | None:
+    """Return ``(owner, repo)`` parsed from a canonical github URL, or
+    ``None`` when the URL doesn't match (defensive — the manifest already
+    filters on canonical form, but a malformed legacy row should degrade
+    gracefully here rather than crash the whole walk).
+    """
+    from app.services.repo_credentials_service import parse_repo_url
+
+    try:
+        return parse_repo_url(repo_url)
+    except (ValueError, TypeError):
+        return None
+
+
+def _slug_for_repo(owner: str, repo_name: str, *, with_owner: bool) -> str:
+    """Build the slug for a repo. ``with_owner=True`` prepends the kebab
+    owner so two different-owner repos with the same name don't collide.
+    """
+    repo_slug = _slugify(repo_name)
+    if not with_owner:
+        return repo_slug
+    owner_slug = _slugify(owner)
+    return f"{owner_slug}-{repo_slug}"
+
+
 def _disambiguate(slug: str, used: set[str], node_id: UUID) -> str:
-    """Make ``slug`` unique within ``used`` by appending a 4-char uuid
-    fragment. The uuid hex is deterministic per-node so subsequent turns
-    see the same slug for the same object.
+    """Last-resort uniqueness suffix for slugs that *still* collide after
+    repo-name + owner-prefix derivation. Almost never fires in practice
+    (it would take e.g. ``my-org/auth-service`` and ``my-org-auth/service``
+    rendering to the same kebab string), but kept so the dynamic tool
+    name is guaranteed unique even on pathological inputs.
     """
     if slug not in used:
         return slug
     suffix = node_id.hex[:4]
     candidate = f"{slug}-{suffix}"
-    # Astronomically unlikely double collision; keep extending if needed.
     n = 1
     while candidate in used:
         candidate = f"{slug}-{suffix}-{n}"
@@ -178,9 +218,13 @@ async def collect_repo_manifest(
         we stop the walk early and the renderer surfaces a truncation hint.
       * Filters non-eligible types: only system / app / store may surface,
         regardless of whether a malformed row carries ``repo_url``.
-      * Slug collisions resolved across the whole walk (not per-level), so
-        two nodes named ``auth-service`` at different depths get distinct
-        identifiers.
+      * Slug derivation: kebab-case of the repo NAME (the ``<name>`` part
+        of ``<owner>/<name>``). When two manifest entries reference
+        different-owner repos that share a name, both slugs are
+        owner-prefixed (``<owner>-<name>``) so the LLM can disambiguate
+        at routing time. Two entries pointing at the SAME repo URL keep
+        the same slug — the supervisor aggregates by repo URL when
+        building tools.
 
     Returns an empty list when:
       * ``active_diagram_id`` is ``None`` (no diagram in chat context),
@@ -192,9 +236,14 @@ async def collect_repo_manifest(
     if active_diagram_id is None:
         return []
 
-    used_slugs: set[str] = set()
     visited_diagrams: set[UUID] = set()
-    out: list[RepoLink] = []
+
+    # Pass 1: walk the diagram tree and collect every (obj, depth) tuple
+    # that carries a repo link. We defer slug assignment to pass 2 so we
+    # can decide owner-prefixed vs bare slugs based on the global
+    # repo-name distribution (different owners with same repo name → both
+    # owner-prefixed).
+    collected: list[tuple[Any, int]] = []  # (obj, depth)
 
     # BFS queue of (diagram_id, depth). Depth=0 is the active diagram.
     queue: list[tuple[UUID, int]] = [(active_diagram_id, 0)]
@@ -215,27 +264,15 @@ async def collect_repo_manifest(
                 # eligible type. Non-eligible types are skipped even when
                 # the row carries a stale repo_url.
                 if obj.repo_url is not None and obj.type in REPO_LINKABLE_TYPES:
-                    if len(out) >= MAX_MANIFEST_ENTRIES:
+                    if len(collected) >= MAX_MANIFEST_ENTRIES:
                         logger.info(
                             "collect_repo_manifest: total cap (%d) reached; "
                             "remaining objects skipped for diagram=%s",
                             MAX_MANIFEST_ENTRIES,
                             active_diagram_id,
                         )
-                        return out
-                    slug = _disambiguate(_slugify(obj.name), used_slugs, obj.id)
-                    used_slugs.add(slug)
-                    out.append(
-                        RepoLink(
-                            node_id=obj.id,
-                            node_name=obj.name,
-                            node_type=_node_type_str(obj.type),
-                            repo_url=obj.repo_url,
-                            repo_branch=obj.repo_branch,
-                            slug=slug,
-                            depth=depth,
-                        )
-                    )
+                        break
+                    collected.append((obj, depth))
 
                 # Recurse into the object's child diagram only when we're
                 # below the depth cap. Non-eligible types CAN still have a
@@ -252,19 +289,131 @@ async def collect_repo_manifest(
                     # but we also skip enqueueing to keep the queue small.
                     continue
                 queue.append((child_id, depth + 1))
+            else:
+                continue
+            # If we hit the inner ``break`` (manifest cap reached), stop
+            # the BFS walk altogether.
+            if len(collected) >= MAX_MANIFEST_ENTRIES:
+                break
     except Exception:  # noqa: BLE001 — degrade gracefully
         logger.warning(
             "collect_repo_manifest: walk failed for diagram=%s",
             active_diagram_id,
             exc_info=True,
         )
-        return out  # Return whatever we collected before the failure.
+        # Fall through with whatever we collected so the supervisor still
+        # gets a partial manifest.
+
+    # Pass 2: figure out which repo names need owner prefixing. A name
+    # collides when two entries reference repos with the same kebab-name
+    # but DIFFERENT canonical URLs (= different owners, or different
+    # repos that happen to slugify the same). Same-URL duplicates are
+    # NOT a collision — supervisor aggregates by URL later.
+    name_to_urls: dict[str, set[str]] = {}
+    parsed: list[tuple[Any, int, str | None, str | None, str]] = []
+    # Each entry: (obj, depth, owner, repo_name, fallback_slug_base)
+    for obj, depth in collected:
+        ownerrepo = _parse_owner_repo(obj.repo_url) if obj.repo_url else None
+        if ownerrepo is not None:
+            owner, repo_name = ownerrepo
+            base_slug = _slugify(repo_name)
+        else:
+            # Malformed URL — keep the entry but fall back to node-name
+            # slug; we never owner-prefix this case (no parsable owner).
+            owner, repo_name = None, None
+            base_slug = _slugify(obj.name)
+        parsed.append((obj, depth, owner, repo_name, base_slug))
+        name_to_urls.setdefault(base_slug, set()).add(obj.repo_url)
+
+    # A name needs owner-prefixing when the SAME slug base maps to ≥2
+    # distinct URLs. (One URL = same repo from multiple nodes → keep
+    # bare slug → supervisor aggregates.)
+    needs_owner_prefix: set[str] = {
+        base for base, urls in name_to_urls.items() if len(urls) >= 2
+    }
+
+    # Final emission: build slugs, run last-resort dedup against the
+    # generated slug set, and assemble the RepoLink list.
+    used_slugs: set[str] = set()
+    out: list[RepoLink] = []
+    for obj, depth, owner, repo_name, base_slug in parsed:
+        if base_slug in needs_owner_prefix and owner is not None and repo_name is not None:
+            slug = _slug_for_repo(owner, repo_name, with_owner=True)
+        else:
+            slug = base_slug
+        # Defensive: if two SAME-URL entries collide on slug, _disambiguate
+        # is a no-op (slug already in used_slugs from the first entry → we
+        # WANT them to share). But if two different URLs still collide
+        # post-owner-prefix (very rare), suffix to keep tool names unique.
+        # We share-or-suffix based on whether the entries reference the
+        # same repo URL.
+        if slug in used_slugs:
+            # Walk back to see if any prior emitted entry has the same URL.
+            shared = any(
+                e.slug == slug and e.repo_url == obj.repo_url for e in out
+            )
+            if not shared:
+                slug = _disambiguate(slug, used_slugs, obj.id)
+        used_slugs.add(slug)
+        out.append(
+            RepoLink(
+                node_id=obj.id,
+                node_name=obj.name,
+                node_type=_node_type_str(obj.type),
+                repo_url=obj.repo_url,
+                repo_branch=obj.repo_branch,
+                slug=slug,
+                depth=depth,
+            )
+        )
 
     return out
 
 
+def aggregate_manifest_by_repo(
+    manifest: list[RepoLink],
+) -> list[tuple[RepoLink, list[RepoLink]]]:
+    """Group ``manifest`` by ``repo_url`` so the supervisor sees one tool
+    per unique GitHub repo.
+
+    Returns a list of ``(primary, all_links)`` tuples in first-seen order
+    (BFS — root first, then descendants). ``primary`` is the first
+    :class:`RepoLink` seen for the URL (used for the slug + branch + the
+    primary node name). ``all_links`` is every :class:`RepoLink` that
+    references the same URL — supervisor renders the "linked to ..." list
+    from this so the LLM can see every component the repo is wired to.
+    """
+    seen: dict[str, list[RepoLink]] = {}
+    order: list[str] = []
+    for entry in manifest:
+        url = entry.repo_url
+        if url not in seen:
+            seen[url] = []
+            order.append(url)
+        seen[url].append(entry)
+    return [(seen[u][0], seen[u]) for u in order]
+
+
+def _format_linked_to(links: list[RepoLink]) -> str:
+    """Render the "linked to <ComponentA> Container and <ComponentB>
+    Container" suffix for a repo that's referenced from one or more
+    diagram nodes. Preserves diagram order (BFS / depth-first as supplied
+    by ``aggregate_manifest_by_repo``).
+    """
+    parts = [f"the **{e.node_name}** {e.node_type}" for e in links]
+    if len(parts) == 1:
+        return parts[0]
+    if len(parts) == 2:
+        return f"{parts[0]} and {parts[1]}"
+    return ", ".join(parts[:-1]) + f", and {parts[-1]}"
+
+
 def render_repo_manifest_block(manifest: list[RepoLink]) -> str:
     """Render the supervisor's "AVAILABLE REPO RESEARCHERS" block.
+
+    One bullet per UNIQUE repo URL — when a repo is linked from multiple
+    nodes, the linked-to clause lists every component (preserving BFS
+    diagram order).
 
     Returns an empty string when ``manifest`` is empty so the supervisor
     sees clean context (the spec is explicit: the block must NOT render
@@ -281,22 +430,24 @@ def render_repo_manifest_block(manifest: list[RepoLink]) -> str:
     lines.append(
         "Each entry is a virtual sub-agent that reads one linked GitHub "
         "repository on your behalf. Invoke with "
-        "``delegate_to_repo_<slug>(question=...)`` — same shape as "
-        "``delegate_to_researcher`` but scoped to the repo. Use them when "
-        "the user asks about code, when a researcher's findings need "
-        "ground-truth from the source, or when planning a Component "
-        "diagram from real implementation details. The repo agent is "
-        "read-only and returns free-form markdown."
+        "``delegate_to_git_researcher_<slug>(question=...)`` — same shape "
+        "as ``delegate_to_researcher`` but scoped to the repo's source "
+        "code. Use them when the user asks about code, when a "
+        "researcher's findings need ground-truth from the source, or "
+        "when planning a Component diagram from real implementation "
+        "details. The repo agent is read-only and returns free-form "
+        "markdown. Note: ``delegate_to_researcher`` has NO access to "
+        "GitHub repos — it only reads the workspace's C4 model."
     )
-    for entry in manifest:
-        branch = entry.repo_branch or "(default)"
-        # Strip the canonical https://github.com/ prefix to keep the line short.
-        short = entry.repo_url
+    for primary, all_links in aggregate_manifest_by_repo(manifest):
+        branch = primary.repo_branch or "(default)"
+        short = primary.repo_url
         if short.startswith("https://github.com/"):
             short = short[len("https://github.com/") :]
+        linked_to = _format_linked_to(all_links)
         lines.append(
-            f"- **repo:{entry.slug}** — Reads `{short}` on `{branch}` "
-            f"(the **{entry.node_name}** {entry.node_type})"
+            f"- **repo:{primary.slug}** — Reads `{short}` on `{branch}` "
+            f"(linked to {linked_to})"
         )
     if len(manifest) >= MAX_MANIFEST_ENTRIES:
         lines.append(

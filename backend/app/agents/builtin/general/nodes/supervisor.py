@@ -121,8 +121,12 @@ SUPERVISOR_TOOLS: list[dict] = [
             "name": "delegate_to_researcher",
             "description": (
                 "Ask the Researcher for read-only structural facts about the "
-                "diagram/object. Use when the user asks 'explain', 'what is', "
-                "'how does X relate to Y'."
+                "workspace's C4 model (objects, diagrams, connections, "
+                "technologies). Use when the user asks 'explain', 'what is', "
+                "'how does X relate to Y'. Has NO access to GitHub "
+                "repositories or any external code — for repo / source-code "
+                "questions, use a `delegate_to_git_researcher_*` tool "
+                "(see AVAILABLE REPO RESEARCHERS) instead."
             ),
             "parameters": {
                 "type": "object",
@@ -233,9 +237,9 @@ _FINALIZE_TOOL = "finalize"
 # router then routes to the corresponding sub-agent (or to the finalize node).
 # See :class:`NodeConfig.terminating_tool_names` for why this is necessary.
 #
-# ``delegate_to_repo_<slug>`` tools are added dynamically per-turn from the
-# repo manifest; the supervisor's ``run`` builds a per-call set that includes
-# them so they too terminate the ReAct loop.
+# ``delegate_to_git_researcher_<slug>`` tools are added dynamically per-turn
+# from the repo manifest; the supervisor's ``run`` builds a per-call set
+# that includes them so they too terminate the ReAct loop.
 _TERMINATING_TOOL_NAMES: set[str] = {
     "delegate_to_planner",
     "delegate_to_diagram",
@@ -245,8 +249,12 @@ _TERMINATING_TOOL_NAMES: set[str] = {
 }
 
 
-# Prefix for the dynamically-added per-repo delegation tools.
-DELEGATE_REPO_PREFIX = "delegate_to_repo_"
+# Prefix for the dynamically-added per-repo delegation tools. Renamed
+# from ``delegate_to_repo_`` to make the routing intent explicit to the
+# LLM — ``delegate_to_researcher`` has NO git access, so the repo path
+# is named differently to prevent the supervisor from picking the wrong
+# sub-agent for code questions.
+DELEGATE_REPO_PREFIX = "delegate_to_git_researcher_"
 
 # Cap on how many recent applied_changes we render in the system block —
 # anything larger gets noisy and starts to crowd the LLM's context.
@@ -345,46 +353,63 @@ def render_repo_manifest_block(state: AgentState) -> str:
 
 
 def build_repo_delegation_tools(state: AgentState) -> list[dict]:
-    """Build one ``delegate_to_repo_<slug>`` tool schema per manifest entry.
+    """Build one ``delegate_to_git_researcher_<slug>`` tool schema per
+    UNIQUE repo URL in the manifest.
 
-    The tool's ``description`` carries the repo's display info so the
-    LLM doesn't need to consult the system block to decide *when* to
-    invoke it (which models routinely fail to cross-reference).
+    Aggregation: when a repo URL appears multiple times in the manifest
+    (same repo linked to two diagram nodes), we emit ONE tool whose
+    description lists every component the repo is linked to. This keeps
+    the supervisor's tool list compact and makes routing decisions
+    obvious to the LLM.
+
+    The tool's ``description`` carries the repo's short URL, branch, and
+    every linked component so the LLM doesn't need to cross-reference
+    the AVAILABLE REPO RESEARCHERS system block at delegation time.
     """
-    from app.agents.builtin.general.manifest import RepoLink
+    from app.agents.builtin.general.manifest import (
+        RepoLink,
+        _format_linked_to,
+        aggregate_manifest_by_repo,
+    )
 
     raw = state.get("repo_manifest") or []
-    out: list[dict] = []
+    # Coerce to RepoLink so :func:`aggregate_manifest_by_repo` can group.
+    # Malformed entries (missing slug / repo_url / etc.) are skipped.
+    links: list[RepoLink] = []
     for entry in raw:
         if isinstance(entry, RepoLink):
-            slug = entry.slug
-            short = entry.repo_url
-            if short.startswith("https://github.com/"):
-                short = short[len("https://github.com/") :]
-            node_name = entry.node_name
-            node_type = entry.node_type
-            branch = entry.repo_branch or "(default)"
-        elif isinstance(entry, dict):
-            slug = str(entry.get("slug") or "")
-            if not slug:
-                continue
-            short = entry.get("repo_url") or ""
-            if isinstance(short, str) and short.startswith("https://github.com/"):
-                short = short[len("https://github.com/") :]
-            node_name = entry.get("node_name") or "(unknown)"
-            node_type = entry.get("node_type") or "system"
-            branch = entry.get("repo_branch") or "(default)"
-        else:
+            links.append(entry)
             continue
+        if isinstance(entry, dict):
+            try:
+                links.append(RepoLink.model_validate(entry))
+            except Exception:  # noqa: BLE001 — malformed: skip
+                logger.debug(
+                    "build_repo_delegation_tools: malformed manifest entry: %r",
+                    entry,
+                )
+
+    out: list[dict] = []
+    for primary, all_links in aggregate_manifest_by_repo(links):
+        slug = primary.slug
+        if not slug:
+            continue
+        short = primary.repo_url
+        if short.startswith("https://github.com/"):
+            short = short[len("https://github.com/") :]
+        branch = primary.repo_branch or "(default)"
+        linked_to = _format_linked_to(all_links)
         out.append(
             {
                 "type": "function",
                 "function": {
                     "name": f"{DELEGATE_REPO_PREFIX}{slug}",
                     "description": (
-                        f"Delegate a free-form question to the repo "
-                        f"researcher for `{short}` on `{branch}` (the "
-                        f"{node_name} {node_type}). Returns markdown."
+                        f"Reads the {short} GitHub repo for code analysis "
+                        f"(linked to {linked_to}). Branch: {branch}. "
+                        f"Use this for source-code questions, implementation "
+                        f"details, or when planning a Component diagram from "
+                        f"real code. Returns free-form markdown."
                     ),
                     "parameters": {
                         "type": "object",
@@ -485,8 +510,8 @@ def make_supervisor_config(
         filter for scope/mode enforcement; tests and direct callers may omit
         it (identity filter is used).
       * ``extra_tools`` — per-call additions to the static ``SUPERVISOR_TOOLS``
-        list. Used for the dynamic ``delegate_to_repo_<slug>`` tools built
-        from the per-turn repo manifest.
+        list. Used for the dynamic ``delegate_to_git_researcher_<slug>``
+        tools built from the per-turn repo manifest.
       * ``extra_terminating_names`` — names that join ``_TERMINATING_TOOL_NAMES``
         for this run so the dynamic delegation tools also exit the ReAct loop.
     """
@@ -597,8 +622,9 @@ def _extract_delegate_brief(messages: list[dict]) -> dict | None:
     should fall back to the raw conversation.
 
     Recognises both the static delegation tools and the per-turn
-    ``delegate_to_repo_<slug>`` family. For the latter, ``kind`` is set to
-    ``"repo:<slug>"`` so the graph router can resolve the manifest entry.
+    ``delegate_to_git_researcher_<slug>`` family. For the latter, ``kind``
+    is set to ``"repo:<slug>"`` so the graph router can resolve the
+    manifest entry.
     """
     for msg in reversed(messages):
         if msg.get("role") != "assistant":
@@ -665,10 +691,10 @@ async def run(
     Routing decisions belong to the runtime layer: it inspects the last
     tool call in ``state_patch['messages']`` to pick the next graph step.
     """
-    # Per-turn dynamic tools: one ``delegate_to_repo_<slug>`` per entry in
-    # the workspace manifest. We rebuild on every visit so the supervisor
-    # always sees an up-to-date list (even if the user navigates between
-    # diagrams mid-turn — D3 will revisit this).
+    # Per-turn dynamic tools: one ``delegate_to_git_researcher_<slug>``
+    # per UNIQUE repo URL in the workspace manifest. We rebuild on every
+    # visit so the supervisor always sees an up-to-date list (even if the
+    # user navigates between diagrams mid-turn — D3 will revisit this).
     extra_tools = build_repo_delegation_tools(state)
     extra_terminating = {
         (t.get("function") or {}).get("name") or ""

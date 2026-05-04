@@ -7,8 +7,8 @@ Covers:
   prompt template with runtime placeholders.
 - ``_build_repo_tool_schemas`` filters out forbidden / mutating tool names
   if any sneak into the registry (read-only enforcement).
-- The graph's supervisor router maps ``delegate_to_repo_<slug>`` to the
-  ``repo_researcher`` node.
+- The graph's supervisor router maps ``delegate_to_git_researcher_<slug>``
+  to the ``repo_researcher`` node.
 - ``build_repo_delegation_tools`` renders one tool per manifest entry and
   the supervisor's brief extractor recognises it as ``repo:<slug>``.
 - ``_resolve_repo_context_from_brief`` finds the matching manifest entry.
@@ -154,7 +154,11 @@ def test_build_repo_tool_schemas_drops_planted_mutation_name(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_build_repo_delegation_tools_renders_one_per_manifest_entry():
+def test_build_repo_delegation_tools_renders_one_per_unique_repo_url():
+    """Each unique repo URL produces exactly one
+    ``delegate_to_git_researcher_<slug>`` tool. Tool name carries the new
+    git-researcher prefix so the supervisor LLM can't confuse it with
+    the plain ``delegate_to_researcher`` (which has no git access)."""
     state = {
         "repo_manifest": [
             {
@@ -177,12 +181,52 @@ def test_build_repo_delegation_tools_renders_one_per_manifest_entry():
     }
     tools = sv_module.build_repo_delegation_tools(state)  # type: ignore[arg-type]
     names = {(t.get("function") or {}).get("name") for t in tools}
-    assert names == {"delegate_to_repo_auth", "delegate_to_repo_billing"}
+    assert names == {
+        "delegate_to_git_researcher_auth",
+        "delegate_to_git_researcher_billing",
+    }
+
+
+def test_build_repo_delegation_tools_aggregates_same_repo_url():
+    """When two manifest entries share a repo URL (same repo linked from
+    two diagram nodes), the supervisor sees ONE tool whose description
+    lists both linked components."""
+    same_url = "https://github.com/my-org/auth-service"
+    state = {
+        "repo_manifest": [
+            {
+                "node_id": str(uuid4()),
+                "node_name": "AuthService",
+                "node_type": "app",
+                "repo_url": same_url,
+                "repo_branch": "main",
+                "slug": "auth-service",
+            },
+            {
+                "node_id": str(uuid4()),
+                "node_name": "AuthGateway",
+                "node_type": "app",
+                "repo_url": same_url,
+                "repo_branch": "main",
+                "slug": "auth-service",
+            },
+        ]
+    }
+    tools = sv_module.build_repo_delegation_tools(state)  # type: ignore[arg-type]
+    names = [(t.get("function") or {}).get("name") for t in tools]
+    # ONE tool emitted for the shared repo URL.
+    assert names == ["delegate_to_git_researcher_auth-service"]
+    desc = (tools[0].get("function") or {}).get("description") or ""
+    # Both linked components surface in the description.
+    assert "AuthService" in desc
+    assert "AuthGateway" in desc
+    # And the connector matches the multi-component spec example.
+    assert "and" in desc.lower()
 
 
 def test_supervisor_sees_multiple_repo_targets():
     """D3: with three manifest entries the supervisor must see three
-    distinct ``delegate_to_repo_<slug>`` tools — one per entry — and the
+    distinct ``delegate_to_git_researcher_<slug>`` tools — one per entry — and the
     rendered system block must list all three."""
     state = {
         "repo_manifest": [
@@ -215,9 +259,9 @@ def test_supervisor_sees_multiple_repo_targets():
     tools = sv_module.build_repo_delegation_tools(state)  # type: ignore[arg-type]
     names = {(t.get("function") or {}).get("name") for t in tools}
     assert names == {
-        "delegate_to_repo_auth-service",
-        "delegate_to_repo_billing-system",
-        "delegate_to_repo_data-warehouse",
+        "delegate_to_git_researcher_auth-service",
+        "delegate_to_git_researcher_billing-system",
+        "delegate_to_git_researcher_data-warehouse",
     }
     # System block lists every entry by slug.
     block = sv_module.render_repo_manifest_block(state)  # type: ignore[arg-type]
@@ -230,13 +274,13 @@ def test_supervisor_sees_multiple_repo_targets():
         (t.get("function") or {}).get("name"): (t.get("function") or {}).get("description")
         for t in tools
     }
-    assert "acme/auth" in descs["delegate_to_repo_auth-service"]
-    assert "acme/billing" in descs["delegate_to_repo_billing-system"]
-    assert "acme/dwh" in descs["delegate_to_repo_data-warehouse"]
+    assert "acme/auth" in descs["delegate_to_git_researcher_auth-service"]
+    assert "acme/billing" in descs["delegate_to_git_researcher_billing-system"]
+    assert "acme/dwh" in descs["delegate_to_git_researcher_data-warehouse"]
 
 
 def test_supervisor_resolves_correct_repo_context_for_each_slug():
-    """Three separate ``delegate_to_repo_<slug>`` calls each route to the
+    """Three separate ``delegate_to_git_researcher_<slug>`` calls each route to the
     matching manifest entry — no cross-talk, each delegation gets the
     right repo_url / repo_branch / node_name."""
     auth_id, billing_id, dwh_id = str(uuid4()), str(uuid4()), str(uuid4())
@@ -300,7 +344,7 @@ def test_supervisor_brief_extractor_recognises_repo_delegation():
                     "id": "c1",
                     "type": "function",
                     "function": {
-                        "name": "delegate_to_repo_auth",
+                        "name": "delegate_to_git_researcher_auth",
                         "arguments": '{"question": "summarise the auth service"}',
                     },
                 }
@@ -326,7 +370,7 @@ def test_supervisor_router_directs_repo_delegate_to_repo_researcher():
                         "id": "c1",
                         "type": "function",
                         "function": {
-                            "name": "delegate_to_repo_auth",
+                            "name": "delegate_to_git_researcher_auth",
                             "arguments": "{}",
                         },
                     }
@@ -335,8 +379,8 @@ def test_supervisor_router_directs_repo_delegate_to_repo_researcher():
         ]
     }
     assert _supervisor_routes_next(state) == "repo_researcher"
-    # Sanity: the prefix constant matches.
-    assert _DELEGATE_REPO_PREFIX == "delegate_to_repo_"
+    # Sanity: the prefix constant matches the new git-researcher form.
+    assert _DELEGATE_REPO_PREFIX == "delegate_to_git_researcher_"
 
 
 def test_supervisor_router_falls_back_when_repo_manifest_unknown():
@@ -354,7 +398,7 @@ def test_supervisor_router_falls_back_when_repo_manifest_unknown():
                         "id": "c1",
                         "type": "function",
                         "function": {
-                            "name": "delegate_to_repo_unknown",
+                            "name": "delegate_to_git_researcher_unknown",
                             "arguments": "{}",
                         },
                     }

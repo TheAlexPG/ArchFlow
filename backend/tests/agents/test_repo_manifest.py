@@ -1,12 +1,13 @@
 """Tests for app/agents/builtin/general/manifest.py.
 
 Covers:
-- Slug derivation (kebab-case, ASCII fallback).
-- Slug collision suffix when two nodes share a name.
+- Slug derivation (kebab-case from REPO NAME, ASCII fallback).
+- Owner-prefixed slugs when two manifest entries reference different-owner
+  repos with the same name.
 - Filtering: only system / app / store types are exposed.
 - Render block: empty manifest → empty string; populated → block markdown.
 - D3 recursive walk: descendants surfaced, depth cap, cycle guard,
-  total-entries cap, slug collisions across depths.
+  total-entries cap, slug derivation across depths.
 """
 from __future__ import annotations
 
@@ -206,16 +207,20 @@ async def test_collect_repo_manifest_handles_db_failure():
 
 @pytest.mark.asyncio
 async def test_collect_repo_manifest_returns_links_for_eligible_objects():
+    """Slugs come from the REPO NAME (the ``<name>`` part of
+    ``<owner>/<name>``), NOT from the diagram node name. So a node named
+    "Backend" linked to ``acme/auth-service`` slugifies to ``auth-service``
+    — the repo-bound naming the LLM can match without re-deriving."""
     diagram_id = uuid4()
     objs = [
         _FakeObject(
-            name="Auth Service",
+            name="Backend",  # node name distinct from repo name
             type=ObjectType.APP,
-            repo_url="https://github.com/acme/auth",
+            repo_url="https://github.com/acme/auth-service",
             repo_branch="main",
         ),
         _FakeObject(
-            name="Billing System",
+            name="Billing Container",  # node name distinct from repo name
             type=ObjectType.SYSTEM,
             repo_url="https://github.com/acme/billing",
         ),
@@ -227,7 +232,7 @@ async def test_collect_repo_manifest_returns_links_for_eligible_objects():
     out = await collect_repo_manifest(diagram_id, session)  # type: ignore[arg-type]
     assert len(out) == 2
     slugs = sorted(link.slug for link in out)
-    assert slugs == ["auth-service", "billing-system"]
+    assert slugs == ["auth-service", "billing"]
     types = sorted(link.node_type for link in out)
     assert types == ["app", "system"]
     # Every entry is reported at depth 0 (active diagram, no descent).
@@ -235,7 +240,10 @@ async def test_collect_repo_manifest_returns_links_for_eligible_objects():
 
 
 @pytest.mark.asyncio
-async def test_collect_repo_manifest_disambiguates_collisions():
+async def test_collect_repo_manifest_distinct_repo_names_no_collision():
+    """Two nodes with the same display name but DIFFERENT repo URLs (and
+    different repo names) get distinct slugs derived from the repo names.
+    No owner prefix is needed because the repo names already differ."""
     diagram_id = uuid4()
     obj_a = _FakeObject(
         name="Auth",
@@ -253,9 +261,63 @@ async def test_collect_repo_manifest_disambiguates_collisions():
     )
     out = await collect_repo_manifest(diagram_id, session)  # type: ignore[arg-type]
     slugs = sorted(link.slug for link in out)
-    assert "auth" in slugs
-    # The second one is suffixed with a 4-char uuid fragment.
-    assert any(s.startswith("auth-") and len(s) == len("auth-") + 4 for s in slugs)
+    # Repo names already disambiguate — slugs are clean repo names.
+    assert slugs == ["auth-1", "auth-2"]
+
+
+@pytest.mark.asyncio
+async def test_collect_repo_manifest_owner_prefixes_same_name_different_owners():
+    """Two repos with the SAME name from DIFFERENT owners → both slugs
+    are owner-prefixed so the LLM can disambiguate at routing time."""
+    diagram_id = uuid4()
+    obj_a = _FakeObject(
+        name="Auth Service A",
+        type=ObjectType.APP,
+        repo_url="https://github.com/my-org/auth-service",
+    )
+    obj_b = _FakeObject(
+        name="Auth Service B",
+        type=ObjectType.APP,
+        repo_url="https://github.com/other-org/auth-service",
+    )
+    session = _FakeTreeSession(
+        diagram_objects={diagram_id: [obj_a, obj_b]},
+        child_diagram_of_object={},
+    )
+    out = await collect_repo_manifest(diagram_id, session)  # type: ignore[arg-type]
+    slugs = sorted(link.slug for link in out)
+    # Both colliding entries are owner-prefixed — neither keeps the bare
+    # ``auth-service`` slug because that would still be ambiguous.
+    assert slugs == ["my-org-auth-service", "other-org-auth-service"]
+
+
+@pytest.mark.asyncio
+async def test_collect_repo_manifest_same_url_two_nodes_keeps_one_slug():
+    """When the SAME repo URL is linked to two diagram nodes, the manifest
+    contains two RepoLink entries (preserving recursion + per-node depth
+    metadata) but they SHARE one slug — the supervisor's tool builder
+    aggregates by URL so the LLM sees one tool for the repo."""
+    diagram_id = uuid4()
+    same_url = "https://github.com/acme/auth-service"
+    obj_a = _FakeObject(
+        name="AuthService",
+        type=ObjectType.APP,
+        repo_url=same_url,
+    )
+    obj_b = _FakeObject(
+        name="AuthGateway",
+        type=ObjectType.APP,
+        repo_url=same_url,
+    )
+    session = _FakeTreeSession(
+        diagram_objects={diagram_id: [obj_a, obj_b]},
+        child_diagram_of_object={},
+    )
+    out = await collect_repo_manifest(diagram_id, session)  # type: ignore[arg-type]
+    assert len(out) == 2
+    # Same slug for both entries — supervisor aggregates by URL.
+    assert {link.slug for link in out} == {"auth-service"}
+    assert {link.repo_url for link in out} == {same_url}
 
 
 # ---------------------------------------------------------------------------
@@ -267,7 +329,9 @@ async def test_collect_repo_manifest_disambiguates_collisions():
 async def test_collect_walks_descendants_to_depth_3():
     """Three-level chain (System → Container → Component diagram), each
     level placed on its own diagram, every scope-object carrying a repo
-    link → all three repos surface in BFS order."""
+    link → all three repos surface in BFS order. Slugs come from the
+    REPO NAME (not the node name), so a node "Billing System" linked to
+    ``acme/billing`` slugifies to ``billing``."""
     diagram_l0 = uuid4()
     diagram_l1 = uuid4()
     diagram_l2 = uuid4()
@@ -306,7 +370,7 @@ async def test_collect_walks_descendants_to_depth_3():
     out = await collect_repo_manifest(diagram_l0, session)  # type: ignore[arg-type]
     slugs = [link.slug for link in out]
     depths = [link.depth for link in out]
-    assert slugs == ["billing-system", "billing-api", "billing-worker"]
+    assert slugs == ["billing", "billing-api", "billing-worker"]
     assert depths == [0, 1, 2]
 
 
@@ -382,7 +446,8 @@ async def test_collect_caps_total_at_50_entries():
 async def test_collect_filters_non_eligible_types_at_depth():
     """A depth-1 group with a (malformed) repo_url is excluded; a depth-1
     store with a repo_url is included. Group is L2 conceptually but is
-    not repo-linkable per service layer rules."""
+    not repo-linkable per service layer rules. Slug is derived from the
+    repo NAME, not the node name."""
     d0, d1 = uuid4(), uuid4()
     o_root = _FakeObject(name="Root", type=ObjectType.SYSTEM)
     # Group: NOT in REPO_LINKABLE_TYPES → excluded even though repo_url is set.
@@ -402,15 +467,20 @@ async def test_collect_filters_non_eligible_types_at_depth():
     )
     out = await collect_repo_manifest(d0, session)  # type: ignore[arg-type]
     slugs = sorted(link.slug for link in out)
-    assert "postgres" in slugs
-    assert "some-group" not in slugs
+    # Slug from REPO NAME (postgres-config), not node name (postgres).
+    assert "postgres-config" in slugs
+    # Group is filtered out regardless of slug.
     assert "should-not-surface" not in [link.repo_url for link in out]
+    # Group never appears.
+    assert all(link.node_name != "Some Group" for link in out)
 
 
 @pytest.mark.asyncio
-async def test_collect_resolves_slug_collisions_across_depths():
-    """Two nodes named 'auth-service' at different depths → the second
-    gets a 4-char uuid suffix, not a re-used slug."""
+async def test_collect_distinct_repo_urls_no_owner_prefix_at_depth():
+    """Two nodes named 'Auth Service' at different depths but linked to
+    DIFFERENT repos (with different repo names) → each slug comes from
+    its own repo name. No owner-prefixing is needed because the repo
+    names already differ."""
     d0, d1 = uuid4(), uuid4()
     o_root = _FakeObject(
         name="Auth Service",
@@ -428,12 +498,35 @@ async def test_collect_resolves_slug_collisions_across_depths():
     )
     out = await collect_repo_manifest(d0, session)  # type: ignore[arg-type]
     slugs = [link.slug for link in out]
-    # Order is BFS: depth-0 first, depth-1 second. Depth-0 keeps the bare
-    # slug; depth-1 gets the suffix.
-    assert slugs[0] == "auth-service"
-    assert slugs[1].startswith("auth-service-")
-    assert len(slugs[1]) == len("auth-service-") + 4
+    # Slugs come from the repo names — no collision so no prefix needed.
+    assert slugs[0] == "auth-l0"
+    assert slugs[1] == "auth-l1"
     assert len(set(slugs)) == 2
+
+
+@pytest.mark.asyncio
+async def test_collect_owner_prefixes_when_same_repo_name_across_depths():
+    """Two nodes at different depths linked to repos that SHARE a name
+    but differ in owner → both slugs are owner-prefixed."""
+    d0, d1 = uuid4(), uuid4()
+    o_root = _FakeObject(
+        name="Auth Service",
+        type=ObjectType.SYSTEM,
+        repo_url="https://github.com/my-org/auth-service",
+    )
+    o_inner = _FakeObject(
+        name="Auth Service",
+        type=ObjectType.APP,
+        repo_url="https://github.com/other-org/auth-service",
+    )
+    session = _FakeTreeSession(
+        diagram_objects={d0: [o_root], d1: [o_inner]},
+        child_diagram_of_object={o_root.id: d1},
+    )
+    out = await collect_repo_manifest(d0, session)  # type: ignore[arg-type]
+    slugs = [link.slug for link in out]
+    assert slugs[0] == "my-org-auth-service"
+    assert slugs[1] == "other-org-auth-service"
 
 
 # ---------------------------------------------------------------------------
@@ -495,3 +588,35 @@ def test_render_block_truncation_hint_when_capped():
     # No hint when the list is below the cap.
     block_small = render_repo_manifest_block(links[:5])
     assert str(MAX_MANIFEST_ENTRIES) not in block_small
+
+
+def test_render_block_aggregates_same_repo_url_across_nodes():
+    """When two RepoLink entries share the same repo_url (= same repo
+    linked from multiple diagram nodes), the renderer emits ONE bullet
+    that lists every component the repo is linked to."""
+    same_url = "https://github.com/acme/auth-service"
+    links = [
+        RepoLink(
+            node_id=uuid4(),
+            node_name="AuthService",
+            node_type="app",
+            repo_url=same_url,
+            repo_branch="main",
+            slug="auth-service",
+        ),
+        RepoLink(
+            node_id=uuid4(),
+            node_name="AuthGateway",
+            node_type="app",
+            repo_url=same_url,
+            repo_branch="main",
+            slug="auth-service",
+        ),
+    ]
+    block = render_repo_manifest_block(links)
+    # One bullet for the shared repo, mentioning both nodes.
+    assert block.count("repo:auth-service") == 1
+    assert "AuthService" in block
+    assert "AuthGateway" in block
+    # The new tool naming is referenced in the block intro.
+    assert "delegate_to_git_researcher_" in block
