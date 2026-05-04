@@ -353,4 +353,24 @@ async def resolve_for_agent(
     for row in agent_rows.values():
         _apply_row(row)
 
+    # Lazy-fill ``litellm_context_window`` from OpenRouter's catalog when the
+    # user picked OpenRouter and didn't set a manual override. Without this
+    # the LLM client falls back to 8192 tokens for every OpenRouter-only
+    # model (LiteLLM's built-in catalog covers OpenAI / Anthropic / Google
+    # but not z-ai / moonshotai / qwen-on-openrouter etc.) and the context
+    # manager starts compacting prematurely.
+    is_openrouter = (
+        (resolved.litellm_provider or "").lower() == "openrouter"
+        or "openrouter.ai" in (resolved.litellm_base_url or "")
+    )
+    if is_openrouter and resolved.litellm_context_window is None and resolved.litellm_model:
+        try:
+            from app.agents import openrouter_catalog
+
+            ctx = await openrouter_catalog.get_context_length(resolved.litellm_model)
+        except Exception:  # pragma: no cover — defensive
+            ctx = None
+        if ctx is not None and ctx > 0:
+            resolved.litellm_context_window = ctx
+
     return resolved
