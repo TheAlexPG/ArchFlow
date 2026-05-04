@@ -38,6 +38,7 @@ export function ChatHistory() {
       {renderItems.map((item, i) => (
         <RenderItem key={`${item.kind}-${i}`} item={item} onRetry={stream.retry} />
       ))}
+      {stream.isStreaming && shouldShowThinking(renderItems) && <ThinkingIndicator />}
       <BottomScroller events={stream.events} />
     </div>
   )
@@ -154,6 +155,36 @@ function isRetriableCode(code: string | undefined): boolean {
   if (!code) return false
   const retriable = ['network', 'timeout', 'rate_limited', 'unavailable', 'connection_lost']
   return retriable.includes(code.toLowerCase())
+}
+
+// ─── ThinkingIndicator ─────────────────────────────────────────────────────
+//
+// Bottom-of-history "agent is working" badge. Shown only while a stream is
+// active and the latest render item isn't itself an in-flight signal
+// (NodeIndicator or a pending tool card already convey activity). Ensures
+// the user never sees a silent panel between SSE frames.
+
+function shouldShowThinking(items: RenderItem[]): boolean {
+  if (items.length === 0) return true
+  const last = items[items.length - 1]
+  if (last.kind === 'node') return false
+  if (last.kind === 'tool_call' && !last.pairedToolResult) return false
+  return true
+}
+
+function ThinkingIndicator() {
+  return (
+    <div className="flex justify-start" data-testid="thinking-indicator">
+      <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface border border-coral/30 text-[11px] text-text-2 font-mono">
+        <span className="inline-flex items-center gap-0.5" aria-hidden>
+          <span className="w-1 h-1 rounded-full bg-coral animate-pulse" />
+          <span className="w-1 h-1 rounded-full bg-coral animate-pulse [animation-delay:120ms]" />
+          <span className="w-1 h-1 rounded-full bg-coral animate-pulse [animation-delay:240ms]" />
+        </span>
+        Agent thinking
+      </div>
+    </div>
+  )
 }
 
 // ─── BottomScroller ────────────────────────────────────────────────────────

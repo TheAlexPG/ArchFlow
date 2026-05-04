@@ -1,18 +1,21 @@
-import { Fragment, useDeferredValue, useMemo, type ReactNode } from 'react'
+import { useDeferredValue, type ReactNode } from 'react'
+import ReactMarkdown, { type Components } from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { cn } from '../../../utils/cn'
-import { parseArchflowLink, type ArchflowLinkTarget } from '../../../lib/archflow-link'
+import { parseArchflowLink } from '../../../lib/archflow-link'
 import { ArchflowLink } from './ArchflowLink'
 
 // ─── AssistantText ──────────────────────────────────────────────────────────
 //
-// Left-aligned bubble rendering streaming assistant text. We hand-roll a
-// minimal markdown subset — bold, italic, inline code, links, and the
-// archflow:// link convention — to avoid pulling react-markdown into the
-// bundle for Phase 1.
+// Left-aligned bubble that renders streaming assistant text as full markdown
+// (GitHub-flavoured: tables, task lists, fenced code, etc.) using
+// react-markdown. Custom renderers route ``archflow://`` links into the
+// in-app navigator and apply project styling tokens to headings, lists,
+// code, tables and blockquotes.
 //
-// Performance: text changes on every `token` SSE event. We wrap the visible
-// string in `useDeferredValue` so React can yield to higher-priority
-// renders (scroll, input) while the latest delta is parsed.
+// Performance: text changes on every ``token`` SSE event. We wrap the
+// visible string in ``useDeferredValue`` so React can yield to higher-
+// priority renders (scroll, input) while the latest delta is parsed.
 
 interface AssistantTextProps {
   text: string
@@ -20,7 +23,6 @@ interface AssistantTextProps {
 
 export function AssistantText({ text }: AssistantTextProps) {
   const deferred = useDeferredValue(text)
-  const blocks = useMemo(() => parseBlocks(deferred), [deferred])
 
   return (
     <div className="flex justify-start" data-testid="assistant-text">
@@ -29,212 +31,179 @@ export function AssistantText({ text }: AssistantTextProps) {
           'max-w-[85%] rounded-lg px-3 py-2',
           'bg-surface border border-border-base',
           'text-[13px] text-text-base leading-relaxed break-words',
+          'archflow-md',
         )}
       >
-        {blocks.map((block, i) => (
-          <Fragment key={i}>{block}</Fragment>
-        ))}
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>
+          {deferred}
+        </ReactMarkdown>
       </div>
     </div>
   )
 }
 
-// ─── Block-level parser ────────────────────────────────────────────────────
+// ─── Custom renderers ──────────────────────────────────────────────────────
 //
-// Split on blank lines (\n\n) — each chunk becomes a <p>. Single newlines
-// within a chunk are preserved as <br/> for usable streamed output.
+// Style each markdown element with project tokens. The ``archflow-md``
+// container class (in index.css) supplies vertical rhythm so we don't
+// hand-tune ``mt-`` on every component.
 
-function parseBlocks(text: string): ReactNode[] {
-  if (!text) return []
-  const paragraphs = text.split(/\n{2,}/)
-  return paragraphs.map((para, i) => (
-    <p key={i} className={i > 0 ? 'mt-2' : undefined}>
-      {parseInline(para)}
-    </p>
-  ))
-}
-
-// ─── Inline parser ─────────────────────────────────────────────────────────
-//
-// Tokenizes inline syntax into spans. Order matters: we match the longest
-// constructs first (code, then links, then emphasis) so e.g. `*foo*` inside
-// a code span does not get italicized.
-//
-// Patterns:
-//   `code`              → <code>
-//   [label](url)        → <a> or <ArchflowLink>
-//   archflow://x/{id}   → <ArchflowLink> (bare URI form, valid UUID only)
-//   **bold**            → <strong>
-//   *italic*            → <em>
-//   plain newlines      → <br/>
-
-interface InlineToken {
-  type: 'text' | 'code' | 'link' | 'archflow' | 'bold' | 'italic' | 'br'
-  value: string
-  href?: string
-  archflow?: { target: ArchflowLinkTarget; id: string }
-}
-
-const INLINE_PATTERNS: Array<{
-  type: InlineToken['type']
-  re: RegExp
-  build?: (m: RegExpExecArray) => InlineToken | null
-}> = [
-  // Inline code first — wins over everything inside the backticks.
-  {
-    type: 'code',
-    re: /`([^`\n]+)`/,
-    build: (m) => ({ type: 'code', value: m[1] }),
-  },
-  // Markdown link `[label](url)`. If the URL is archflow://, route to <ArchflowLink>.
-  {
-    type: 'link',
-    re: /\[([^\]]+)\]\(([^)\s]+)\)/,
-    build: (m) => {
-      const archflow = parseArchflowLink(m[2])
+const MARKDOWN_COMPONENTS: Components = {
+  a({ href, children, ...props }) {
+    if (typeof href === 'string') {
+      const archflow = parseArchflowLink(href)
       if (archflow) {
-        return {
-          type: 'archflow',
-          value: m[1],
-          archflow: { target: archflow.target, id: archflow.id },
-        }
-      }
-      return { type: 'link', value: m[1], href: m[2] }
-    },
-  },
-  // Bare archflow:// URI (must be a real UUID — see archflow-link.ts INLINE_RE).
-  {
-    type: 'archflow',
-    re: /archflow:\/\/(object|diagram|connection)\/[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}/,
-    build: (m) => {
-      const parsed = parseArchflowLink(m[0])
-      if (!parsed) return null
-      return {
-        type: 'archflow',
-        value: m[0],
-        archflow: { target: parsed.target, id: parsed.id },
-      }
-    },
-  },
-  // Bold (must precede italic — both use *).
-  {
-    type: 'bold',
-    re: /\*\*([^*\n]+)\*\*/,
-    build: (m) => ({ type: 'bold', value: m[1] }),
-  },
-  // Italic.
-  {
-    type: 'italic',
-    re: /\*([^*\n]+)\*/,
-    build: (m) => ({ type: 'italic', value: m[1] }),
-  },
-]
-
-function tokenizeInline(text: string): InlineToken[] {
-  const tokens: InlineToken[] = []
-  let remaining = text
-  while (remaining.length > 0) {
-    // Find the earliest match across all patterns.
-    let bestIdx = -1
-    let bestLen = 0
-    let bestToken: InlineToken | null = null
-
-    for (const pattern of INLINE_PATTERNS) {
-      const m = pattern.re.exec(remaining)
-      if (!m) continue
-      const built = pattern.build ? pattern.build(m) : { type: pattern.type, value: m[0] }
-      if (!built) continue
-      if (bestIdx === -1 || m.index < bestIdx) {
-        bestIdx = m.index
-        bestLen = m[0].length
-        bestToken = built
+        return (
+          <ArchflowLink target={archflow.target} id={archflow.id}>
+            {children as ReactNode}
+          </ArchflowLink>
+        )
       }
     }
-
-    if (bestIdx === -1 || bestToken == null) {
-      // No more inline patterns — flush the rest as text (with br for newlines).
-      pushTextWithBreaks(tokens, remaining)
-      break
-    }
-
-    if (bestIdx > 0) {
-      pushTextWithBreaks(tokens, remaining.slice(0, bestIdx))
-    }
-    tokens.push(bestToken)
-    remaining = remaining.slice(bestIdx + bestLen)
-  }
-  return tokens
-}
-
-function pushTextWithBreaks(out: InlineToken[], text: string): void {
-  if (!text) return
-  const lines = text.split('\n')
-  lines.forEach((line, i) => {
-    if (i > 0) out.push({ type: 'br', value: '' })
-    if (line) out.push({ type: 'text', value: line })
-  })
-}
-
-function parseInline(text: string): ReactNode[] {
-  const tokens = tokenizeInline(text)
-  return tokens.map((t, i) => renderToken(t, i))
-}
-
-function renderToken(t: InlineToken, key: number): ReactNode {
-  switch (t.type) {
-    case 'text':
-      return <span key={key}>{t.value}</span>
-    case 'br':
-      return <br key={key} />
-    case 'code':
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-coral underline underline-offset-2 hover:text-coral-2"
+        {...props}
+      >
+        {children}
+      </a>
+    )
+  },
+  code({ inline, className, children, ...props }: {
+    inline?: boolean
+    className?: string
+    children?: ReactNode
+  } & Record<string, unknown>) {
+    if (inline) {
       return (
         <code
-          key={key}
           className="px-1 py-0.5 rounded bg-surface-hi border border-border-base text-[12px] font-mono text-coral-2"
+          {...props}
         >
-          {t.value}
+          {children}
         </code>
       )
-    case 'bold':
-      return (
-        <strong key={key} className="font-semibold">
-          {t.value}
-        </strong>
-      )
-    case 'italic':
-      return (
-        <em key={key} className="italic">
-          {t.value}
-        </em>
-      )
-    case 'link':
-      return (
-        <a
-          key={key}
-          href={t.href}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-coral underline underline-offset-2 hover:text-coral-2"
-        >
-          {t.value}
-        </a>
-      )
-    case 'archflow': {
-      if (!t.archflow) return null
-      // For bare URIs, keep the original URI as the visible label (so users
-      // can copy it). For [label](archflow://...) syntax, use the label.
-      const isBareUri = t.value.startsWith('archflow://')
-      const label = isBareUri ? `${t.archflow.target}/${shortenId(t.archflow.id)}` : t.value
-      return (
-        <ArchflowLink key={key} target={t.archflow.target} id={t.archflow.id}>
-          {label}
-        </ArchflowLink>
-      )
     }
-  }
+    return (
+      <code className={cn('font-mono text-[12px]', className)} {...props}>
+        {children}
+      </code>
+    )
+  },
+  pre({ children, ...props }) {
+    return (
+      <pre
+        className="rounded-md bg-surface-hi border border-border-base p-2 overflow-x-auto text-[12px] my-2"
+        {...props}
+      >
+        {children}
+      </pre>
+    )
+  },
+  h1({ children, ...props }) {
+    return (
+      <h1 className="text-[15px] font-semibold mt-3 mb-1" {...props}>
+        {children}
+      </h1>
+    )
+  },
+  h2({ children, ...props }) {
+    return (
+      <h2 className="text-[14px] font-semibold mt-3 mb-1" {...props}>
+        {children}
+      </h2>
+    )
+  },
+  h3({ children, ...props }) {
+    return (
+      <h3 className="text-[13px] font-semibold mt-2 mb-1" {...props}>
+        {children}
+      </h3>
+    )
+  },
+  ul({ children, ...props }) {
+    return (
+      <ul className="list-disc pl-5 my-1 space-y-0.5" {...props}>
+        {children}
+      </ul>
+    )
+  },
+  ol({ children, ...props }) {
+    return (
+      <ol className="list-decimal pl-5 my-1 space-y-0.5" {...props}>
+        {children}
+      </ol>
+    )
+  },
+  li({ children, ...props }) {
+    return (
+      <li className="leading-snug" {...props}>
+        {children}
+      </li>
+    )
+  },
+  blockquote({ children, ...props }) {
+    return (
+      <blockquote
+        className="border-l-2 border-coral/40 pl-3 my-2 text-text-2 italic"
+        {...props}
+      >
+        {children}
+      </blockquote>
+    )
+  },
+  table({ children, ...props }) {
+    return (
+      <div className="overflow-x-auto my-2">
+        <table className="text-[12px] border-collapse" {...props}>
+          {children}
+        </table>
+      </div>
+    )
+  },
+  th({ children, ...props }) {
+    return (
+      <th
+        className="border border-border-base bg-surface-hi px-2 py-1 text-left font-semibold"
+        {...props}
+      >
+        {children}
+      </th>
+    )
+  },
+  td({ children, ...props }) {
+    return (
+      <td className="border border-border-base px-2 py-1 align-top" {...props}>
+        {children}
+      </td>
+    )
+  },
+  hr() {
+    return <hr className="border-border-base my-3" />
+  },
+  p({ children, ...props }) {
+    return (
+      <p className="my-1 first:mt-0 last:mb-0" {...props}>
+        {children}
+      </p>
+    )
+  },
+  strong({ children, ...props }) {
+    return (
+      <strong className="font-semibold" {...props}>
+        {children}
+      </strong>
+    )
+  },
+  em({ children, ...props }) {
+    return (
+      <em className="italic" {...props}>
+        {children}
+      </em>
+    )
+  },
 }
 
-function shortenId(id: string): string {
-  // Show first 8 chars of a UUID for readability — full id stays in the URL.
-  return id.length > 8 ? id.slice(0, 8) : id
-}
