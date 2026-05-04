@@ -293,13 +293,24 @@ async def execute_tool(call: dict, ctx: ToolContext) -> ToolExecutionResult:
         args = t.input_schema(**raw_args)
     except ValidationError as exc:
         # Compact, LLM-readable validation message (no full pydantic dump).
-        messages = "; ".join(
-            f"{'.'.join(str(p) for p in e['loc'])}: {e['msg']}"
-            for e in exc.errors()
-        )
+        # When a top-level field is missing / invalid, append the field's
+        # own ``description`` so the agent's retry has a concrete hint —
+        # raw "Field required" alone wasn't enough to teach delete_*
+        # callers to pass `reason` (trace d885971d showed 6 retries).
+        parts: list[str] = []
+        for e in exc.errors():
+            loc = ".".join(str(p) for p in e["loc"])
+            msg = e["msg"]
+            hint: str | None = None
+            if len(e["loc"]) == 1:
+                field_name = str(e["loc"][0])
+                field = t.input_schema.model_fields.get(field_name)
+                if field is not None and field.description:
+                    hint = field.description
+            parts.append(f"{loc}: {msg}{f' — {hint}' if hint else ''}")
         return _err_result(
             tool_call_id, name,
-            f"validation error: {messages}",
+            f"validation error: {'; '.join(parts)}",
         )
 
     # ── 5. Mode guard (do this BEFORE ACL so read_only is fast-fail) ──
