@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.activity import router as activity_router
+from app.api.v1.undo import router as undo_router
 from app.api.v1.api_keys import router as api_keys_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.comments import router as comments_router
@@ -82,6 +83,7 @@ def create_app() -> FastAPI:
     app.include_router(versions_router, prefix="/api/v1")
     app.include_router(websocket_router, prefix="/api/v1")
     app.include_router(notifications_router, prefix="/api/v1")
+    app.include_router(undo_router, prefix="/api/v1")
 
     @app.get("/health")
     async def health():
