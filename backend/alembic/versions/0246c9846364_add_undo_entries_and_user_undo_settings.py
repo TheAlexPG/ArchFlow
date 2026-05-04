@@ -91,6 +91,16 @@ def upgrade() -> None:
         "undo_entries",
         ["target_id", "target_type"],
     )
+    op.create_index(
+        "ix_undo_entries_diagram_id",
+        "undo_entries",
+        ["diagram_id"],
+    )
+    op.create_index(
+        "ix_undo_entries_draft_id",
+        "undo_entries",
+        ["draft_id"],
+    )
 
     op.add_column(
         "users",
@@ -101,6 +111,8 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_column("users", "undo_settings")
+    op.drop_index("ix_undo_entries_draft_id", table_name="undo_entries")
+    op.drop_index("ix_undo_entries_diagram_id", table_name="undo_entries")
     op.drop_index("ix_undo_entries_target", table_name="undo_entries")
     op.drop_index("ix_undo_entries_sweep", table_name="undo_entries")
     op.drop_index("ix_undo_entries_coalesce", table_name="undo_entries")
