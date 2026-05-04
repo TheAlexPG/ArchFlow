@@ -515,13 +515,23 @@ async def undo_to(
     Atomic — runs in the existing transaction; the caller commits.
     """
     target = await db.get(UndoEntry, entry_id)
-    if target is None or target.user_id != user_id or target.diagram_id != diagram_id:
+    if (
+        target is None
+        or target.user_id != user_id
+        or target.diagram_id != diagram_id
+        or target.draft_id != draft_id
+    ):
+        raise UndoEntryNotFound()
+
+    # SKIPPED entries are not reachable: _redo_until only finds UNDONE rows,
+    # so it would silently over-redo without ever stopping at the target.
+    if target.state == UndoState.SKIPPED:
         raise UndoEntryNotFound()
 
     if target.state == UndoState.ACTIVE:
         applied = await _undo_until(db, user_id, diagram_id, draft_id,
                                      target.seq, actor_user)
-    else:
+    else:  # UNDONE
         applied = await _redo_until(db, user_id, diagram_id, draft_id,
                                      target.seq, actor_user)
 
