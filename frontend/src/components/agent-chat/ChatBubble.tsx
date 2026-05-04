@@ -6,10 +6,41 @@ import { ChatHeader } from './ChatHeader'
 import { ChatHistory } from './ChatHistory'
 import { ChatStatusBar } from './ChatStatusBar'
 import { DraftCreatedBanner } from './DraftCreatedBanner'
-import { AgentStreamProvider } from './hooks/use-agent-stream'
+import { AgentStreamProvider, useAgentStream } from './hooks/use-agent-stream'
+import { useAgentSession } from './hooks/use-agent-sessions'
 import { useAppliedChangeSync } from './hooks/use-applied-change-sync'
 import { useViewChange } from './hooks/use-view-change'
 import { useAgentChatStore } from './store'
+
+// ─── Session history loader ─────────────────────────────────────────────────
+//
+// When the user picks a past session from SessionPicker, ``activeSessionId``
+// flips to a real id while ``stream.sessionId`` is still null (the picker
+// only resets the stream and updates the store). We watch for that delta,
+// fetch the session detail, and seed the transcript with its messages so
+// the bubble shows the historical conversation immediately.
+//
+// We DO NOT load history when the stream already owns this session id
+// (i.e. the user just sent a message and got a session frame back) — that
+// would clobber the live events with a stale snapshot.
+
+function useSessionHistoryLoader(): void {
+  const stream = useAgentStream()
+  const activeSessionId = useAgentChatStore((s) => s.activeSessionId)
+  const { data, isFetched } = useAgentSession(activeSessionId)
+
+  useEffect(() => {
+    if (!activeSessionId || !data || !isFetched) return
+    if (stream.sessionId === activeSessionId) return
+    stream.loadHistory(
+      data.messages.map((m) => ({ role: m.role, content: m.content })),
+      activeSessionId,
+    )
+    // We deliberately re-run only when the session detail or selection
+    // changes — stream identity is stable across renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSessionId, data, isFetched])
+}
 
 // ─── Breakpoint hook ────────────────────────────────────────────────────────
 
@@ -100,6 +131,8 @@ function ChatBubblePanel() {
   // Refresh canvas / object / connection caches whenever the agent applied
   // a mutation, so the live diagram updates without a page reload.
   useAppliedChangeSync()
+  // Hydrate transcript when the user picks a past session from the picker.
+  useSessionHistoryLoader()
 
   const isExpanded = bubbleState === 'expanded'
 

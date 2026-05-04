@@ -226,6 +226,33 @@ async def get_session_messages(
     return list(result.scalars().all())
 
 
+async def update_session_title(
+    db: AsyncSession,
+    session_id: UUID,
+    title: str,
+    *,
+    actor_user_id: UUID | None = None,
+    actor_api_key_id: UUID | None = None,
+) -> AgentChatSession | None:
+    """Set the session ``title``. Truncates to the column's 255-char limit.
+
+    Returns the updated session, or ``None`` if the session doesn't belong
+    to the actor (caller maps to 404).
+    """
+    session = await get_session(
+        db,
+        session_id,
+        actor_user_id=actor_user_id,
+        actor_api_key_id=actor_api_key_id,
+    )
+    if session is None:
+        return None
+    session.title = (title or "").strip()[:255] or None
+    await db.commit()
+    await db.refresh(session)
+    return session
+
+
 async def delete_session(
     db: AsyncSession,
     session_id: UUID,

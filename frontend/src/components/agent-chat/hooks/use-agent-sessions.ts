@@ -78,19 +78,28 @@ export function useDeleteAgentSession() {
   })
 }
 
-// ─── Auto-title helper (Phase 1 simplification) ──────────────────────────────
+// ─── Auto-title helper ────────────────────────────────────────────────────
 //
-// Truncates the first user message to 50 chars and PATCHes the session title.
-// Fire-and-forget — callers do not await this.
+// Hits the backend's POST /agents/sessions/{id}/auto-title endpoint, which
+// runs a quick LLM call against the first persisted user message and
+// updates the session title in the background. Idempotent server-side —
+// re-calling on a session that already has a title returns the existing
+// one. Fire-and-forget; failure is non-blocking. Optional ``onSuccess``
+// callback is invoked after the title lands so callers can invalidate
+// React Query caches (the picker list, the per-session detail).
 
 export function maybeTitleSession(
   sessionId: string,
-  firstUserMessage: string,
+  onSuccess?: () => void,
 ): void {
-  const title = firstUserMessage.slice(0, 50).trim()
-  if (!title) return
-  // Fire-and-forget: ignore the result — failure here is non-blocking.
   api
-    .patch(`/agents/sessions/${sessionId}`, { title })
+    .post(`/agents/sessions/${sessionId}/auto-title`)
+    .then(() => {
+      try {
+        onSuccess?.()
+      } catch {
+        /* user code threw — ignore, this is fire-and-forget */
+      }
+    })
     .catch(() => { /* intentionally swallowed */ })
 }

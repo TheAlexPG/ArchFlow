@@ -7,6 +7,7 @@
 /* eslint-disable react-hooks/immutability */
 
 import { createContext, createElement, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 
 import {
   AgentStreamError,
@@ -15,6 +16,7 @@ import {
   respondToChoice,
   streamAgent,
 } from '../../../lib/agent-stream'
+import { maybeTitleSession } from './use-agent-sessions'
 import { useAuthStore } from '../../../stores/auth-store'
 import { useWorkspaceStore } from '../../../stores/workspace-store'
 import type { AgentInvokeBody, AgentSSEEvent, AgentSSEEventKind } from '../types'
@@ -51,6 +53,13 @@ export interface UseAgentStreamResult {
   retry: () => void
   /** Wipe events + flags. Call before starting a new conversation. */
   reset: () => void
+  /** Replace ``events`` with synthetic ``message`` frames so the chat
+   *  history shows a previously-persisted conversation. Pairs with
+   *  the agent-sessions detail endpoint at the panel level. */
+  loadHistory: (
+    messages: Array<{ role: 'user' | 'assistant'; content: string }>,
+    sessionId: string,
+  ) => void
 }
 
 // ─── Constants ─────────────────────────────────────────────────────────────
@@ -85,6 +94,9 @@ interface StreamBag {
   /** "User asked us to stop" vs. "transport dropped" — only the latter
    *  triggers reconnect logic. */
   cancelledByUser: boolean
+  /** Set after we've asked the backend to LLM-name this session.
+   *  Prevents firing the auto-title call on every reconnect. */
+  titleRequested: boolean
   /** Forward-declared so attemptReconnect can call itself across the
    *  startReconnectStream → onClose → attemptReconnect loop without
    *  TDZ pain. */
@@ -100,6 +112,7 @@ function makeBag(): StreamBag {
     lastEventKind: null,
     reconnectAttempt: 0,
     cancelledByUser: false,
+    titleRequested: false,
     attemptReconnect: () => undefined,
   }
 }
@@ -132,6 +145,11 @@ function useAgentStreamInstance(): UseAgentStreamResult {
   // access into a `useEffect` and make the code harder to follow.
   const [bag] = useState<StreamBag>(makeBag)
 
+  // React Query client — captured at hook init so the SSE event handler
+  // (a stable ``useCallback``) can invalidate the sessions list when the
+  // backend's auto-title call lands.
+  const queryClient = useQueryClient()
+
   // ── Auth + workspace headers ─────────────────────────────────────────────
   //
   // Pulled directly from the existing zustand stores (matches api-client.ts
@@ -155,6 +173,17 @@ function useAgentStreamInstance(): UseAgentStreamResult {
         if (sid && bag.sessionId !== sid) {
           bag.sessionId = sid
           setSessionId(sid)
+          // Fire-and-forget: server will LLM-summarize the first user
+          // message into a 3-6 word title and persist it so the picker
+          // shows something useful instead of "New session". Idempotent
+          // server-side — safe to call on reconnects too.
+          if (!bag.titleRequested) {
+            bag.titleRequested = true
+            maybeTitleSession(sid, () => {
+              queryClient.invalidateQueries({ queryKey: ['agent-sessions'] })
+              queryClient.invalidateQueries({ queryKey: ['agent-session', sid] })
+            })
+          }
         }
       }
 
@@ -168,7 +197,7 @@ function useAgentStreamInstance(): UseAgentStreamResult {
 
       setEvents((prev) => [...prev, evt])
     },
-    [bag],
+    [bag, queryClient],
   )
 
   // ── Internal: start a resume stream ──────────────────────────────────────
@@ -318,14 +347,37 @@ function useAgentStreamInstance(): UseAgentStreamResult {
 
   // ── Public: cancel ───────────────────────────────────────────────────────
   //
-  // Sends POST /cancel; the still-open stream will receive `cancelled` +
-  // `done` events from the server. We do NOT abort the local fetch here —
-  // we want those terminal events to land. abort() is reserved for hard
-  // teardown via reset().
+  // Stops the active generation as snappily as possible:
+  //   1. Mark cancelledByUser so onClose stops the streaming spinner and
+  //      the reconnect loop doesn't kick in.
+  //   2. Abort the local SSE fetch — UI returns to idle even if the server
+  //      takes a moment to react. (Previously we left the fetch open hoping
+  //      the server's terminal "cancelled" / "done" frames would land —
+  //      but if the user clicked cancel before the first ``session`` frame,
+  //      ``bag.sessionId`` was null and this whole method was a no-op.)
+  //   3. POST /cancel when we have a session id, so the LangGraph run also
+  //      stops on the server and doesn't burn budget. When session id is
+  //      not yet known we skip the POST — backend will finish the current
+  //      step and persist whatever it has; from the user's POV the chat
+  //      already looks idle.
   const cancel = useCallback(async () => {
+    bag.cancelledByUser = true
+    if (bag.abort) {
+      try {
+        bag.abort.abort()
+      } catch {
+        // already aborted — fine
+      }
+      bag.abort = null
+    }
+    if (bag.reconnectTimer) {
+      clearTimeout(bag.reconnectTimer)
+      bag.reconnectTimer = null
+    }
+    setIsStreaming(false)
+    setIsReconnecting(false)
     const sid = bag.sessionId
     if (!sid) return
-    bag.cancelledByUser = true
     const authToken = useAuthStore.getState().accessToken ?? undefined
     const workspaceId = useWorkspaceStore.getState().currentWorkspaceId ?? undefined
     try {
@@ -363,6 +415,54 @@ function useAgentStreamInstance(): UseAgentStreamResult {
     startReconnectStream()
   }, [bag, isStreaming, startReconnectStream])
 
+  // ── Public: loadHistory ──────────────────────────────────────────────────
+  //
+  // Seeds ``events`` with synthetic ``message`` frames so the chat history
+  // shows a previously-persisted conversation. The build-render-items
+  // bucketer already turns ``message`` events into UserMessage /
+  // AssistantText render items, so no extra work is required downstream.
+  //
+  // Aborts any in-flight stream first — switching to an old session means
+  // the user no longer cares about the current run.
+  const loadHistory = useCallback(
+    (
+      messages: Array<{ role: 'user' | 'assistant'; content: string }>,
+      sid: string,
+    ) => {
+      bag.abort?.abort()
+      bag.abort = null
+      if (bag.reconnectTimer) {
+        clearTimeout(bag.reconnectTimer)
+        bag.reconnectTimer = null
+      }
+      bag.cancelledByUser = true
+      bag.sessionId = sid
+      bag.lastEventId = 0
+      bag.lastEventKind = null
+      bag.reconnectAttempt = 0
+      // Past sessions already have whatever title they're going to have —
+      // don't re-fire the auto-title call when the user picks an old one.
+      bag.titleRequested = true
+      const seeded: AgentSSEEvent[] = []
+      for (const m of messages) {
+        if (!m.content) continue
+        bag.lastEventId += 1
+        seeded.push({
+          id: bag.lastEventId,
+          kind: 'message',
+          payload: { role: m.role, text: m.content },
+        })
+      }
+      setEvents(seeded)
+      setSessionId(sid)
+      setIsStreaming(false)
+      setIsReconnecting(false)
+      setConnectionLost(false)
+      setLastError(null)
+    },
+    [bag],
+  )
+
   // ── Public: reset ────────────────────────────────────────────────────────
   const reset = useCallback(() => {
     bag.abort?.abort()
@@ -376,6 +476,7 @@ function useAgentStreamInstance(): UseAgentStreamResult {
     bag.lastEventId = 0
     bag.lastEventKind = null
     bag.reconnectAttempt = 0
+    bag.titleRequested = false
     setEvents([])
     setSessionId(null)
     setIsStreaming(false)
@@ -414,6 +515,7 @@ function useAgentStreamInstance(): UseAgentStreamResult {
     respond,
     retry,
     reset,
+    loadHistory,
   }
 }
 

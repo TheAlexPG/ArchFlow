@@ -84,6 +84,14 @@ class CancelResponse(BaseModel):
     cancelled_at: str
 
 
+class UpdateSessionBody(BaseModel):
+    title: str | None = None
+
+
+class AutoTitleResponse(BaseModel):
+    title: str
+
+
 class RespondBody(BaseModel):
     tool_call_id: str
     choice_id: str
@@ -390,6 +398,136 @@ async def respond_to_choice(
         redis_client, session_id, body.tool_call_id, choice_payload
     )
     return RespondResponse(stored=True, tool_call_id=body.tool_call_id)
+
+
+@router.patch("/{session_id}", response_model=SessionListItem)
+async def update_session_endpoint(
+    session_id: UUID,
+    body: UpdateSessionBody,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> SessionListItem:
+    """Update mutable session fields (currently just ``title``).
+
+    404 when the session doesn't belong to the actor.
+    """
+    actor = _actor_filter(request, current_user)
+    if body.title is not None:
+        session = await agent_session_service.update_session_title(
+            db,
+            session_id,
+            body.title,
+            actor_user_id=actor["actor_user_id"],
+            actor_api_key_id=actor["actor_api_key_id"],
+        )
+    else:
+        session = await agent_session_service.get_session(
+            db,
+            session_id,
+            actor_user_id=actor["actor_user_id"],
+            actor_api_key_id=actor["actor_api_key_id"],
+        )
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return _serialize_session(session)
+
+
+@router.post("/{session_id}/auto-title", response_model=AutoTitleResponse)
+async def auto_title_endpoint(
+    session_id: UUID,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AutoTitleResponse:
+    """Generate a 3-6 word session title from the first user message via LLM
+    and persist it. Idempotent — re-running returns the existing title once
+    set; pass ``?force=1`` (TODO if needed) to regenerate.
+
+    Designed to be called fire-and-forget by the frontend right after the
+    first ``session`` SSE frame arrives. The LLM client uses the workspace's
+    resolved agent settings (same provider/model as the chat itself).
+
+    404 when the session isn't visible to the actor; 422 when no user
+    message has been persisted yet.
+    """
+    actor = _actor_filter(request, current_user)
+    session = await agent_session_service.get_session(
+        db,
+        session_id,
+        actor_user_id=actor["actor_user_id"],
+        actor_api_key_id=actor["actor_api_key_id"],
+    )
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.title and session.title.strip():
+        return AutoTitleResponse(title=session.title)
+
+    messages = await agent_session_service.get_session_messages(db, session_id)
+    first_user = next(
+        (
+            m for m in messages
+            if (m.role.value if hasattr(m.role, "value") else str(m.role)) == "user"
+            and (m.content_text or "").strip()
+        ),
+        None,
+    )
+    if first_user is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Session has no user message yet — cannot auto-title.",
+        )
+
+    from app.agents.llm import LLMClient
+    from app.services.agent_settings_service import resolve_for_agent
+
+    settings_resolved = await resolve_for_agent(
+        db,
+        workspace_id=session.workspace_id,
+        agent_id=session.agent_id,
+    )
+    llm = LLMClient(settings=settings_resolved)
+    user_text = (first_user.content_text or "").strip()[:1500]
+    prompt = [
+        {
+            "role": "system",
+            "content": (
+                "You name chat sessions. Read the user's first message and "
+                "output a short 3-6 word title that captures the topic. "
+                "No quotes, no trailing punctuation, no emoji, Title Case. "
+                "Output ONLY the title."
+            ),
+        },
+        {"role": "user", "content": user_text},
+    ]
+    try:
+        result = await llm.acompletion(
+            prompt,
+            metadata=None,
+            temperature=0.2,
+            max_tokens=24,
+            timeout=30.0,
+        )
+    except Exception as exc:  # pragma: no cover — LLM unavailable
+        logger.warning("auto-title LLM call failed: %s", exc)
+        # Fallback: first 60 chars of the user message.
+        title = user_text[:60].strip() or "Untitled"
+    else:
+        title = ((result.text or "").strip().splitlines() or [""])[0].strip(' "\'.,')
+        if not title:
+            title = user_text[:60].strip() or "Untitled"
+    title = title[:80]
+
+    updated = await agent_session_service.update_session_title(
+        db,
+        session_id,
+        title,
+        actor_user_id=actor["actor_user_id"],
+        actor_api_key_id=actor["actor_api_key_id"],
+    )
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return AutoTitleResponse(title=updated.title or title)
 
 
 @router.delete("/{session_id}", status_code=204)
