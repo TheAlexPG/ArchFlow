@@ -235,46 +235,30 @@ def _get_tracer(config: Optional[RunnableConfig]) -> Any | None:
     return None
 
 
-def _supervisor_span_input(state: AgentState) -> dict | None:
-    """Build the supervisor span's input payload for Langfuse.
+def _supervisor_span_input(state: AgentState) -> str | None:
+    """Return the user's verbatim message as the supervisor span's input.
 
-    First visit: the user's verbatim message. Subsequent visits: a short
-    summary of the most recent sub-agent's tool result so the trace shows
-    *what the supervisor saw* on this hop, not the entire history.
+    The supervisor span is opened once per run and reused across every
+    visit, so the input is fixed: it's the user's original ask. Per-visit
+    context (sub-agent results, scratchpad updates) is visible inside the
+    span as nested generations and tool events — no need to repeat it as
+    structured input.
     """
-    messages = state.get("messages") or []
-    if not messages:
-        return None
-    last_user: str | None = None
-    for msg in messages:
+    for msg in state.get("messages") or []:
         if msg.get("role") == "user" and isinstance(msg.get("content"), str):
-            last_user = msg["content"]
-    last_tool: dict | None = None
-    for msg in reversed(messages):
-        if msg.get("role") == "tool":
-            last_tool = msg
-            break
-    payload: dict = {}
-    if last_user:
-        payload["user_message"] = last_user
-    if last_tool is not None:
-        content = last_tool.get("content")
-        # Tool results can be huge JSON dumps; clip so the span stays readable.
-        if isinstance(content, str) and len(content) > 1500:
-            content = content[:1500] + "…"
-        payload["last_subagent_result"] = {
-            "tool_call_id": last_tool.get("tool_call_id"),
-            "content": content,
-        }
-    visit = state.get("supervisor_visits") or 0
-    if visit:
-        payload["visit"] = int(visit) + 1  # this call is the next visit
-    return payload or None
+            content = msg["content"].strip()
+            if content:
+                return content
+    return None
 
 
 def _supervisor_span_output(output: Any | None, forced: str | None) -> dict:
-    """Distil the supervisor's output for Langfuse — the assistant text it
-    produced and the delegate_to_*/finalize tool call it dispatched."""
+    """Distil the supervisor's output for Langfuse — the final assistant
+    text and the delegate_to_*/finalize tool call it dispatched.
+
+    Called on every supervisor visit; the tracer buffers the latest value
+    and applies it once when the supervisor span closes at run finish.
+    """
     summary: dict = {"forced_finalize": forced}
     if output is None:
         return summary

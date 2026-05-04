@@ -283,11 +283,18 @@ class AgentTracer:
         # the trace boundary (~25s by default) which made it look like the
         # node was hung when it had actually completed.
         self._spans: dict[str, Any] = {}
-        # Most recent supervisor span id — sub-agent spans (planner /
-        # researcher / diagram / critic) hang off this so the trace tree
-        # shows ``supervisor → researcher → tool:…`` instead of every node
-        # sitting at the root level.
-        self._last_supervisor_span_id: str | None = None
+        # Single long-lived supervisor span — opened on the first
+        # supervisor visit, reused on every subsequent visit, and closed at
+        # finish(). All sub-agent spans (planner / researcher / diagram /
+        # critic) parent off it, plus every supervisor LLM generation
+        # nests inside it via parent_observation_id. The result is one
+        # ``agent:supervisor`` subtree that contains the whole conversation
+        # — instead of N sibling supervisor spans for N visits.
+        self._supervisor_span_id: str | None = None
+        # Latest supervisor output dict — finish() ends the span with this
+        # so the supervisor row in Langfuse shows the final assistant
+        # message / delegate target / forced-finalize reason.
+        self._supervisor_output: Any | None = None
         # Cache of the verbatim user message so we can re-assert it on the
         # trace root at finish() — LiteLLM's langfuse callback otherwise
         # overwrites trace.input with the first generation's messages payload.
@@ -332,18 +339,42 @@ class AgentTracer:
         (or ``None`` when tracing is disabled / fails).
 
         ``role`` shapes hierarchy:
-          * ``"supervisor"`` — root-level (parent_id=None unless caller
-            overrides) AND remembered as the parent for subsequent sub-agent
-            spans within this invocation.
-          * ``"subagent"``   — defaults parent_id to the most recent
-            supervisor span so the trace tree reads
-            ``supervisor → researcher`` instead of two siblings.
-          * ``None``         — neutral; uses ``parent_id`` verbatim.
+          * ``"supervisor"`` — open-once / reuse-many. The first call
+            opens the long-lived supervisor span and returns its id.
+            Subsequent calls return the SAME id without opening a new
+            span — every supervisor visit thus shares one trace row, with
+            its LLM generations nesting inside via ``parent_observation_id``.
+            ``input_payload`` is honored on the first call only;
+            ``output_payload`` from end_node_span is buffered and applied
+            at :meth:`finish`.
+          * ``"subagent"``   — opens a fresh span and parents it under
+            the supervisor span automatically (so researcher/planner/
+            diagram/critic appear inside the supervisor subtree).
+          * ``None``         — neutral; uses ``parent_id`` verbatim and
+            opens a one-shot span.
         """
         if self._client is None or self._trace is None:
             return None
+        if role == "supervisor":
+            if self._supervisor_span_id is not None:
+                return self._supervisor_span_id
+            span_id = str(uuid4())
+            try:
+                handle = self._client.span(
+                    id=span_id,
+                    trace_id=self.trace_id,
+                    parent_observation_id=parent_id,
+                    name=name,
+                    input=_coerce_jsonable(input_payload) if input_payload is not None else None,
+                )
+            except Exception as exc:  # pragma: no cover — defensive
+                logger.debug("AgentTracer: span(%s) failed: %s", name, exc)
+                return None
+            self._spans[span_id] = handle
+            self._supervisor_span_id = span_id
+            return span_id
         if role == "subagent" and parent_id is None:
-            parent_id = self._last_supervisor_span_id
+            parent_id = self._supervisor_span_id
         span_id = str(uuid4())
         try:
             handle = self._client.span(
@@ -357,8 +388,6 @@ class AgentTracer:
             logger.debug("AgentTracer: span(%s) failed: %s", name, exc)
             return None
         self._spans[span_id] = handle
-        if role == "supervisor":
-            self._last_supervisor_span_id = span_id
         return span_id
 
     def end_node_span(
@@ -369,8 +398,17 @@ class AgentTracer:
         level: str | None = None,
     ) -> None:
         """Close a span opened by :meth:`start_node_span`. Idempotent on
-        ``span_id is None`` and on already-ended spans."""
+        ``span_id is None`` and on already-ended spans.
+
+        Special-cased for the supervisor span: each visit's "end" doesn't
+        actually close the span (so subsequent visits keep nesting their
+        generations inside it). Instead the latest output is buffered and
+        applied at :meth:`finish`.
+        """
         if span_id is None:
+            return
+        if span_id == self._supervisor_span_id:
+            self._supervisor_output = output
             return
         handle = self._spans.pop(span_id, None)
         if handle is None:
@@ -420,9 +458,22 @@ class AgentTracer:
         with the first generation's full messages-array payload (system
         prompt + history) — useful for debugging that LLM call but useless
         as the user-facing trace input.
+
+        Closes the long-lived supervisor span (opened on the first
+        supervisor visit) with the latest buffered supervisor output.
         """
         if self._trace is None:
             return
+        # Close the supervisor span if it's still open.
+        sup_id = self._supervisor_span_id
+        if sup_id is not None:
+            handle = self._spans.pop(sup_id, None)
+            if handle is not None:
+                try:
+                    handle.end(output=_coerce_jsonable(self._supervisor_output))
+                except Exception as exc:  # pragma: no cover — defensive
+                    logger.debug("AgentTracer: supervisor span end failed: %s", exc)
+            self._supervisor_span_id = None
         update_kwargs: dict[str, Any] = {"output": output}
         if self._chat_input:
             update_kwargs["input"] = self._chat_input
