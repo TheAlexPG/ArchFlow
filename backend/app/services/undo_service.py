@@ -5,12 +5,17 @@ See docs/superpowers/specs/2026-05-04-per-user-undo-design.md.
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.connection import Connection
+from app.models.diagram import DiagramObject
+from app.models.object import ModelObject
 from app.models.undo_entry import UndoAction, UndoEntry, UndoState, UndoTargetType
+from app.services import restore_service
 
 COALESCE_WINDOW_SECONDS = 2
 RETENTION_DAYS = 3
@@ -170,13 +175,284 @@ def _draft_eq(draft_id: uuid.UUID | None):
     return UndoEntry.draft_id == draft_id
 
 
+class UndoStackEmpty(Exception):
+    ...
+
+
+class UndoConcurrencyError(Exception):
+    def __init__(self, actual_seq: int):
+        self.actual_seq = actual_seq
+
+
+class UndoTargetMissing(Exception):
+    def __init__(self, entry):
+        self.entry = entry
+
+
+@dataclass
+class UndoResult:
+    undone_entry: UndoEntry | None
+    redone_entry: UndoEntry | None
+    cursor_seq: int | None
+    remaining_undo_count: int
+    redo_count: int
+
+
+async def undo(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    diagram_id: uuid.UUID,
+    draft_id: uuid.UUID | None,
+    actor_user,
+    expected_seq: int | None = None,
+    hops_remaining: int = MAX_SKIP_HOPS,
+) -> UndoResult:
+    entry = await _top_active(db, user_id, diagram_id, draft_id)
+    if entry is None:
+        raise UndoStackEmpty()
+    if expected_seq is not None and entry.seq != expected_seq:
+        raise UndoConcurrencyError(actual_seq=entry.seq)
+
+    current = await _snapshot_target(db, entry.target_type, entry.target_id)
+    # Scope redo_payload to the keys we'll restore on redo. For UPDATEs,
+    # those are the keys touched by the inverse `before` payload; for
+    # CREATE/DELETE we keep the full snapshot since restore needs all
+    # columns. This both keeps the JSON small and lets redo target only
+    # the fields the original action actually changed (Figma's trick:
+    # land at *current* values for those fields, not Alice's original).
+    if entry.action == UndoAction.UPDATE:
+        before = entry.inverse_payload.get("before") or {}
+        entry.redo_payload = {k: current.get(k) for k in before}
+    else:
+        entry.redo_payload = current
+
+    try:
+        await _apply(
+            db, entry, payload=entry.inverse_payload,
+            actor_user=actor_user, direction="undo",
+        )
+    except UndoTargetMissing:
+        entry.state = UndoState.SKIPPED
+        entry.undone_at = datetime.now(UTC)
+        await db.flush()
+        if hops_remaining <= 0:
+            return await _stack_summary(
+                db, user_id, diagram_id, draft_id,
+                undone=entry, redone=None,
+            )
+        try:
+            return await undo(
+                db, user_id=user_id, diagram_id=diagram_id, draft_id=draft_id,
+                actor_user=actor_user, expected_seq=None,
+                hops_remaining=hops_remaining - 1,
+            )
+        except UndoStackEmpty:
+            # Nothing left to try — surface the skipped entry as the result.
+            return await _stack_summary(
+                db, user_id, diagram_id, draft_id,
+                undone=entry, redone=None,
+            )
+
+    entry.state = UndoState.UNDONE
+    entry.undone_at = datetime.now(UTC)
+    await db.flush()
+    return await _stack_summary(
+        db, user_id, diagram_id, draft_id,
+        undone=entry, redone=None,
+    )
+
+
+async def redo(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    diagram_id: uuid.UUID,
+    draft_id: uuid.UUID | None,
+    actor_user,
+    expected_seq: int | None = None,
+) -> UndoResult:
+    entry = await _top_undone(db, user_id, diagram_id, draft_id)
+    if entry is None:
+        raise UndoStackEmpty()
+    if expected_seq is not None and entry.seq != expected_seq:
+        raise UndoConcurrencyError(actual_seq=entry.seq)
+    if entry.redo_payload is None:
+        raise RuntimeError(f"Undone entry {entry.id} has no redo_payload")
+
+    await _apply(
+        db, entry, payload={"after": entry.redo_payload},
+        actor_user=actor_user, direction="redo",
+    )
+    entry.state = UndoState.ACTIVE
+    entry.undone_at = None
+    await db.flush()
+    return await _stack_summary(
+        db, user_id, diagram_id, draft_id,
+        undone=None, redone=entry,
+    )
+
+
+async def _top_active(db, user_id, diagram_id, draft_id):
+    q = (
+        select(UndoEntry)
+        .where(
+            UndoEntry.user_id == user_id,
+            UndoEntry.diagram_id == diagram_id,
+            _draft_eq(draft_id),
+            UndoEntry.state == UndoState.ACTIVE,
+            UndoEntry.created_at > _retention_cutoff(),
+        )
+        .order_by(UndoEntry.seq.desc()).limit(1)
+    )
+    return (await db.execute(q)).scalar_one_or_none()
+
+
+async def _top_undone(db, user_id, diagram_id, draft_id):
+    """Smallest undone seq = the most recent undo, the next to redo."""
+    q = (
+        select(UndoEntry)
+        .where(
+            UndoEntry.user_id == user_id,
+            UndoEntry.diagram_id == diagram_id,
+            _draft_eq(draft_id),
+            UndoEntry.state == UndoState.UNDONE,
+        )
+        .order_by(UndoEntry.seq.asc()).limit(1)
+    )
+    return (await db.execute(q)).scalar_one_or_none()
+
+
+def _retention_cutoff():
+    return datetime.now(UTC) - timedelta(days=RETENTION_DAYS)
+
+
+async def _snapshot_target(
+    db: AsyncSession, target_type: UndoTargetType, target_id: uuid.UUID
+) -> dict:
+    """Snapshot user-visible fields of a target. Reuses
+    activity_service._snapshot for consistency with the audit log."""
+    from app.services import activity_service
+
+    if target_type == UndoTargetType.OBJECT:
+        obj = await db.get(ModelObject, target_id)
+    elif target_type == UndoTargetType.CONNECTION:
+        obj = await db.get(Connection, target_id)
+    elif target_type == UndoTargetType.DIAGRAM_OBJECT:
+        obj = await db.get(DiagramObject, target_id)
+    elif target_type == UndoTargetType.COMMENT:
+        from app.models.comment import Comment
+
+        obj = await db.get(Comment, target_id)
+    else:
+        obj = None  # edge_property folded into connection
+    if obj is None:
+        return {}
+    return activity_service._snapshot(obj)
+
+
+async def _apply(db, entry: UndoEntry, *, payload: dict, actor_user, direction: str):
+    if entry.action == UndoAction.UPDATE:
+        await _apply_update(db, entry, payload)
+    elif entry.action == UndoAction.CREATE:
+        if direction == "undo":
+            await _apply_delete(db, entry)
+        else:
+            await _apply_restore(db, entry, payload)
+    elif entry.action == UndoAction.DELETE:
+        if direction == "undo":
+            await _apply_restore(db, entry, payload)
+        else:
+            await _apply_delete(db, entry)
+
+
+async def _apply_update(db, entry, payload):
+    target = await _load_target(db, entry.target_type, entry.target_id)
+    if target is None:
+        raise UndoTargetMissing(entry)
+    fields = payload.get("before") or payload.get("after") or {}
+    for field, value in fields.items():
+        setattr(target, field, value)
+    await db.flush()
+
+
+async def _apply_delete(db, entry):
+    target = await _load_target(db, entry.target_type, entry.target_id)
+    if target is None:
+        raise UndoTargetMissing(entry)
+    await db.delete(target)
+    await db.flush()
+
+
+async def _apply_restore(db, entry, payload):
+    snapshot = entry.inverse_payload.get("snapshot") or payload.get("after")
+    if snapshot is None:
+        raise RuntimeError(
+            f"Cannot restore entry {entry.id}: no snapshot in inverse_payload"
+        )
+    await restore_service.restore(
+        db, target_type=entry.target_type,
+        target_id=entry.target_id, snapshot=snapshot,
+    )
+
+
+async def _load_target(db, target_type: UndoTargetType, target_id: uuid.UUID):
+    if target_type == UndoTargetType.OBJECT:
+        return await db.get(ModelObject, target_id)
+    if target_type == UndoTargetType.CONNECTION:
+        return await db.get(Connection, target_id)
+    if target_type == UndoTargetType.DIAGRAM_OBJECT:
+        return await db.get(DiagramObject, target_id)
+    if target_type == UndoTargetType.COMMENT:
+        from app.models.comment import Comment
+
+        return await db.get(Comment, target_id)
+    return None
+
+
+async def _stack_summary(
+    db, user_id, diagram_id, draft_id, *,
+    undone: UndoEntry | None, redone: UndoEntry | None,
+) -> UndoResult:
+    cursor_q = select(func.max(UndoEntry.seq)).where(
+        UndoEntry.user_id == user_id,
+        UndoEntry.diagram_id == diagram_id,
+        _draft_eq(draft_id),
+        UndoEntry.state == UndoState.ACTIVE,
+        UndoEntry.created_at > _retention_cutoff(),
+    )
+    cursor_seq = (await db.execute(cursor_q)).scalar()
+
+    counts_q = select(UndoEntry.state, func.count()).where(
+        UndoEntry.user_id == user_id,
+        UndoEntry.diagram_id == diagram_id,
+        _draft_eq(draft_id),
+        UndoEntry.created_at > _retention_cutoff(),
+    ).group_by(UndoEntry.state)
+    counts = {state: n for state, n in (await db.execute(counts_q)).all()}
+
+    return UndoResult(
+        undone_entry=undone,
+        redone_entry=redone,
+        cursor_seq=cursor_seq,
+        remaining_undo_count=counts.get(UndoState.ACTIVE, 0),
+        redo_count=counts.get(UndoState.UNDONE, 0),
+    )
+
+
 __all__ = [
     "COALESCE_WINDOW_SECONDS",
     "MAX_SKIP_HOPS",
     "PER_CONTEXT_CAP",
     "RETENTION_DAYS",
     "UndoAction",
+    "UndoConcurrencyError",
+    "UndoResult",
+    "UndoStackEmpty",
     "UndoState",
+    "UndoTargetMissing",
     "UndoTargetType",
     "record",
+    "redo",
+    "undo",
 ]
