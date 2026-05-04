@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { cn } from '../../../utils/cn'
 
 // ─── NodeIndicator ──────────────────────────────────────────────────────────
@@ -7,9 +8,13 @@ import { cn } from '../../../utils/cn'
 // tool calls. Maps the raw LangGraph node name to a human label + emoji.
 // Unknown nodes fall through to a neutral badge.
 //
-// Activity animation: a coral pulse around the badge plus three dots
-// running through ``animate-pulse`` with staggered delays — same idiom
-// as the in-flight tool card.
+// Motion budget: one focal element. We previously stacked an
+// animate-ping ring, an outer coral-glow shadow, and three pulsing dots
+// — three competing motions that read as noise. The badge now uses a
+// single ~1.6s coral-glow heartbeat plus a single coral status dot that
+// breathes in lockstep. After ~2.4s without remount we drop the
+// heartbeat to a calm steady glow so a stale node indicator doesn't
+// keep nagging while the agent is busy elsewhere.
 
 const NODE_LABELS: Record<string, { emoji: string; label: string }> = {
   supervisor: { emoji: '🧭', label: 'Orchestrating' },
@@ -35,30 +40,44 @@ interface NodeIndicatorProps {
 
 export function NodeIndicator({ node }: NodeIndicatorProps) {
   const meta = NODE_LABELS[node.toLowerCase()] ?? { emoji: '•', label: node }
+
+  // Calm down after ~2.4s — assume the agent has moved on to another
+  // node or a tool call by then, so a static glow is plenty.
+  const [calmed, setCalmed] = useState(false)
+  useEffect(() => {
+    const t = window.setTimeout(() => setCalmed(true), 2400)
+    return () => window.clearTimeout(t)
+  }, [node])
+
   return (
-    <div className="flex items-center" data-testid="node-indicator">
+    <div className="flex items-center" data-testid="node-indicator" data-calmed={calmed ? 'true' : 'false'}>
       <div
         className={cn(
-          'relative inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full',
+          'relative inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full',
           'bg-surface border border-coral/40',
-          'text-[11px] text-text-2 font-mono',
-          'shadow-[0_0_0_1px_var(--color-coral-glow)]',
+          'text-[11px] text-text-1 font-mono',
         )}
+        style={{
+          animation: calmed
+            ? undefined
+            : 'archflow-node-glow 1.6s cubic-bezier(0.16, 1, 0.3, 1) infinite',
+          boxShadow: calmed ? '0 0 0 1px var(--color-coral-glow)' : undefined,
+        }}
       >
-        {/* Pulsing ring around the badge — passive activity hint. */}
         <span
           aria-hidden
-          className="absolute inset-0 rounded-full ring-1 ring-coral/30 animate-ping pointer-events-none"
+          className={cn(
+            'inline-block w-1.5 h-1.5 rounded-full bg-coral',
+            !calmed && 'shadow-[0_0_6px_var(--color-coral)]',
+          )}
+          style={
+            calmed
+              ? undefined
+              : { animation: 'archflow-heartbeat 1.6s cubic-bezier(0.16, 1, 0.3, 1) infinite' }
+          }
         />
-        <span aria-hidden="true" className="relative">
-          {meta.emoji}
-        </span>
-        <span className="relative">{meta.label}</span>
-        <span className="relative inline-flex items-center gap-0.5 ml-0.5" aria-hidden>
-          <span className="w-1 h-1 rounded-full bg-coral animate-pulse" />
-          <span className="w-1 h-1 rounded-full bg-coral animate-pulse [animation-delay:120ms]" />
-          <span className="w-1 h-1 rounded-full bg-coral animate-pulse [animation-delay:240ms]" />
-        </span>
+        <span aria-hidden="true">{meta.emoji}</span>
+        <span>{meta.label}</span>
       </div>
     </div>
   )
