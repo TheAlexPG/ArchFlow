@@ -140,7 +140,7 @@ async def add_object_to_diagram(
             action=UndoAction.CREATE,
             forward_summary=f"Added object to diagram"[:80],
             inverse_payload={"target_id": str(obj.id)},
-            after_state=activity_service.snapshot(obj),
+            after_state=activity_service.snapshot(obj, include_metadata=True),
             coalesce_key=f"diagram_object:{obj.id}:create",
         )
 
@@ -167,7 +167,7 @@ async def update_diagram_object(
     if not obj:
         return None
 
-    before = activity_service.snapshot(obj)
+    before = activity_service.snapshot(obj, include_metadata=True)
     update_data = data.model_dump(exclude_unset=True)
     # Strip undo-context fields
     update_data.pop("from_draft_id", None)
@@ -175,7 +175,7 @@ async def update_diagram_object(
         setattr(obj, field, value)
     await db.flush()
     await db.refresh(obj)
-    after = activity_service.snapshot(obj)
+    after = activity_service.snapshot(obj, include_metadata=True)
 
     # Undo recording — separate coalesce keys for position vs size
     if (
@@ -265,8 +265,9 @@ async def remove_object_from_diagram(
     if not obj:
         return False
 
-    # Capture snapshot BEFORE delete
-    snapshot = activity_service.snapshot(obj)
+    # Capture snapshot BEFORE delete — include metadata so restore_service
+    # can reconstruct the placement on undo.
+    snapshot = activity_service.snapshot(obj, include_metadata=True)
     do_id = obj.id
 
     await db.delete(obj)

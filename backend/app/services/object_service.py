@@ -132,7 +132,7 @@ async def create_object(
             action=UndoAction.CREATE,
             forward_summary=f"Created {(obj.name or '?')[:60]}"[:80],
             inverse_payload={"target_id": str(obj.id)},
-            after_state=activity_service.snapshot(obj),
+            after_state=activity_service.snapshot(obj, include_metadata=True),
             coalesce_key=f"object:{obj.id}:create",
         )
 
@@ -150,7 +150,10 @@ async def update_object(
 ) -> ModelObject:
     if "technology_ids" in data.model_fields_set:
         await validate_technology_ids(db, obj.workspace_id, data.technology_ids)
-    before = activity_service.snapshot(obj)
+    # Two snapshot pairs: activity log keeps metadata out of audit diffs,
+    # undo needs metadata to detect metadata-only edits and round-trip them.
+    before_for_log = activity_service.snapshot(obj)
+    before_for_undo = activity_service.snapshot(obj, include_metadata=True)
     update_data = data.model_dump(exclude_unset=True)
     # Strip undo-context fields that are not object attributes
     update_data.pop("from_diagram_id", None)
@@ -164,9 +167,10 @@ async def update_object(
             setattr(obj, field, value)
     await db.flush()
     await db.refresh(obj)
-    after = activity_service.snapshot(obj)
+    after_for_log = activity_service.snapshot(obj)
+    after_for_undo = activity_service.snapshot(obj, include_metadata=True)
     await activity_service.log_updated(
-        db, ActivityTargetType.OBJECT, obj.id, before, after,
+        db, ActivityTargetType.OBJECT, obj.id, before_for_log, after_for_log,
         workspace_id=obj.workspace_id,
     )
 
@@ -176,7 +180,7 @@ async def update_object(
         and from_diagram_id is not None
         and obj.workspace_id is not None
     ):
-        diff = activity_service.diff_snapshots(before, after)
+        diff = activity_service.diff_snapshots(before_for_undo, after_for_undo)
         if diff:
             from app.models.undo_entry import UndoAction, UndoTargetType
             from app.services import undo_service
@@ -207,8 +211,10 @@ async def delete_object(
     from_diagram_id: uuid.UUID | None = None,
     from_draft_id: uuid.UUID | None = None,
 ) -> None:
-    # Capture snapshot and placements BEFORE delete
-    snapshot = activity_service.snapshot(obj)
+    # Capture snapshot and placements BEFORE delete. Undo needs the full row
+    # (including metadata_) so restore_service can rebuild the entity; the
+    # activity log keeps its no-metadata default via log_deleted itself.
+    snapshot = activity_service.snapshot(obj, include_metadata=True)
     obj_id = obj.id
     obj_ws_id = obj.workspace_id
 
@@ -219,7 +225,7 @@ async def delete_object(
     placements = list(placements_result.scalars().all())
     if placements:
         snapshot["_placements"] = [
-            activity_service.snapshot(p) for p in placements
+            activity_service.snapshot(p, include_metadata=True) for p in placements
         ]
 
     await activity_service.log_deleted(
