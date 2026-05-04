@@ -812,3 +812,74 @@ async def test_run_breaks_out_of_identical_tool_call_cycle(monkeypatch):
     forced = [ev for ev in events if ev.kind == "forced_finalize"]
     assert forced and forced[0].payload.get("reason") == "stuck"
     assert "tool-loop" in (forced[0].payload.get("detail") or "")
+
+
+@pytest.mark.asyncio
+async def test_run_breaks_out_of_interleaved_tool_call_cycle(monkeypatch):
+    """Same call repeated 4× across last 8 calls (interleaved with other
+    distinct calls) → forced_finalize='stuck'.
+
+    Trace 5e4f3ed9 had diagram batching delete_object(A), delete_object(B),
+    delete_object(A) repeatedly. Strict-consecutive detection never tripped
+    because B kept resetting the streak. The window detector catches it.
+    """
+    from app.agents.builtin.general.nodes import diagram as diagram_node
+
+    real_make = diagram_node.make_diagram_config
+
+    def small_ceiling_config(*args, **kwargs):
+        cfg = real_make(*args, **kwargs)
+        from dataclasses import replace as _replace
+
+        return _replace(cfg, max_steps=20)
+
+    monkeypatch.setattr(diagram_node, "make_diagram_config", small_ceiling_config)
+
+    repeat_args = json.dumps({"diagram_id": "11111111-1111-1111-1111-111111111111"})
+    other_args = json.dumps({"diagram_id": "22222222-2222-2222-2222-222222222222"})
+    # Pattern A, B, A, B, A, B, A — the 4th A lands on call 7 (window=8).
+    pattern = [
+        ("repeat", repeat_args),
+        ("other", other_args),
+        ("repeat", repeat_args),
+        ("other", other_args),
+        ("repeat", repeat_args),
+        ("other", other_args),
+        ("repeat", repeat_args),
+    ]
+    calls = [
+        {"id": f"c{i}", "name": "read_diagram", "arguments": args}
+        for i, (_tag, args) in enumerate(pattern)
+    ]
+    results = [_llm_result(text=None, tool_calls=[c]) for c in calls]
+    enforcer = _make_enforcer(results=results)
+    cm = _make_context_manager()
+
+    executor = _make_tool_executor(
+        results=[
+            {
+                "tool_call_id": c["id"],
+                "status": "ok",
+                "content": json.dumps({"ok": True}),
+                "preview": "ok",
+            }
+            for c in calls
+        ]
+    )
+
+    state = _make_state(messages=[{"role": "user", "content": "loop"}])
+
+    events = await _collect(
+        run(
+            state,
+            enforcer=enforcer,
+            context_manager=cm,
+            tool_executor=executor,
+            call_metadata_base=_make_call_meta(),
+        )
+    )
+
+    output = _terminal_output(events)
+    assert output.forced_finalize == "stuck"
+    # 4 'repeat' + 3 'other' = 7 calls before the detector trips on the 4th repeat.
+    assert output.tool_calls_made == 7

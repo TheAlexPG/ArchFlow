@@ -893,11 +893,13 @@ async def run_react(
     empty_retries = 0
 
     # Tool-loop detector: when the agent makes the same (name, args) call
-    # _LOOP_THRESHOLD times in a row we abort early. Trace d885971d showed
-    # delete_object retried 6× with the identical incomplete arg-set even
-    # though every call returned the same validation error — the agent
-    # wasn't going to escape on its own. Tracks the last N call signatures
-    # across steps; resets on any differing call.
+    # _LOOP_THRESHOLD+ times within the last _LOOP_WINDOW tool calls we
+    # abort early. Tracking a fixed-size window (instead of a strict
+    # "consecutive" streak) catches the trace 5e4f3ed9 pattern where the
+    # diagram node batched delete_object(A), delete_object(B), delete_object(A)
+    # in alternation — strict consecutive matching never tripped because
+    # B reset the streak even though A was clearly cycling.
+    _LOOP_WINDOW = 8
     _LOOP_THRESHOLD = 4
     recent_tool_sigs: list[str] = []
 
@@ -1187,17 +1189,23 @@ async def run_react(
             else:
                 args_repr = str(tc_args) if tc_args is not None else ""
             sig = f"{tool_call_evt.get('name')}::{args_repr}"
-            if recent_tool_sigs and recent_tool_sigs[-1] == sig:
-                recent_tool_sigs.append(sig)
-            else:
-                recent_tool_sigs = [sig]
-            if len(recent_tool_sigs) >= _LOOP_THRESHOLD:
-                loop_break_signature = sig
+            recent_tool_sigs.append(sig)
+            if len(recent_tool_sigs) > _LOOP_WINDOW:
+                del recent_tool_sigs[: len(recent_tool_sigs) - _LOOP_WINDOW]
+            top_sig: str | None = None
+            top_count = 0
+            for s in recent_tool_sigs:
+                c = recent_tool_sigs.count(s)
+                if c > top_count:
+                    top_sig, top_count = s, c
+            if top_count >= _LOOP_THRESHOLD and top_sig is not None:
+                loop_break_signature = top_sig
                 logger.warning(
-                    "run_react[%s] step=%d tool-loop detected: %s repeated %d×",
+                    "run_react[%s] step=%d tool-loop detected: %s repeated %dx in last %d calls",
                     cfg.name,
                     step,
                     tool_call_evt.get("name"),
+                    top_count,
                     len(recent_tool_sigs),
                 )
                 break
