@@ -448,12 +448,40 @@ async def stream(
     )
     next_seq += 1
 
+    # Build the per-turn repo manifest. Empty when the workspace has no
+    # token, the active scope isn't a diagram, or no placed objects carry
+    # repo URLs. ``collect_repo_manifest`` swallows query errors so a DB
+    # blip doesn't crash the supervisor's first visit.
+    repo_manifest_links: list[Any] = []
+    if (
+        req.chat_context.kind == "diagram"
+        and req.chat_context.id is not None
+    ):
+        try:
+            from app.agents.builtin.general.manifest import collect_repo_manifest
+
+            # Only collect when the workspace actually has a token — saves
+            # the DB join when there's nothing to expose anyway.
+            from app.services import workspace_service
+
+            token = await workspace_service.get_github_token(
+                db, req.workspace_id
+            )
+            if token:
+                repo_manifest_links = await collect_repo_manifest(
+                    req.chat_context.id, db
+                )
+        except Exception:  # noqa: BLE001 — manifest is best-effort
+            logger.warning("repo manifest collection failed", exc_info=True)
+            repo_manifest_links = []
+
     initial_state = _build_initial_state(
         req=req,
         session=session,
         active_draft_id=active_draft_id,
         clamped_mode=clamped_mode,
         existing_messages=existing_messages,
+        repo_manifest_links=repo_manifest_links,
     )
 
     # ── 9. Drive the graph ──
@@ -1169,6 +1197,7 @@ def _build_initial_state(
     active_draft_id: UUID | None,
     clamped_mode: Literal["full", "read_only"],
     existing_messages: list[dict],
+    repo_manifest_links: list[Any] | None = None,
 ) -> dict:
     """Compose the AgentState dict for graph entry."""
     # Strip the helper sequence key — graph nodes don't expect it.
@@ -1177,6 +1206,16 @@ def _build_initial_state(
         copy = {k: v for k, v in m.items() if k != "sequence"}
         history.append(copy)
     history.append({"role": "user", "content": req.message})
+
+    # Serialise repo manifest links so the state stays JSON-friendly across
+    # LangGraph checkpoints. The supervisor's render block accepts both the
+    # dict form and the live RepoLink instances.
+    serialised_manifest: list[dict] = []
+    for link in repo_manifest_links or []:
+        if hasattr(link, "model_dump"):
+            serialised_manifest.append(link.model_dump(mode="json"))
+        elif isinstance(link, dict):
+            serialised_manifest.append(link)
 
     return {
         "workspace_id": req.workspace_id,
@@ -1214,6 +1253,9 @@ def _build_initial_state(
         "tokens_out": 0,
         "forced_finalize": None,
         "budget_counters": {},
+        "repo_manifest": serialised_manifest,
+        "repo_context": None,
+        "repo_response": None,
     }
 
 
@@ -1345,11 +1387,15 @@ def _make_tool_executor(
                 }
 
         # --- Delegate to the full execute_tool wrapper ---
-        ctx = ToolContext(
-            db=db,
-            actor=actor,
-            workspace_id=workspace_id,
-            chat_context={
+        # Use the live ``state['chat_context']`` dict (when present) so the
+        # repo-tool layer can mutate ``_repo_cache`` and have the cached
+        # entries survive across tool calls within the same turn. Falling
+        # back to a fresh dict keeps tests / direct callers working.
+        live_chat_context = state.get("chat_context")
+        if isinstance(live_chat_context, dict):
+            tool_chat_context = live_chat_context
+        else:
+            tool_chat_context = {
                 "kind": chat_context.kind,
                 "id": str(chat_context.id) if chat_context.id else None,
                 "draft_id": (
@@ -1360,7 +1406,20 @@ def _make_tool_executor(
                     if chat_context.parent_diagram_id
                     else None
                 ),
-            },
+            }
+        # Repo tools read ``chat_context['repo_context']`` for the active
+        # repo target. Sub-agent runs that aren't ``repo_researcher`` either
+        # don't have it set (no-op) or have it from a prior repo turn (also
+        # safe — the repo tool list is gated on the node).
+        repo_context = state.get("repo_context")
+        if isinstance(repo_context, dict):
+            tool_chat_context = dict(tool_chat_context)
+            tool_chat_context["repo_context"] = repo_context
+        ctx = ToolContext(
+            db=db,
+            actor=actor,
+            workspace_id=workspace_id,
+            chat_context=tool_chat_context,
             session_id=state.get("session_id"),  # type: ignore[arg-type]
             agent_id=agent_id,
             agent_runtime_mode=mode,  # type: ignore[arg-type]
