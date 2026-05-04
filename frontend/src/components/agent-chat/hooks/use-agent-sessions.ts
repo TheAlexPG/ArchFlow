@@ -24,11 +24,18 @@ export interface AgentSessionDetail extends AgentSessionListItem {
   messages: AgentSessionMessage[]
 }
 
+// Mirrors backend ``MessageRead`` (app/api/v1/agent_sessions.py).  ``role``
+// can be more than user/assistant on the wire (system / tool …) — chat UI
+// callers filter to user/assistant only when reseeding the transcript.
 export interface AgentSessionMessage {
   id: string
-  role: 'user' | 'assistant'
-  content: string
+  sequence: number
+  role: 'user' | 'assistant' | 'system' | 'tool'
+  content_text: string | null
+  content_json: Record<string, unknown> | null
+  tool_call_id: string | null
   created_at: string
+  is_compacted: boolean
 }
 
 // ─── Hooks ──────────────────────────────────────────────────────────────────

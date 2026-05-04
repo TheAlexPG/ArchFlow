@@ -32,10 +32,19 @@ function useSessionHistoryLoader(): void {
   useEffect(() => {
     if (!activeSessionId || !data || !isFetched) return
     if (stream.sessionId === activeSessionId) return
-    stream.loadHistory(
-      data.messages.map((m) => ({ role: m.role, content: m.content })),
-      activeSessionId,
-    )
+    // Only seed user/assistant turns into the visible transcript —
+    // system / tool / compacted rows belong to LLM context, not the
+    // user-facing history. ``content_text`` is the canonical field on
+    // the wire (see backend MessageRead model).
+    const visible = data.messages
+      .filter(
+        (m): m is typeof m & { role: 'user' | 'assistant' } =>
+          (m.role === 'user' || m.role === 'assistant') &&
+          typeof m.content_text === 'string' &&
+          m.content_text.trim().length > 0,
+      )
+      .map((m) => ({ role: m.role, content: m.content_text as string }))
+    stream.loadHistory(visible, activeSessionId)
     // We deliberately re-run only when the session detail or selection
     // changes — stream identity is stable across renders.
     // eslint-disable-next-line react-hooks/exhaustive-deps
