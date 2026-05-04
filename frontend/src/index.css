@@ -404,6 +404,97 @@ select {
   100% { opacity: 1; transform: scale(1);    filter: blur(0); }
 }
 
+/* ─── Agent-chat motion primitives ────────────────────────────────────────── */
+/*
+ * One slow "I'm alive" heartbeat used by the node indicator and the
+ * bottom thinking pill. Driven via opacity so it doesn't trigger layout
+ * or mint a fresh GPU layer per cycle. ~1.6s feels intentional rather
+ * than spammy.
+ */
+@keyframes archflow-heartbeat {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 1; }
+}
+
+/*
+ * Single soft glow heartbeat for the active node badge — replaces the
+ * triple stack (animate-ping + shadow + three dots) that read as noise.
+ */
+@keyframes archflow-node-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 107, 53, 0.18); }
+  50%      { box-shadow: 0 0 0 4px rgba(255, 107, 53, 0.10); }
+}
+
+/*
+ * Indeterminate top-edge progress bar for in-flight tool cards.
+ * A 40%-wide coral sliver sweeps left→right; transform-only, no width
+ * thrash. cubic-bezier mimics a confident "still working" sweep instead
+ * of a linear loop.
+ */
+@keyframes archflow-tool-progress {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(250%); }
+}
+
+/*
+ * Calmer ring for the composer cancel button. The default Tailwind
+ * animate-ping pops 4× scale at full opacity which feels alarming next
+ * to a red button. This stays inside the button footprint and keeps
+ * opacity below 0.4.
+ */
+@keyframes archflow-cancel-ring {
+  0%   { transform: scale(1);    opacity: 0.5; }
+  100% { transform: scale(1.6);  opacity: 0;   }
+}
+
+/* ─── Markdown rhythm for assistant streaming text ────────────────────────── */
+/*
+ * The AssistantText container is .archflow-md. We give paragraphs and
+ * lists a touch more breathing room than the default `my-1` and ensure
+ * code blocks don't crowd surrounding text. Streaming tokens land word
+ * by word — the extra leading prevents the visual jitter of lines
+ * snapping closed as new content arrives.
+ */
+.archflow-md {
+  line-height: 1.55;
+}
+.archflow-md > * + * {
+  margin-top: 0.45rem;
+}
+.archflow-md p {
+  margin: 0;
+}
+.archflow-md p + p {
+  margin-top: 0.45rem;
+}
+.archflow-md ul,
+.archflow-md ol {
+  margin-top: 0.35rem;
+  margin-bottom: 0.35rem;
+}
+.archflow-md li + li {
+  margin-top: 0.15rem;
+}
+.archflow-md pre {
+  margin-top: 0.55rem;
+  margin-bottom: 0.55rem;
+}
+.archflow-md h1,
+.archflow-md h2,
+.archflow-md h3 {
+  margin-top: 0.85rem;
+  margin-bottom: 0.25rem;
+}
+.archflow-md h1:first-child,
+.archflow-md h2:first-child,
+.archflow-md h3:first-child {
+  margin-top: 0;
+}
+.archflow-md hr {
+  margin-top: 0.85rem;
+  margin-bottom: 0.85rem;
+}
+
 /* ─── Task 012: Add Object FAB + Popup component classes ──────────────────── */
 
 /*
