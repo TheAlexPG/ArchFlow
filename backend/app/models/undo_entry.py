@@ -61,11 +61,19 @@ class UndoEntry(Base, UUIDMixin):
     seq: Mapped[int] = mapped_column(BigInteger)
 
     target_type: Mapped[UndoTargetType] = mapped_column(
-        Enum(UndoTargetType, name="undo_target_type")
+        Enum(
+            UndoTargetType,
+            name="undo_target_type",
+            values_callable=lambda e: [v.value for v in e],
+        )
     )
     target_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
     action: Mapped[UndoAction] = mapped_column(
-        Enum(UndoAction, name="undo_action")
+        Enum(
+            UndoAction,
+            name="undo_action",
+            values_callable=lambda e: [v.value for v in e],
+        )
     )
 
     forward_summary: Mapped[str] = mapped_column(Text)
@@ -77,7 +85,11 @@ class UndoEntry(Base, UUIDMixin):
     coalesce_key: Mapped[str] = mapped_column(Text)
 
     state: Mapped[UndoState] = mapped_column(
-        Enum(UndoState, name="undo_state"),
+        Enum(
+            UndoState,
+            name="undo_state",
+            values_callable=lambda e: [v.value for v in e],
+        ),
         default=UndoState.ACTIVE,
     )
 
