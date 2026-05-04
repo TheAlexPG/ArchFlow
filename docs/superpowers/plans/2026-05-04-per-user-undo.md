@@ -1,0 +1,3305 @@
+# Per-user Undo Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Add per-user, per-diagram, server-backed undo & redo to the ArchFlow canvas, with separate stacks for live and each draft, capped at 100 entries / 3 days, coalesced on a 2-second window, and surfaced via Cmd+Z, toolbar buttons, and a click-to-here history popover.
+
+**Architecture:** Server-side `undo_entries` table. Each existing mutation service-call gets one new line that calls `undo_service.record(...)` after the DB write. Undo applies the inverse through the *same* mutation pipeline (unchanged ACL, activity_log, WS fanout). At undo time we capture the *current* state as the redo payload (Figma's trick). The frontend keeps a small Zustand cache + cursor; the truth lives server-side.
+
+**Tech Stack:** FastAPI + SQLAlchemy 2.0 async + Alembic (Postgres 16) + asyncpg + pytest-asyncio backend; React 18 + TypeScript + @xyflow/react + TanStack Query + Zustand + Vitest frontend; orval for typed API client.
+
+**Spec:** `docs/superpowers/specs/2026-05-04-per-user-undo-design.md`
+
+---
+
+## File Structure
+
+### Backend — new files
+
+| File | Responsibility |
+|---|---|
+| `backend/app/models/undo_entry.py` | SQLAlchemy model + enums |
+| `backend/app/schemas/undo.py` | Pydantic schemas (request/response shapes) |
+| `backend/app/services/undo_service.py` | Recording, coalescing, cap, undo/redo logic, history reader, sweeper |
+| `backend/app/services/restore_service.py` | `restore_<entity>(snapshot, id)` paths used only by delete-undo |
+| `backend/app/api/v1/undo.py` | 4 REST endpoints + history endpoint |
+| `backend/alembic/versions/<rev>_add_undo_entries.py` | Migration: undo_entries table + users.undo_settings JSONB |
+| `backend/tests/services/test_undo_service.py` | Unit tests for service |
+| `backend/tests/api/test_undo_endpoints.py` | API integration tests |
+| `backend/tests/scenarios/test_collab_undo.py` | Multi-user scenario tests |
+
+### Backend — modified files
+
+| File | Change |
+|---|---|
+| `backend/app/models/user.py` | Add `undo_settings: Mapped[dict]` JSONB column |
+| `backend/app/services/object_service.py` | Add `undo_service.record(...)` after each mutation; thread `actor_user_id`, `from_diagram_id`, `from_draft_id` through |
+| `backend/app/services/connection_service.py` | Same |
+| `backend/app/services/diagram_service.py` | Same (add_object, remove_object, update_position, update_size) |
+| `backend/app/services/comment_service.py` | Same — gated on caller's `undo_settings.include_comments_in_undo` |
+| `backend/app/services/draft_service.py` | On discard / merge: `DELETE FROM undo_entries WHERE draft_id = :did` |
+| `backend/app/api/v1/objects.py`, `connections.py`, `diagrams.py`, `comments.py` | Pass `actor_user_id`, `from_diagram_id`, `from_draft_id` from request to service |
+| `backend/app/schemas/object.py`, `connection.py`, `diagram.py`, `comment.py` | Add optional `from_diagram_id: UUID \| None`, `from_draft_id: UUID \| None` to mutation request bodies |
+| `backend/app/api/v1/__init__.py` | Mount `undo.py` router |
+| `backend/app/api/v1/users.py` (or wherever PATCH /users/me lives) | Accept `undo_settings` in update payload |
+
+### Frontend — new files
+
+| File | Responsibility |
+|---|---|
+| `frontend/src/stores/undo-store.ts` | Zustand: cursorSeq, undoCount, redoCount, recentEntries, isInFlight per (diagram, draft) context |
+| `frontend/src/hooks/use-undo.ts` | `useUndoController`, `useUndoMutation`, `useRedoMutation`, `useUndoTo`, `useDiagramHistory` |
+| `frontend/src/hooks/use-debounced-mutation.ts` | Generic debounce wrapper around React Query mutations (500ms idle, flush on blur) |
+| `frontend/src/components/canvas/UndoToolbarButtons.tsx` | Two buttons + popover trigger |
+| `frontend/src/components/canvas/HistoryPopover.tsx` | Timeline popover with click-to-here |
+| `frontend/src/hooks/use-undo.test.tsx`, `undo-store.test.ts`, `HistoryPopover.test.tsx`, `UndoToolbarButtons.test.tsx`, `use-debounced-mutation.test.ts` | Tests |
+
+### Frontend — modified files
+
+| File | Change |
+|---|---|
+| `frontend/src/components/canvas/ArchFlowCanvas.tsx` | Mount `useUndoController`, render toolbar buttons, pass `from_diagram_id` / `from_draft_id` into mutations |
+| `frontend/src/hooks/use-realtime.ts` | Handle `user.undo` / `user.redo` events |
+| `frontend/src/hooks/use-api.ts` | Apply `useDebouncedMutation` to inline name / edge label / description mutations |
+| `frontend/src/components/canvas/C4Node.tsx`, `C4Edge.tsx` | Use the debounced variant for inline-edit fields |
+| `frontend/src/lib/api/orval.gen.ts` | Regenerated from OpenAPI |
+
+---
+
+## Phase 1 — Backend foundation (Tasks 1–7)
+
+### Task 1: Alembic migration — `undo_entries` table + `users.undo_settings`
+
+**Files:**
+- Create: `backend/alembic/versions/<auto-generated>_add_undo_entries.py`
+- Modify: `backend/app/models/user.py`
+
+- [ ] **Step 1: Add `undo_settings` to User model**
+
+In `backend/app/models/user.py`, add the column alongside the existing fields:
+
+```python
+from sqlalchemy.dialects.postgresql import JSONB
+# ...
+
+class User(Base, UUIDMixin):
+    # ... existing fields ...
+    undo_settings: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, server_default="{}"
+    )
+```
+
+- [ ] **Step 2: Generate the migration**
+
+Run: `make db-migrate msg="add undo entries and user undo settings"`
+
+- [ ] **Step 3: Replace generated migration body with the real schema**
+
+Open the generated file under `backend/alembic/versions/`. Replace the autogenerated body with this — the autogen output won't include the indexes / enums correctly:
+
+```python
+"""add undo entries and user undo settings
+
+Revision ID: <keep-the-generated-id>
+Revises: <keep-the-generated-down-revision>
+"""
+from alembic import op
+import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
+
+revision = "<keep>"
+down_revision = "<keep>"
+branch_labels = None
+depends_on = None
+
+
+def upgrade() -> None:
+    target_type = postgresql.ENUM(
+        "object", "connection", "diagram_object", "edge_property", "comment",
+        name="undo_target_type",
+    )
+    target_type.create(op.get_bind(), checkfirst=True)
+
+    action = postgresql.ENUM(
+        "create", "update", "delete",
+        name="undo_action",
+    )
+    action.create(op.get_bind(), checkfirst=True)
+
+    state = postgresql.ENUM(
+        "active", "undone", "skipped",
+        name="undo_state",
+    )
+    state.create(op.get_bind(), checkfirst=True)
+
+    op.create_table(
+        "undo_entries",
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True,
+                  server_default=sa.text("gen_random_uuid()")),
+        sa.Column("workspace_id", postgresql.UUID(as_uuid=True),
+                  sa.ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False),
+        sa.Column("user_id", postgresql.UUID(as_uuid=True),
+                  sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
+        sa.Column("diagram_id", postgresql.UUID(as_uuid=True),
+                  sa.ForeignKey("diagrams.id", ondelete="CASCADE"), nullable=False),
+        sa.Column("draft_id", postgresql.UUID(as_uuid=True),
+                  sa.ForeignKey("drafts.id", ondelete="CASCADE"), nullable=True),
+        sa.Column("seq", sa.BigInteger, nullable=False),
+        sa.Column("target_type",
+                  postgresql.ENUM(name="undo_target_type", create_type=False),
+                  nullable=False),
+        sa.Column("target_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("action",
+                  postgresql.ENUM(name="undo_action", create_type=False),
+                  nullable=False),
+        sa.Column("forward_summary", sa.Text, nullable=False),
+        sa.Column("inverse_payload", postgresql.JSONB, nullable=False),
+        sa.Column("redo_payload", postgresql.JSONB, nullable=True),
+        sa.Column("after_state", postgresql.JSONB, nullable=True),
+        sa.Column("coalesce_key", sa.Text, nullable=False),
+        sa.Column("state",
+                  postgresql.ENUM(name="undo_state", create_type=False),
+                  nullable=False, server_default="active"),
+        sa.Column("created_at", sa.DateTime(timezone=True),
+                  server_default=sa.text("now()"), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True),
+                  server_default=sa.text("now()"), nullable=False),
+        sa.Column("undone_at", sa.DateTime(timezone=True), nullable=True),
+    )
+
+    op.create_index(
+        "ix_undo_entries_stack",
+        "undo_entries",
+        ["user_id", "diagram_id", "draft_id", sa.text("seq DESC")],
+    )
+    op.create_index(
+        "ix_undo_entries_coalesce",
+        "undo_entries",
+        ["user_id", "diagram_id", "draft_id", "coalesce_key",
+         sa.text("updated_at DESC")],
+        postgresql_where=sa.text("state = 'active'"),
+    )
+    op.create_index(
+        "ix_undo_entries_sweep",
+        "undo_entries",
+        ["workspace_id", "created_at"],
+    )
+    op.create_index(
+        "ix_undo_entries_target",
+        "undo_entries",
+        ["target_id", "target_type"],
+    )
+
+    op.add_column(
+        "users",
+        sa.Column("undo_settings", postgresql.JSONB,
+                  nullable=False, server_default=sa.text("'{}'::jsonb")),
+    )
+
+
+def downgrade() -> None:
+    op.drop_column("users", "undo_settings")
+    op.drop_index("ix_undo_entries_target", table_name="undo_entries")
+    op.drop_index("ix_undo_entries_sweep", table_name="undo_entries")
+    op.drop_index("ix_undo_entries_coalesce", table_name="undo_entries")
+    op.drop_index("ix_undo_entries_stack", table_name="undo_entries")
+    op.drop_table("undo_entries")
+    postgresql.ENUM(name="undo_state").drop(op.get_bind(), checkfirst=True)
+    postgresql.ENUM(name="undo_action").drop(op.get_bind(), checkfirst=True)
+    postgresql.ENUM(name="undo_target_type").drop(op.get_bind(), checkfirst=True)
+```
+
+- [ ] **Step 4: Run migration up**
+
+Run: `make db-upgrade`
+Expected: no errors. The new table and column appear in Postgres.
+
+- [ ] **Step 5: Verify down works**
+
+Run: `make db-downgrade && make db-upgrade`
+Expected: clean down + up cycle, no errors.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add backend/alembic/versions backend/app/models/user.py
+git commit -m "feat(undo): migration for undo_entries table and user.undo_settings"
+```
+
+---
+
+### Task 2: SQLAlchemy model — `UndoEntry`
+
+**Files:**
+- Create: `backend/app/models/undo_entry.py`
+- Modify: `backend/app/models/__init__.py`
+
+- [ ] **Step 1: Create the model**
+
+Create `backend/app/models/undo_entry.py`:
+
+```python
+import enum
+import uuid
+from datetime import datetime
+
+from sqlalchemy import BigInteger, DateTime, Enum, ForeignKey, Index, Text, func
+from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.models.base import Base, UUIDMixin
+
+
+class UndoTargetType(str, enum.Enum):
+    OBJECT = "object"
+    CONNECTION = "connection"
+    DIAGRAM_OBJECT = "diagram_object"
+    EDGE_PROPERTY = "edge_property"
+    COMMENT = "comment"
+
+
+class UndoAction(str, enum.Enum):
+    CREATE = "create"
+    UPDATE = "update"
+    DELETE = "delete"
+
+
+class UndoState(str, enum.Enum):
+    ACTIVE = "active"
+    UNDONE = "undone"
+    SKIPPED = "skipped"
+
+
+class UndoEntry(Base, UUIDMixin):
+    """One row per coalesced logical action by one user on one diagram.
+
+    See docs/superpowers/specs/2026-05-04-per-user-undo-design.md for the
+    full data model. The cursor is `MAX(seq) WHERE state='active'`,
+    derived — no separate cursor table.
+    """
+
+    __tablename__ = "undo_entries"
+
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+    )
+    diagram_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("diagrams.id", ondelete="CASCADE"),
+    )
+    draft_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("drafts.id", ondelete="CASCADE"),
+        nullable=True,
+        default=None,
+    )
+
+    seq: Mapped[int] = mapped_column(BigInteger)
+
+    target_type: Mapped[UndoTargetType] = mapped_column(
+        Enum(UndoTargetType, name="undo_target_type")
+    )
+    target_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    action: Mapped[UndoAction] = mapped_column(
+        Enum(UndoAction, name="undo_action")
+    )
+
+    forward_summary: Mapped[str] = mapped_column(Text)
+
+    inverse_payload: Mapped[dict] = mapped_column(JSONB)
+    redo_payload: Mapped[dict | None] = mapped_column(JSONB, default=None)
+    after_state: Mapped[dict | None] = mapped_column(JSONB, default=None)
+
+    coalesce_key: Mapped[str] = mapped_column(Text)
+
+    state: Mapped[UndoState] = mapped_column(
+        Enum(UndoState, name="undo_state"),
+        default=UndoState.ACTIVE,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    undone_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_undo_entries_stack",
+            "user_id", "diagram_id", "draft_id", seq.desc(),
+        ),
+        # The coalesce + sweep + target indexes are created in the migration
+        # with options the declarative API doesn't express cleanly (partial
+        # WHERE on coalesce, multi-column on sweep). They exist physically;
+        # they just don't appear here.
+    )
+```
+
+- [ ] **Step 2: Register in `__init__.py`**
+
+In `backend/app/models/__init__.py`, add:
+
+```python
+from app.models.undo_entry import UndoAction, UndoEntry, UndoState, UndoTargetType  # noqa: F401
+```
+
+- [ ] **Step 3: Verify import**
+
+Run: `cd backend && uv run python -c "from app.models.undo_entry import UndoEntry; print(UndoEntry.__tablename__)"`
+Expected: prints `undo_entries`.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add backend/app/models/undo_entry.py backend/app/models/__init__.py
+git commit -m "feat(undo): UndoEntry SQLAlchemy model"
+```
+
+---
+
+### Task 3: Pydantic schemas
+
+**Files:**
+- Create: `backend/app/schemas/undo.py`
+
+- [ ] **Step 1: Create the schemas file**
+
+```python
+"""Pydantic schemas for undo endpoints."""
+import uuid
+from datetime import datetime
+
+from pydantic import BaseModel, Field
+
+
+class UndoEntryRead(BaseModel):
+    id: uuid.UUID
+    seq: int
+    state: str
+    target_type: str
+    target_id: uuid.UUID
+    action: str
+    forward_summary: str
+    created_at: datetime
+    updated_at: datetime
+    undone_at: datetime | None = None
+
+    class Config:
+        from_attributes = True
+
+
+class UndoActionRequest(BaseModel):
+    """POST /diagrams/{id}/undo body."""
+    expected_seq: int | None = Field(
+        default=None,
+        description="Optimistic-concurrency guard. Server returns 409 if "
+                    "the actual top-of-stack seq differs.",
+    )
+
+
+class UndoActionResponse(BaseModel):
+    undone_entry: UndoEntryRead | None = None
+    redone_entry: UndoEntryRead | None = None
+    cursor_seq: int | None
+    remaining_undo_count: int
+    redo_count: int
+
+
+class UndoHistoryResponse(BaseModel):
+    entries: list[UndoEntryRead]
+    cursor_seq: int | None
+
+
+class UndoToRequest(BaseModel):
+    expected_path_length: int | None = None
+
+
+class UndoToResponse(BaseModel):
+    applied: list[dict]   # [{ entry_id: UUID, direction: "undo"|"redo" }]
+    cursor_seq: int | None
+```
+
+- [ ] **Step 2: Verify import**
+
+Run: `cd backend && uv run python -c "from app.schemas.undo import UndoEntryRead, UndoActionRequest; print('ok')"`
+Expected: prints `ok`.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add backend/app/schemas/undo.py
+git commit -m "feat(undo): pydantic schemas"
+```
+
+---
+
+### Task 4: `undo_service.record()` — coalescing + cap
+
+**Files:**
+- Create: `backend/app/services/undo_service.py`
+- Create: `backend/tests/services/test_undo_service.py`
+
+- [ ] **Step 1: Write the failing test for basic record + read**
+
+Create `backend/tests/services/test_undo_service.py`:
+
+```python
+"""Unit tests for undo_service. Each test starts with a clean DB.
+Fixtures `db`, `user`, `workspace`, `diagram` come from
+backend/tests/conftest.py (existing)."""
+import pytest
+
+from app.models.undo_entry import UndoAction, UndoState, UndoTargetType
+from app.services import undo_service
+
+
+@pytest.mark.asyncio
+async def test_record_creates_entry(db, user, workspace, diagram):
+    entry = await undo_service.record(
+        db,
+        user_id=user.id,
+        workspace_id=workspace.id,
+        diagram_id=diagram.id,
+        draft_id=None,
+        target_type=UndoTargetType.OBJECT,
+        target_id=diagram.id,  # placeholder UUID, irrelevant for shape test
+        action=UndoAction.UPDATE,
+        forward_summary="Renamed Foo → Bar",
+        inverse_payload={"before": {"name": "Foo"}},
+        after_state={"name": "Bar"},
+        coalesce_key="object:abc:name",
+    )
+    await db.commit()
+    assert entry.id is not None
+    assert entry.seq == 1
+    assert entry.state == UndoState.ACTIVE
+    assert entry.inverse_payload == {"before": {"name": "Foo"}}
+```
+
+- [ ] **Step 2: Run test, verify it fails with ImportError**
+
+Run: `cd backend && uv run pytest tests/services/test_undo_service.py::test_record_creates_entry -v`
+Expected: FAIL — `ModuleNotFoundError: No module named 'app.services.undo_service'`.
+
+- [ ] **Step 3: Implement minimal `undo_service.record()`**
+
+Create `backend/app/services/undo_service.py`:
+
+```python
+"""Per-user undo/redo service.
+
+See docs/superpowers/specs/2026-05-04-per-user-undo-design.md.
+"""
+from __future__ import annotations
+
+import uuid
+from datetime import datetime, timedelta, timezone
+
+from sqlalchemy import and_, delete, func, select, text, update
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.undo_entry import UndoAction, UndoEntry, UndoState, UndoTargetType
+
+
+COALESCE_WINDOW_SECONDS = 2
+RETENTION_DAYS = 3
+PER_CONTEXT_CAP = 100
+MAX_SKIP_HOPS = 5  # for missing-target / Phase-2 stale cases
+
+
+async def record(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    workspace_id: uuid.UUID,
+    diagram_id: uuid.UUID,
+    draft_id: uuid.UUID | None,
+    target_type: UndoTargetType,
+    target_id: uuid.UUID,
+    action: UndoAction,
+    forward_summary: str,
+    inverse_payload: dict,
+    coalesce_key: str,
+    after_state: dict | None = None,
+) -> UndoEntry:
+    """Record an undo entry. Coalesces with a recent same-key entry from the
+    same user/context if within COALESCE_WINDOW_SECONDS. Otherwise inserts a
+    new entry and evicts the oldest beyond PER_CONTEXT_CAP. Also clears any
+    `state='undone'` redo entries for this context (a new action invalidates
+    redo)."""
+    await _clear_redo(db, user_id, diagram_id, draft_id)
+
+    coalesced = await _try_coalesce(
+        db, user_id, diagram_id, draft_id, coalesce_key, forward_summary,
+        after_state,
+    )
+    if coalesced is not None:
+        return coalesced
+
+    next_seq = await _next_seq(db, user_id, diagram_id, draft_id)
+    entry = UndoEntry(
+        workspace_id=workspace_id,
+        user_id=user_id,
+        diagram_id=diagram_id,
+        draft_id=draft_id,
+        seq=next_seq,
+        target_type=target_type,
+        target_id=target_id,
+        action=action,
+        forward_summary=forward_summary,
+        inverse_payload=inverse_payload,
+        after_state=after_state,
+        coalesce_key=coalesce_key,
+        state=UndoState.ACTIVE,
+    )
+    db.add(entry)
+    await db.flush()
+
+    await _enforce_cap(db, user_id, diagram_id, draft_id)
+    return entry
+
+
+async def _clear_redo(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    diagram_id: uuid.UUID,
+    draft_id: uuid.UUID | None,
+) -> None:
+    await db.execute(
+        delete(UndoEntry).where(
+            UndoEntry.user_id == user_id,
+            UndoEntry.diagram_id == diagram_id,
+            _draft_eq(draft_id),
+            UndoEntry.state == UndoState.UNDONE,
+        )
+    )
+
+
+async def _try_coalesce(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    diagram_id: uuid.UUID,
+    draft_id: uuid.UUID | None,
+    coalesce_key: str,
+    forward_summary: str,
+    after_state: dict | None,
+) -> UndoEntry | None:
+    cutoff = datetime.now(timezone.utc) - timedelta(seconds=COALESCE_WINDOW_SECONDS)
+    q = (
+        select(UndoEntry)
+        .where(
+            UndoEntry.user_id == user_id,
+            UndoEntry.diagram_id == diagram_id,
+            _draft_eq(draft_id),
+            UndoEntry.coalesce_key == coalesce_key,
+            UndoEntry.state == UndoState.ACTIVE,
+            UndoEntry.updated_at > cutoff,
+        )
+        .order_by(UndoEntry.seq.desc())
+        .limit(1)
+    )
+    res = await db.execute(q)
+    recent = res.scalar_one_or_none()
+    if recent is None:
+        return None
+    # Merge: keep recent.inverse_payload (= state before the FIRST edit in
+    # the window), update updated_at + forward_summary + after_state to
+    # reflect the latest change.
+    recent.updated_at = datetime.now(timezone.utc)
+    recent.forward_summary = forward_summary
+    if after_state is not None:
+        recent.after_state = after_state
+    await db.flush()
+    return recent
+
+
+async def _next_seq(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    diagram_id: uuid.UUID,
+    draft_id: uuid.UUID | None,
+) -> int:
+    q = select(func.coalesce(func.max(UndoEntry.seq), 0)).where(
+        UndoEntry.user_id == user_id,
+        UndoEntry.diagram_id == diagram_id,
+        _draft_eq(draft_id),
+    )
+    res = await db.execute(q)
+    return int(res.scalar_one()) + 1
+
+
+async def _enforce_cap(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    diagram_id: uuid.UUID,
+    draft_id: uuid.UUID | None,
+) -> None:
+    # Use a scalar subquery to delete everything past the most-recent CAP rows.
+    sub = (
+        select(UndoEntry.id)
+        .where(
+            UndoEntry.user_id == user_id,
+            UndoEntry.diagram_id == diagram_id,
+            _draft_eq(draft_id),
+        )
+        .order_by(UndoEntry.seq.desc())
+        .offset(PER_CONTEXT_CAP)
+    ).scalar_subquery()
+    await db.execute(delete(UndoEntry).where(UndoEntry.id.in_(sub)))
+
+
+def _draft_eq(draft_id: uuid.UUID | None):
+    """Generate a `draft_id IS NULL` or `draft_id = :did` predicate.
+    `IS NOT DISTINCT FROM` would be cleaner but SQLAlchemy doesn't expose
+    it portably."""
+    if draft_id is None:
+        return UndoEntry.draft_id.is_(None)
+    return UndoEntry.draft_id == draft_id
+```
+
+- [ ] **Step 4: Run the test, verify it passes**
+
+Run: `cd backend && uv run pytest tests/services/test_undo_service.py::test_record_creates_entry -v`
+Expected: PASS.
+
+- [ ] **Step 5: Add coalescing tests**
+
+Append to `backend/tests/services/test_undo_service.py`:
+
+```python
+import asyncio
+
+
+@pytest.mark.asyncio
+async def test_record_coalesces_within_window(db, user, workspace, diagram):
+    e1 = await undo_service.record(
+        db, user_id=user.id, workspace_id=workspace.id,
+        diagram_id=diagram.id, draft_id=None,
+        target_type=UndoTargetType.OBJECT, target_id=diagram.id,
+        action=UndoAction.UPDATE, forward_summary="P",
+        inverse_payload={"before": {"name": ""}},
+        coalesce_key="object:abc:name",
+        after_state={"name": "P"},
+    )
+    e2 = await undo_service.record(
+        db, user_id=user.id, workspace_id=workspace.id,
+        diagram_id=diagram.id, draft_id=None,
+        target_type=UndoTargetType.OBJECT, target_id=diagram.id,
+        action=UndoAction.UPDATE, forward_summary="Pa",
+        inverse_payload={"before": {"name": "P"}},  # would be wrong on its own
+        coalesce_key="object:abc:name",
+        after_state={"name": "Pa"},
+    )
+    await db.commit()
+    assert e1.id == e2.id
+    # inverse_payload kept from FIRST record (= pre-window state)
+    assert e2.inverse_payload == {"before": {"name": ""}}
+    assert e2.forward_summary == "Pa"
+    assert e2.after_state == {"name": "Pa"}
+
+
+@pytest.mark.asyncio
+async def test_record_does_not_coalesce_different_field(db, user, workspace, diagram):
+    e1 = await undo_service.record(
+        db, user_id=user.id, workspace_id=workspace.id,
+        diagram_id=diagram.id, draft_id=None,
+        target_type=UndoTargetType.OBJECT, target_id=diagram.id,
+        action=UndoAction.UPDATE, forward_summary="rename",
+        inverse_payload={}, coalesce_key="object:abc:name",
+    )
+    e2 = await undo_service.record(
+        db, user_id=user.id, workspace_id=workspace.id,
+        diagram_id=diagram.id, draft_id=None,
+        target_type=UndoTargetType.OBJECT, target_id=diagram.id,
+        action=UndoAction.UPDATE, forward_summary="status",
+        inverse_payload={}, coalesce_key="object:abc:status",
+    )
+    assert e1.id != e2.id
+    assert e2.seq == e1.seq + 1
+
+
+@pytest.mark.asyncio
+async def test_record_does_not_coalesce_different_user(db, user, user_other,
+                                                       workspace, diagram):
+    e1 = await undo_service.record(
+        db, user_id=user.id, workspace_id=workspace.id,
+        diagram_id=diagram.id, draft_id=None,
+        target_type=UndoTargetType.OBJECT, target_id=diagram.id,
+        action=UndoAction.UPDATE, forward_summary="x",
+        inverse_payload={}, coalesce_key="object:abc:name",
+    )
+    e2 = await undo_service.record(
+        db, user_id=user_other.id, workspace_id=workspace.id,
+        diagram_id=diagram.id, draft_id=None,
+        target_type=UndoTargetType.OBJECT, target_id=diagram.id,
+        action=UndoAction.UPDATE, forward_summary="x",
+        inverse_payload={}, coalesce_key="object:abc:name",
+    )
+    assert e1.id != e2.id
+```
+
+- [ ] **Step 6: Run all undo_service tests**
+
+Run: `cd backend && uv run pytest tests/services/test_undo_service.py -v`
+Expected: PASS — 4 tests.
+
+- [ ] **Step 7: Add the cap eviction test**
+
+Append:
+
+```python
+@pytest.mark.asyncio
+async def test_record_evicts_beyond_cap(db, user, workspace, diagram, monkeypatch):
+    monkeypatch.setattr(undo_service, "PER_CONTEXT_CAP", 3)
+    ids = []
+    for i in range(5):
+        e = await undo_service.record(
+            db, user_id=user.id, workspace_id=workspace.id,
+            diagram_id=diagram.id, draft_id=None,
+            target_type=UndoTargetType.OBJECT, target_id=diagram.id,
+            action=UndoAction.UPDATE, forward_summary=f"a{i}",
+            inverse_payload={}, coalesce_key=f"object:abc:f{i}",
+        )
+        ids.append(e.id)
+    # Only the last 3 survive
+    surviving = (await db.execute(
+        select(UndoEntry.id).where(UndoEntry.user_id == user.id)
+    )).scalars().all()
+    assert set(surviving) == set(ids[-3:])
+```
+
+- [ ] **Step 8: Run, expect PASS**
+
+Run: `cd backend && uv run pytest tests/services/test_undo_service.py -v`
+Expected: PASS — 5 tests. If you don't yet have a `user_other` fixture, add one to `backend/tests/conftest.py` modeled on the existing `user` fixture.
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add backend/app/services/undo_service.py backend/tests/services/test_undo_service.py backend/tests/conftest.py
+git commit -m "feat(undo): undo_service.record with coalescing and cap"
+```
+
+---
+
+### Task 5: `undo_service.undo()` and `redo()`
+
+**Files:**
+- Modify: `backend/app/services/undo_service.py`
+- Modify: `backend/tests/services/test_undo_service.py`
+- Create: `backend/app/services/restore_service.py`
+
+- [ ] **Step 1: Write the failing test for a basic update-undo round-trip**
+
+Append to test file:
+
+```python
+from app.models.object import ModelObject
+
+
+@pytest.mark.asyncio
+async def test_undo_update_restores_previous_value(
+    db, user, workspace, diagram
+):
+    obj = ModelObject(name="After", type="system", workspace_id=workspace.id)
+    db.add(obj)
+    await db.flush()
+
+    await undo_service.record(
+        db, user_id=user.id, workspace_id=workspace.id,
+        diagram_id=diagram.id, draft_id=None,
+        target_type=UndoTargetType.OBJECT, target_id=obj.id,
+        action=UndoAction.UPDATE,
+        forward_summary="Renamed Before → After",
+        inverse_payload={"before": {"name": "Before"}},
+        after_state={"name": "After"},
+        coalesce_key=f"object:{obj.id}:name",
+    )
+
+    res = await undo_service.undo(
+        db, user_id=user.id, diagram_id=diagram.id, draft_id=None,
+        actor_user=user,
+    )
+
+    await db.refresh(obj)
+    assert obj.name == "Before"
+    assert res.undone_entry.state == UndoState.UNDONE
+    # Figma's trick: redo_payload captures CURRENT state at undo time
+    assert res.undone_entry.redo_payload == {"name": "After"}
+```
+
+- [ ] **Step 2: Run test, expect failure**
+
+Run: `cd backend && uv run pytest tests/services/test_undo_service.py::test_undo_update_restores_previous_value -v`
+Expected: FAIL — `AttributeError: module 'app.services.undo_service' has no attribute 'undo'`.
+
+- [ ] **Step 3: Implement `undo()`, `redo()`, and `_apply_inverse()`**
+
+Append to `backend/app/services/undo_service.py`:
+
+```python
+from dataclasses import dataclass
+
+from app.models.connection import Connection
+from app.models.diagram import DiagramObject
+from app.models.object import ModelObject
+from app.services import restore_service
+
+
+class UndoStackEmpty(Exception): ...
+class UndoTargetMissing(Exception):
+    def __init__(self, entry: UndoEntry):
+        self.entry = entry
+
+
+@dataclass
+class UndoResult:
+    undone_entry: UndoEntry | None
+    redone_entry: UndoEntry | None
+    cursor_seq: int | None
+    remaining_undo_count: int
+    redo_count: int
+
+
+async def undo(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    diagram_id: uuid.UUID,
+    draft_id: uuid.UUID | None,
+    actor_user,
+    expected_seq: int | None = None,
+    hops_remaining: int = MAX_SKIP_HOPS,
+) -> UndoResult:
+    entry = await _top_active(db, user_id, diagram_id, draft_id)
+    if entry is None:
+        raise UndoStackEmpty()
+    if expected_seq is not None and entry.seq != expected_seq:
+        raise UndoConcurrencyError(actual_seq=entry.seq)
+
+    # Snapshot current state into redo_payload BEFORE applying inverse
+    # (Figma's trick).
+    current = await _snapshot_target(db, entry.target_type, entry.target_id)
+    entry.redo_payload = current
+
+    try:
+        await _apply(
+            db, entry, payload=entry.inverse_payload,
+            actor_user=actor_user, direction="undo",
+        )
+    except UndoTargetMissing:
+        # Target gone — mark skipped, recurse to next entry up to MAX_SKIP_HOPS.
+        entry.state = UndoState.SKIPPED
+        entry.undone_at = datetime.now(timezone.utc)
+        await db.flush()
+        if hops_remaining <= 0:
+            return await _stack_summary(db, user_id, diagram_id, draft_id,
+                                        undone=entry, redone=None)
+        return await undo(
+            db, user_id=user_id, diagram_id=diagram_id, draft_id=draft_id,
+            actor_user=actor_user, expected_seq=None,
+            hops_remaining=hops_remaining - 1,
+        )
+
+    entry.state = UndoState.UNDONE
+    entry.undone_at = datetime.now(timezone.utc)
+    await db.flush()
+    return await _stack_summary(db, user_id, diagram_id, draft_id,
+                                undone=entry, redone=None)
+
+
+async def redo(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    diagram_id: uuid.UUID,
+    draft_id: uuid.UUID | None,
+    actor_user,
+    expected_seq: int | None = None,
+) -> UndoResult:
+    entry = await _top_undone(db, user_id, diagram_id, draft_id)
+    if entry is None:
+        raise UndoStackEmpty()
+    if expected_seq is not None and entry.seq != expected_seq:
+        raise UndoConcurrencyError(actual_seq=entry.seq)
+
+    if entry.redo_payload is None:
+        # Defensive — should always be populated at undo time.
+        raise RuntimeError(f"Undone entry {entry.id} has no redo_payload")
+
+    await _apply(
+        db, entry, payload={"after": entry.redo_payload},
+        actor_user=actor_user, direction="redo",
+    )
+    entry.state = UndoState.ACTIVE
+    entry.undone_at = None
+    await db.flush()
+    return await _stack_summary(db, user_id, diagram_id, draft_id,
+                                undone=None, redone=entry)
+
+
+class UndoConcurrencyError(Exception):
+    def __init__(self, actual_seq: int):
+        self.actual_seq = actual_seq
+
+
+async def _top_active(db, user_id, diagram_id, draft_id):
+    q = (
+        select(UndoEntry)
+        .where(
+            UndoEntry.user_id == user_id,
+            UndoEntry.diagram_id == diagram_id,
+            _draft_eq(draft_id),
+            UndoEntry.state == UndoState.ACTIVE,
+            UndoEntry.created_at > _retention_cutoff(),
+        )
+        .order_by(UndoEntry.seq.desc()).limit(1)
+    )
+    return (await db.execute(q)).scalar_one_or_none()
+
+
+async def _top_undone(db, user_id, diagram_id, draft_id):
+    q = (
+        select(UndoEntry)
+        .where(
+            UndoEntry.user_id == user_id,
+            UndoEntry.diagram_id == diagram_id,
+            _draft_eq(draft_id),
+            UndoEntry.state == UndoState.UNDONE,
+        )
+        .order_by(UndoEntry.seq.asc()).limit(1)
+    )
+    # Smallest seq among undone = the most recent undo, the next to redo.
+    return (await db.execute(q)).scalar_one_or_none()
+
+
+def _retention_cutoff():
+    return datetime.now(timezone.utc) - timedelta(days=RETENTION_DAYS)
+
+
+async def _snapshot_target(
+    db: AsyncSession, target_type: UndoTargetType, target_id: uuid.UUID
+) -> dict:
+    """Snapshot the user-visible fields of the target. Reuses
+    activity_service._snapshot to stay consistent with the audit log."""
+    from app.services import activity_service
+    if target_type == UndoTargetType.OBJECT:
+        obj = await db.get(ModelObject, target_id)
+    elif target_type == UndoTargetType.CONNECTION:
+        obj = await db.get(Connection, target_id)
+    elif target_type == UndoTargetType.DIAGRAM_OBJECT:
+        obj = await db.get(DiagramObject, target_id)
+    elif target_type == UndoTargetType.COMMENT:
+        from app.models.comment import Comment
+        obj = await db.get(Comment, target_id)
+    else:
+        obj = None  # edge_property — folded into connection
+    if obj is None:
+        return {}
+    return activity_service._snapshot(obj)  # noqa: SLF001 — intentional reuse
+
+
+async def _apply(
+    db, entry: UndoEntry, *, payload: dict, actor_user, direction: str,
+) -> None:
+    """Apply an inverse (or redo) payload through the same mutation paths a
+    normal edit would use. Raises UndoTargetMissing when the target row no
+    longer exists."""
+    if entry.action == UndoAction.UPDATE:
+        await _apply_update(db, entry, payload, actor_user)
+    elif entry.action == UndoAction.CREATE:
+        # The "create" entry's inverse is delete. On redo, the payload's
+        # "after" is the snapshot — recreate.
+        if direction == "undo":
+            await _apply_delete(db, entry, actor_user)
+        else:
+            await _apply_restore(db, entry, payload, actor_user)
+    elif entry.action == UndoAction.DELETE:
+        if direction == "undo":
+            await _apply_restore(db, entry, payload, actor_user)
+        else:
+            await _apply_delete(db, entry, actor_user)
+
+
+async def _apply_update(db, entry, payload, actor_user):
+    target = await _load_target(db, entry.target_type, entry.target_id)
+    if target is None:
+        raise UndoTargetMissing(entry)
+    fields = payload.get("before") or payload.get("after") or {}
+    for field, value in fields.items():
+        setattr(target, field, value)
+    await db.flush()
+
+
+async def _apply_delete(db, entry, actor_user):
+    target = await _load_target(db, entry.target_type, entry.target_id)
+    if target is None:
+        raise UndoTargetMissing(entry)
+    await db.delete(target)
+    await db.flush()
+
+
+async def _apply_restore(db, entry, payload, actor_user):
+    snapshot = entry.inverse_payload.get("snapshot") or payload.get("after")
+    if snapshot is None:
+        raise RuntimeError(
+            f"Cannot restore entry {entry.id}: no snapshot in inverse_payload"
+        )
+    await restore_service.restore(
+        db, target_type=entry.target_type,
+        target_id=entry.target_id, snapshot=snapshot,
+    )
+
+
+async def _load_target(db, target_type: UndoTargetType, target_id: uuid.UUID):
+    if target_type == UndoTargetType.OBJECT:
+        return await db.get(ModelObject, target_id)
+    if target_type == UndoTargetType.CONNECTION:
+        return await db.get(Connection, target_id)
+    if target_type == UndoTargetType.DIAGRAM_OBJECT:
+        return await db.get(DiagramObject, target_id)
+    if target_type == UndoTargetType.COMMENT:
+        from app.models.comment import Comment
+        return await db.get(Comment, target_id)
+    return None
+
+
+async def _stack_summary(
+    db, user_id, diagram_id, draft_id, *,
+    undone: UndoEntry | None, redone: UndoEntry | None,
+) -> UndoResult:
+    cursor_q = select(func.max(UndoEntry.seq)).where(
+        UndoEntry.user_id == user_id,
+        UndoEntry.diagram_id == diagram_id,
+        _draft_eq(draft_id),
+        UndoEntry.state == UndoState.ACTIVE,
+        UndoEntry.created_at > _retention_cutoff(),
+    )
+    cursor_seq = (await db.execute(cursor_q)).scalar()
+
+    counts_q = select(UndoEntry.state, func.count()).where(
+        UndoEntry.user_id == user_id,
+        UndoEntry.diagram_id == diagram_id,
+        _draft_eq(draft_id),
+        UndoEntry.created_at > _retention_cutoff(),
+    ).group_by(UndoEntry.state)
+    counts = {state: n for state, n in (await db.execute(counts_q)).all()}
+
+    return UndoResult(
+        undone_entry=undone,
+        redone_entry=redone,
+        cursor_seq=cursor_seq,
+        remaining_undo_count=counts.get(UndoState.ACTIVE, 0),
+        redo_count=counts.get(UndoState.UNDONE, 0),
+    )
+```
+
+- [ ] **Step 4: Create the minimal `restore_service` skeleton**
+
+Create `backend/app/services/restore_service.py`:
+
+```python
+"""Restore deleted entities by reapplying a snapshot with the same UUID.
+
+Used only by undo of delete actions. We do not call existing service
+.create_*() functions because those allocate fresh UUIDs and we MUST
+keep the original id so other diagrams referencing it still work.
+"""
+import uuid
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.comment import Comment
+from app.models.connection import Connection
+from app.models.diagram import DiagramObject
+from app.models.object import ModelObject
+from app.models.undo_entry import UndoTargetType
+
+
+async def restore(
+    db: AsyncSession,
+    *,
+    target_type: UndoTargetType,
+    target_id: uuid.UUID,
+    snapshot: dict,
+) -> None:
+    if target_type == UndoTargetType.OBJECT:
+        await _restore_object(db, target_id, snapshot)
+    elif target_type == UndoTargetType.CONNECTION:
+        await _restore_connection(db, target_id, snapshot)
+    elif target_type == UndoTargetType.DIAGRAM_OBJECT:
+        await _restore_diagram_object(db, target_id, snapshot)
+    elif target_type == UndoTargetType.COMMENT:
+        await _restore_comment(db, target_id, snapshot)
+
+
+def _materialise(model_cls, target_id: uuid.UUID, snapshot: dict):
+    """Build a model instance with the original UUID and snapshot fields,
+    skipping computed/virtual columns."""
+    columns = {c.key for c in model_cls.__table__.columns}
+    payload = {k: v for k, v in snapshot.items() if k in columns}
+    payload["id"] = target_id
+    return model_cls(**payload)
+
+
+async def _restore_object(db, target_id, snapshot):
+    db.add(_materialise(ModelObject, target_id, snapshot))
+    # Restore DiagramObject placements if captured (stored under "_placements").
+    for placement in snapshot.get("_placements", []):
+        db.add(_materialise(DiagramObject, uuid.UUID(placement["id"]), placement))
+    await db.flush()
+
+
+async def _restore_connection(db, target_id, snapshot):
+    db.add(_materialise(Connection, target_id, snapshot))
+    await db.flush()
+
+
+async def _restore_diagram_object(db, target_id, snapshot):
+    db.add(_materialise(DiagramObject, target_id, snapshot))
+    await db.flush()
+
+
+async def _restore_comment(db, target_id, snapshot):
+    db.add(_materialise(Comment, target_id, snapshot))
+    await db.flush()
+```
+
+- [ ] **Step 5: Run undo round-trip test**
+
+Run: `cd backend && uv run pytest tests/services/test_undo_service.py::test_undo_update_restores_previous_value -v`
+Expected: PASS.
+
+- [ ] **Step 6: Add redo round-trip test**
+
+Append:
+
+```python
+@pytest.mark.asyncio
+async def test_redo_after_undo_restores_after_state(db, user, workspace, diagram):
+    obj = ModelObject(name="After", type="system", workspace_id=workspace.id)
+    db.add(obj)
+    await db.flush()
+
+    await undo_service.record(
+        db, user_id=user.id, workspace_id=workspace.id,
+        diagram_id=diagram.id, draft_id=None,
+        target_type=UndoTargetType.OBJECT, target_id=obj.id,
+        action=UndoAction.UPDATE,
+        forward_summary="Renamed Before → After",
+        inverse_payload={"before": {"name": "Before"}},
+        after_state={"name": "After"},
+        coalesce_key=f"object:{obj.id}:name",
+    )
+    await undo_service.undo(
+        db, user_id=user.id, diagram_id=diagram.id, draft_id=None,
+        actor_user=user,
+    )
+    await db.refresh(obj)
+    assert obj.name == "Before"
+
+    await undo_service.redo(
+        db, user_id=user.id, diagram_id=diagram.id, draft_id=None,
+        actor_user=user,
+    )
+    await db.refresh(obj)
+    assert obj.name == "After"
+
+
+@pytest.mark.asyncio
+async def test_redo_uses_current_state_not_pre_undo_state(
+    db, user, workspace, diagram
+):
+    """Figma's trick: if Bob changed the value between Alice's edit and
+    Alice's undo, redo should land at *current* (Bob's) value, not Alice's
+    original after-value."""
+    obj = ModelObject(name="Alice's value", type="system",
+                       workspace_id=workspace.id)
+    db.add(obj)
+    await db.flush()
+
+    await undo_service.record(
+        db, user_id=user.id, workspace_id=workspace.id,
+        diagram_id=diagram.id, draft_id=None,
+        target_type=UndoTargetType.OBJECT, target_id=obj.id,
+        action=UndoAction.UPDATE,
+        forward_summary="Alice rename",
+        inverse_payload={"before": {"name": "Original"}},
+        after_state={"name": "Alice's value"},
+        coalesce_key=f"object:{obj.id}:name",
+    )
+
+    # Bob changes the value before Alice undoes
+    obj.name = "Bob's value"
+    await db.flush()
+
+    await undo_service.undo(
+        db, user_id=user.id, diagram_id=diagram.id, draft_id=None,
+        actor_user=user,
+    )
+    await db.refresh(obj)
+    # Alice's undo set it back to "Original"
+    assert obj.name == "Original"
+
+    await undo_service.redo(
+        db, user_id=user.id, diagram_id=diagram.id, draft_id=None,
+        actor_user=user,
+    )
+    await db.refresh(obj)
+    # Redo restores Bob's value, NOT Alice's.
+    assert obj.name == "Bob's value"
+```
+
+- [ ] **Step 7: Run, expect PASS**
+
+Run: `cd backend && uv run pytest tests/services/test_undo_service.py -v`
+Expected: PASS — all tests, including the two new ones.
+
+- [ ] **Step 8: Add target-missing skip test**
+
+Append:
+
+```python
+@pytest.mark.asyncio
+async def test_undo_skips_when_target_missing(db, user, workspace, diagram):
+    obj = ModelObject(name="A", type="system", workspace_id=workspace.id)
+    db.add(obj)
+    await db.flush()
+    obj_id = obj.id
+
+    await undo_service.record(
+        db, user_id=user.id, workspace_id=workspace.id,
+        diagram_id=diagram.id, draft_id=None,
+        target_type=UndoTargetType.OBJECT, target_id=obj_id,
+        action=UndoAction.UPDATE,
+        forward_summary="rename",
+        inverse_payload={"before": {"name": "B"}},
+        coalesce_key=f"object:{obj_id}:name",
+    )
+    # Add a second entry behind it that we expect to fall through to
+    other = ModelObject(name="X", type="system", workspace_id=workspace.id)
+    db.add(other)
+    await db.flush()
+    await undo_service.record(
+        db, user_id=user.id, workspace_id=workspace.id,
+        diagram_id=diagram.id, draft_id=None,
+        target_type=UndoTargetType.OBJECT, target_id=other.id,
+        action=UndoAction.UPDATE,
+        forward_summary="rename other",
+        inverse_payload={"before": {"name": "Y"}},
+        coalesce_key=f"object:{other.id}:name",
+    )
+    # Wait, sequencing: most recent entry is `other`. Test the FIRST entry
+    # is the one that becomes orphaned. Reverse the setup.
+    # (See the test at the top of this commit; you may need to rebuild
+    # the fixtures so the orphaned entry is the most recent.)
+
+    # Delete the FIRST target manually
+    await db.delete(obj)
+    await db.flush()
+
+    # Bring the orphan to top: undo the harmless one first to step over it,
+    # but that's not the scenario we want. Better: only one entry whose
+    # target is missing. Drop the `other` setup above.
+
+    # Final scenario: stack has [orphan]. Undo should mark skipped.
+```
+
+(That test was getting overcomplicated — replace it with the simpler version below.)
+
+- [ ] **Step 9: Replace with the simpler scenario**
+
+Replace the `test_undo_skips_when_target_missing` you just appended with:
+
+```python
+@pytest.mark.asyncio
+async def test_undo_skips_when_target_missing_simple(db, user, workspace, diagram):
+    obj = ModelObject(name="A", type="system", workspace_id=workspace.id)
+    db.add(obj)
+    await db.flush()
+    obj_id = obj.id
+
+    await undo_service.record(
+        db, user_id=user.id, workspace_id=workspace.id,
+        diagram_id=diagram.id, draft_id=None,
+        target_type=UndoTargetType.OBJECT, target_id=obj_id,
+        action=UndoAction.UPDATE,
+        forward_summary="rename",
+        inverse_payload={"before": {"name": "B"}},
+        coalesce_key=f"object:{obj_id}:name",
+    )
+    await db.delete(obj)
+    await db.flush()
+
+    res = await undo_service.undo(
+        db, user_id=user.id, diagram_id=diagram.id, draft_id=None,
+        actor_user=user,
+    )
+    # Stack is now empty (skipped + nothing else); undone_entry was the
+    # skipped one or None.
+    assert res.remaining_undo_count == 0
+    skipped = (await db.execute(
+        select(UndoEntry).where(UndoEntry.target_id == obj_id)
+    )).scalar_one()
+    assert skipped.state == UndoState.SKIPPED
+```
+
+- [ ] **Step 10: Run all tests**
+
+Run: `cd backend && uv run pytest tests/services/test_undo_service.py -v`
+Expected: PASS.
+
+- [ ] **Step 11: Commit**
+
+```bash
+git add backend/app/services/undo_service.py backend/app/services/restore_service.py backend/tests/services/test_undo_service.py
+git commit -m "feat(undo): undo + redo with Figma redo-snapshot trick and skip-on-missing"
+```
+
+---
+
+### Task 6: History reader + sweeper
+
+**Files:**
+- Modify: `backend/app/services/undo_service.py`
+- Modify: `backend/tests/services/test_undo_service.py`
+
+- [ ] **Step 1: Write tests for `history()` and the 3-day filter**
+
+Append to test file:
+
+```python
+@pytest.mark.asyncio
+async def test_history_returns_entries_in_reverse_seq_order(
+    db, user, workspace, diagram
+):
+    for i in range(3):
+        await undo_service.record(
+            db, user_id=user.id, workspace_id=workspace.id,
+            diagram_id=diagram.id, draft_id=None,
+            target_type=UndoTargetType.OBJECT, target_id=diagram.id,
+            action=UndoAction.UPDATE,
+            forward_summary=f"a{i}",
+            inverse_payload={}, coalesce_key=f"k{i}",
+        )
+    h = await undo_service.history(
+        db, user_id=user.id, diagram_id=diagram.id, draft_id=None, limit=10,
+    )
+    assert [e.forward_summary for e in h.entries] == ["a2", "a1", "a0"]
+    assert h.cursor_seq == 3
+
+
+@pytest.mark.asyncio
+async def test_history_excludes_entries_older_than_retention(
+    db, user, workspace, diagram
+):
+    e = await undo_service.record(
+        db, user_id=user.id, workspace_id=workspace.id,
+        diagram_id=diagram.id, draft_id=None,
+        target_type=UndoTargetType.OBJECT, target_id=diagram.id,
+        action=UndoAction.UPDATE,
+        forward_summary="ancient",
+        inverse_payload={}, coalesce_key="k",
+    )
+    e.created_at = datetime.now(timezone.utc) - timedelta(days=4)
+    await db.flush()
+
+    h = await undo_service.history(
+        db, user_id=user.id, diagram_id=diagram.id, draft_id=None, limit=10,
+    )
+    assert h.entries == []
+```
+
+- [ ] **Step 2: Run, expect failure**
+
+Run: `cd backend && uv run pytest tests/services/test_undo_service.py::test_history_returns_entries_in_reverse_seq_order -v`
+Expected: FAIL — `history` not defined.
+
+- [ ] **Step 3: Implement `history()` and `sweep()`**
+
+Append to `undo_service.py`:
+
+```python
+@dataclass
+class UndoHistory:
+    entries: list[UndoEntry]
+    cursor_seq: int | None
+
+
+async def history(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    diagram_id: uuid.UUID,
+    draft_id: uuid.UUID | None,
+    limit: int = 50,
+) -> UndoHistory:
+    q = (
+        select(UndoEntry)
+        .where(
+            UndoEntry.user_id == user_id,
+            UndoEntry.diagram_id == diagram_id,
+            _draft_eq(draft_id),
+            UndoEntry.created_at > _retention_cutoff(),
+        )
+        .order_by(UndoEntry.seq.desc())
+        .limit(limit)
+    )
+    entries = list((await db.execute(q)).scalars().all())
+
+    cursor_q = select(func.max(UndoEntry.seq)).where(
+        UndoEntry.user_id == user_id,
+        UndoEntry.diagram_id == diagram_id,
+        _draft_eq(draft_id),
+        UndoEntry.state == UndoState.ACTIVE,
+        UndoEntry.created_at > _retention_cutoff(),
+    )
+    cursor_seq = (await db.execute(cursor_q)).scalar()
+
+    return UndoHistory(entries=entries, cursor_seq=cursor_seq)
+
+
+async def sweep_old_entries(db: AsyncSession) -> int:
+    """Hard-delete rows older than RETENTION_DAYS. Intended for a daily job.
+    Returns rows deleted."""
+    cutoff = _retention_cutoff()
+    result = await db.execute(
+        delete(UndoEntry).where(UndoEntry.created_at < cutoff)
+    )
+    await db.commit()
+    return result.rowcount or 0
+```
+
+- [ ] **Step 4: Run all tests**
+
+Run: `cd backend && uv run pytest tests/services/test_undo_service.py -v`
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add backend/app/services/undo_service.py backend/tests/services/test_undo_service.py
+git commit -m "feat(undo): history reader and retention sweeper"
+```
+
+---
+
+### Task 7: `undo_to(entry_id)` — atomic multi-step
+
+**Files:**
+- Modify: `backend/app/services/undo_service.py`
+- Modify: `backend/tests/services/test_undo_service.py`
+
+- [ ] **Step 1: Write the failing test**
+
+Append:
+
+```python
+@pytest.mark.asyncio
+async def test_undo_to_walks_back_three_steps(db, user, workspace, diagram):
+    objs = []
+    for n in ("A", "B", "C"):
+        o = ModelObject(name=n, type="system", workspace_id=workspace.id)
+        db.add(o); await db.flush(); objs.append(o)
+        await undo_service.record(
+            db, user_id=user.id, workspace_id=workspace.id,
+            diagram_id=diagram.id, draft_id=None,
+            target_type=UndoTargetType.OBJECT, target_id=o.id,
+            action=UndoAction.UPDATE,
+            forward_summary=f"Renamed something to {n}",
+            inverse_payload={"before": {"name": "old"}},
+            after_state={"name": n},
+            coalesce_key=f"object:{o.id}:name",
+        )
+    # Find the entry that targets `objs[0]` (the "A" entry — oldest).
+    target_entry = (await db.execute(
+        select(UndoEntry).where(UndoEntry.target_id == objs[0].id)
+    )).scalar_one()
+
+    res = await undo_service.undo_to(
+        db, user_id=user.id, diagram_id=diagram.id, draft_id=None,
+        actor_user=user, entry_id=target_entry.id,
+    )
+    assert len(res.applied) == 3
+    for o in objs:
+        await db.refresh(o)
+        assert o.name == "old"
+```
+
+- [ ] **Step 2: Run, expect failure**
+
+Run: `cd backend && uv run pytest tests/services/test_undo_service.py::test_undo_to_walks_back_three_steps -v`
+Expected: FAIL — `undo_to` not defined.
+
+- [ ] **Step 3: Implement `undo_to()`**
+
+Append to `undo_service.py`:
+
+```python
+@dataclass
+class UndoToResult:
+    applied: list[dict]
+    cursor_seq: int | None
+
+
+class UndoEntryNotFound(Exception): ...
+
+
+async def undo_to(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    diagram_id: uuid.UUID,
+    draft_id: uuid.UUID | None,
+    actor_user,
+    entry_id: uuid.UUID,
+    expected_path_length: int | None = None,
+) -> UndoToResult:
+    """Undo or redo until `entry_id` becomes the new top of the active stack.
+    Atomic — runs in the existing transaction; the caller commits.
+    """
+    target = await db.get(UndoEntry, entry_id)
+    if target is None or target.user_id != user_id or target.diagram_id != diagram_id:
+        raise UndoEntryNotFound()
+
+    # Direction: if target is currently active and below cursor, we are
+    # undoing down to it (target itself stays active). If target is undone
+    # and above cursor, we are redoing up to it.
+    if target.state == UndoState.ACTIVE:
+        # Undo every entry with seq > target.seq AND state='active'.
+        applied = await _undo_until(db, user_id, diagram_id, draft_id,
+                                     target.seq, actor_user)
+    else:
+        applied = await _redo_until(db, user_id, diagram_id, draft_id,
+                                     target.seq, actor_user)
+
+    if expected_path_length is not None and len(applied) != expected_path_length:
+        # Caller's view of the stack was stale — raise to roll back txn.
+        raise UndoConcurrencyError(actual_seq=target.seq)
+
+    summary = await _stack_summary(db, user_id, diagram_id, draft_id,
+                                   undone=None, redone=None)
+    return UndoToResult(applied=applied, cursor_seq=summary.cursor_seq)
+
+
+async def _undo_until(db, user_id, diagram_id, draft_id, target_seq, actor_user):
+    applied = []
+    while True:
+        top = await _top_active(db, user_id, diagram_id, draft_id)
+        if top is None or top.seq <= target_seq:
+            return applied
+        await undo(
+            db, user_id=user_id, diagram_id=diagram_id, draft_id=draft_id,
+            actor_user=actor_user,
+        )
+        applied.append({"entry_id": str(top.id), "direction": "undo"})
+
+
+async def _redo_until(db, user_id, diagram_id, draft_id, target_seq, actor_user):
+    applied = []
+    while True:
+        top = await _top_undone(db, user_id, diagram_id, draft_id)
+        if top is None or top.seq > target_seq:
+            return applied
+        await redo(
+            db, user_id=user_id, diagram_id=diagram_id, draft_id=draft_id,
+            actor_user=actor_user,
+        )
+        applied.append({"entry_id": str(top.id), "direction": "redo"})
+```
+
+- [ ] **Step 4: Run, expect PASS**
+
+Run: `cd backend && uv run pytest tests/services/test_undo_service.py::test_undo_to_walks_back_three_steps -v`
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add backend/app/services/undo_service.py backend/tests/services/test_undo_service.py
+git commit -m "feat(undo): undo_to atomic multi-step"
+```
+
+---
+
+## Phase 2 — Backend integration (Tasks 8–11)
+
+### Task 8: REST endpoints
+
+**Files:**
+- Create: `backend/app/api/v1/undo.py`
+- Modify: `backend/app/api/v1/__init__.py`
+- Create: `backend/tests/api/test_undo_endpoints.py`
+
+- [ ] **Step 1: Write the failing test**
+
+Create `backend/tests/api/test_undo_endpoints.py`:
+
+```python
+import pytest
+from httpx import AsyncClient
+
+
+@pytest.mark.asyncio
+async def test_undo_returns_204_on_empty_stack(
+    client: AsyncClient, auth_headers, diagram
+):
+    res = await client.post(
+        f"/api/v1/diagrams/{diagram.id}/undo",
+        headers=auth_headers, json={},
+    )
+    assert res.status_code == 204
+```
+
+- [ ] **Step 2: Run, expect failure**
+
+Run: `cd backend && uv run pytest tests/api/test_undo_endpoints.py -v`
+Expected: FAIL — 404 (route not registered).
+
+- [ ] **Step 3: Implement the routes**
+
+Create `backend/app/api/v1/undo.py`:
+
+```python
+import uuid
+from fastapi import APIRouter, Depends, HTTPException, Response, status
+
+from app.api.deps import get_current_user, get_db
+from app.api.permissions_dep import require_diagram_edit
+from app.models.user import User
+from app.schemas.undo import (
+    UndoActionRequest, UndoActionResponse, UndoEntryRead,
+    UndoHistoryResponse, UndoToRequest, UndoToResponse,
+)
+from app.services import undo_service
+from app.services.undo_service import (
+    UndoConcurrencyError, UndoEntryNotFound, UndoStackEmpty,
+)
+
+router = APIRouter(prefix="/diagrams/{diagram_id}", tags=["undo"])
+
+
+@router.post("/undo", response_model=UndoActionResponse | None)
+async def undo_endpoint(
+    diagram_id: uuid.UUID,
+    body: UndoActionRequest,
+    draft_id: uuid.UUID | None = None,
+    user: User = Depends(get_current_user),
+    db = Depends(get_db),
+    _ = Depends(require_diagram_edit),
+):
+    try:
+        result = await undo_service.undo(
+            db, user_id=user.id, diagram_id=diagram_id, draft_id=draft_id,
+            actor_user=user, expected_seq=body.expected_seq,
+        )
+    except UndoStackEmpty:
+        return Response(status_code=204)
+    except UndoConcurrencyError as e:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "undo_seq_mismatch", "actual_seq": e.actual_seq},
+        )
+
+    await db.commit()
+    return UndoActionResponse(
+        undone_entry=UndoEntryRead.model_validate(result.undone_entry)
+            if result.undone_entry else None,
+        redone_entry=None,
+        cursor_seq=result.cursor_seq,
+        remaining_undo_count=result.remaining_undo_count,
+        redo_count=result.redo_count,
+    )
+
+
+@router.post("/redo", response_model=UndoActionResponse | None)
+async def redo_endpoint(
+    diagram_id: uuid.UUID,
+    body: UndoActionRequest,
+    draft_id: uuid.UUID | None = None,
+    user: User = Depends(get_current_user),
+    db = Depends(get_db),
+    _ = Depends(require_diagram_edit),
+):
+    try:
+        result = await undo_service.redo(
+            db, user_id=user.id, diagram_id=diagram_id, draft_id=draft_id,
+            actor_user=user, expected_seq=body.expected_seq,
+        )
+    except UndoStackEmpty:
+        return Response(status_code=204)
+    except UndoConcurrencyError as e:
+        raise HTTPException(409, {"code": "redo_seq_mismatch",
+                                   "actual_seq": e.actual_seq})
+
+    await db.commit()
+    return UndoActionResponse(
+        undone_entry=None,
+        redone_entry=UndoEntryRead.model_validate(result.redone_entry)
+            if result.redone_entry else None,
+        cursor_seq=result.cursor_seq,
+        remaining_undo_count=result.remaining_undo_count,
+        redo_count=result.redo_count,
+    )
+
+
+@router.get("/history", response_model=UndoHistoryResponse)
+async def history_endpoint(
+    diagram_id: uuid.UUID,
+    draft_id: uuid.UUID | None = None,
+    limit: int = 50,
+    user: User = Depends(get_current_user),
+    db = Depends(get_db),
+    _ = Depends(require_diagram_edit),
+):
+    h = await undo_service.history(
+        db, user_id=user.id, diagram_id=diagram_id, draft_id=draft_id,
+        limit=limit,
+    )
+    return UndoHistoryResponse(
+        entries=[UndoEntryRead.model_validate(e) for e in h.entries],
+        cursor_seq=h.cursor_seq,
+    )
+
+
+@router.post("/undo-to/{entry_id}", response_model=UndoToResponse)
+async def undo_to_endpoint(
+    diagram_id: uuid.UUID,
+    entry_id: uuid.UUID,
+    body: UndoToRequest,
+    draft_id: uuid.UUID | None = None,
+    user: User = Depends(get_current_user),
+    db = Depends(get_db),
+    _ = Depends(require_diagram_edit),
+):
+    try:
+        res = await undo_service.undo_to(
+            db, user_id=user.id, diagram_id=diagram_id, draft_id=draft_id,
+            actor_user=user, entry_id=entry_id,
+            expected_path_length=body.expected_path_length,
+        )
+    except UndoEntryNotFound:
+        raise HTTPException(404, {"code": "undo_entry_not_found"})
+    except UndoConcurrencyError as e:
+        raise HTTPException(409, {"code": "undo_to_path_mismatch",
+                                   "actual_seq": e.actual_seq})
+    await db.commit()
+    return UndoToResponse(applied=res.applied, cursor_seq=res.cursor_seq)
+```
+
+- [ ] **Step 4: Mount the router**
+
+In `backend/app/api/v1/__init__.py`, add:
+
+```python
+from app.api.v1 import undo
+api_router.include_router(undo.router)
+```
+
+- [ ] **Step 5: Run, expect PASS**
+
+Run: `cd backend && uv run pytest tests/api/test_undo_endpoints.py -v`
+Expected: PASS — empty-stack returns 204.
+
+- [ ] **Step 6: Add the rest of the integration tests**
+
+Append to `test_undo_endpoints.py`:
+
+```python
+@pytest.mark.asyncio
+async def test_undo_403_without_edit_access(
+    client: AsyncClient, viewer_auth_headers, diagram
+):
+    res = await client.post(
+        f"/api/v1/diagrams/{diagram.id}/undo",
+        headers=viewer_auth_headers, json={},
+    )
+    assert res.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_undo_409_on_seq_mismatch(
+    client: AsyncClient, auth_headers, diagram, recorded_entry
+):
+    res = await client.post(
+        f"/api/v1/diagrams/{diagram.id}/undo",
+        headers=auth_headers,
+        json={"expected_seq": 999},
+    )
+    assert res.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_redo_204_after_new_action_clears_redo(
+    client: AsyncClient, auth_headers, diagram, recorded_entry, db, user, workspace,
+):
+    # Undo the entry, then record a fresh entry — that fresh entry triggers
+    # `_clear_redo`. Subsequent /redo should be 204.
+    await client.post(f"/api/v1/diagrams/{diagram.id}/undo",
+                       headers=auth_headers, json={})
+    # Fake a new mutation by recording another undo entry directly.
+    from app.services import undo_service
+    from app.models.undo_entry import UndoTargetType, UndoAction
+    await undo_service.record(
+        db, user_id=user.id, workspace_id=workspace.id,
+        diagram_id=diagram.id, draft_id=None,
+        target_type=UndoTargetType.OBJECT, target_id=diagram.id,
+        action=UndoAction.UPDATE, forward_summary="new action",
+        inverse_payload={}, coalesce_key="zzz",
+    )
+    await db.commit()
+
+    res = await client.post(f"/api/v1/diagrams/{diagram.id}/redo",
+                             headers=auth_headers, json={})
+    assert res.status_code == 204
+```
+
+The `recorded_entry`, `viewer_auth_headers`, and `client` fixtures should follow the existing test conventions in `backend/tests/conftest.py` and `backend/tests/api/conftest.py`. If the `recorded_entry` fixture doesn't yet exist, add a small one that records a single update entry on the test diagram.
+
+- [ ] **Step 7: Run all API tests**
+
+Run: `cd backend && uv run pytest tests/api/test_undo_endpoints.py -v`
+Expected: PASS.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add backend/app/api/v1/undo.py backend/app/api/v1/__init__.py backend/tests/api/test_undo_endpoints.py backend/tests/conftest.py
+git commit -m "feat(undo): REST endpoints for undo, redo, history, undo-to"
+```
+
+---
+
+### Task 9: Wire recording into mutation services + thread context through API
+
+**Files:**
+- Modify: `backend/app/services/object_service.py`
+- Modify: `backend/app/services/connection_service.py`
+- Modify: `backend/app/services/diagram_service.py`
+- Modify: `backend/app/services/comment_service.py`
+- Modify: `backend/app/schemas/object.py`, `connection.py`, `diagram.py`, `comment.py`
+- Modify: `backend/app/api/v1/objects.py`, `connections.py`, `diagrams.py`, `comments.py`
+
+This task touches 14 mutation sites. Do them one service at a time, run the existing service test suite after each to make sure you haven't regressed.
+
+- [ ] **Step 1: Add `from_diagram_id` and `from_draft_id` to mutation schemas**
+
+In `backend/app/schemas/object.py`, add to `ObjectCreate` and `ObjectUpdate`:
+
+```python
+from uuid import UUID
+
+class ObjectCreate(BaseModel):
+    # ... existing fields ...
+    from_diagram_id: UUID | None = None  # source diagram for per-user undo
+    from_draft_id: UUID | None = None
+```
+
+Repeat for `ObjectUpdate`. Then do the same in `connection.py`, `diagram.py` (where they affect `DiagramObject` placement schemas), `comment.py`.
+
+- [ ] **Step 2: Add `actor_user`, `from_diagram_id`, `from_draft_id` to service signatures**
+
+In `backend/app/services/object_service.py`, change `update_object` to accept these and call `undo_service.record(...)`:
+
+```python
+async def update_object(
+    db: AsyncSession,
+    obj: ModelObject,
+    data: ObjectUpdate,
+    *,
+    actor_user: User | None = None,
+    from_diagram_id: uuid.UUID | None = None,
+    from_draft_id: uuid.UUID | None = None,
+) -> ModelObject:
+    # ... existing body, unchanged through the activity_service.log_updated
+    # call, including the `before` and `after` snapshots ...
+    if (
+        actor_user is not None
+        and from_diagram_id is not None
+        and obj.workspace_id is not None
+    ):
+        diff = activity_service.diff_snapshots(before, after)
+        if diff:  # don't record no-op edits
+            inverse = {"before": {k: v["before"] for k, v in diff.items()}}
+            after_state = {k: v["after"] for k, v in diff.items()}
+            from app.models.undo_entry import UndoTargetType, UndoAction
+            from app.services import undo_service
+            await undo_service.record(
+                db,
+                user_id=actor_user.id,
+                workspace_id=obj.workspace_id,
+                diagram_id=from_diagram_id,
+                draft_id=from_draft_id,
+                target_type=UndoTargetType.OBJECT,
+                target_id=obj.id,
+                action=UndoAction.UPDATE,
+                forward_summary=summarise_object_diff(obj, diff),
+                inverse_payload=inverse,
+                after_state=after_state,
+                coalesce_key=f"object:{obj.id}:{','.join(sorted(diff.keys()))}",
+            )
+    return obj
+
+
+def summarise_object_diff(obj: ModelObject, diff: dict) -> str:
+    """Human-readable label for the history popover. Max ~80 chars."""
+    fields = ", ".join(sorted(diff.keys()))
+    name = (obj.name or "?")[:40]
+    return f"Edited {name} — {fields}"[:80]
+```
+
+Same pattern for `create_object` (action=CREATE, inverse_payload={"target_id": str(obj.id)}, coalesce_key=f"object:{obj.id}:create") and `delete_object` (snapshot the entity + placements before delete, action=DELETE, inverse_payload={"snapshot": ..., "id": str(obj.id)}, coalesce_key=f"object:{obj.id}:delete").
+
+- [ ] **Step 3: Thread the new params through `objects.py` API routes**
+
+In `backend/app/api/v1/objects.py`, every mutation route extracts `from_diagram_id`/`from_draft_id` from the request body and passes them along with the current `user` to the service:
+
+```python
+@router.put("/{object_id}", response_model=ObjectRead)
+async def update_object_route(
+    object_id: uuid.UUID,
+    data: ObjectUpdate,
+    user: User = Depends(get_current_user),
+    db = Depends(get_db),
+):
+    obj = await object_service.get_object(db, object_id)
+    if obj is None:
+        raise HTTPException(404)
+    return await object_service.update_object(
+        db, obj, data,
+        actor_user=user,
+        from_diagram_id=data.from_diagram_id,
+        from_draft_id=data.from_draft_id,
+    )
+```
+
+Repeat for create + delete. Note: `ObjectDelete` doesn't currently exist as a body schema — for DELETE routes accept `from_diagram_id` and `from_draft_id` as query params instead:
+
+```python
+@router.delete("/{object_id}")
+async def delete_object_route(
+    object_id: uuid.UUID,
+    from_diagram_id: uuid.UUID | None = None,
+    from_draft_id: uuid.UUID | None = None,
+    user: User = Depends(get_current_user),
+    db = Depends(get_db),
+):
+    ...
+```
+
+- [ ] **Step 4: Run object_service tests**
+
+Run: `cd backend && uv run pytest tests/services/test_object_service.py tests/api/test_objects.py -v`
+Expected: PASS — no regressions on existing object tests.
+
+- [ ] **Step 5: Repeat for `connection_service.py`**
+
+Same pattern for `create_connection`, `update_connection`, `delete_connection`, `flip_connection`. For flip, the `coalesce_key` is `connection:{id}:flip` and the inverse is to flip again — the `inverse_payload` is just `{}` (no payload data needed).
+
+- [ ] **Step 6: Repeat for `diagram_service.py`**
+
+Apply to `add_object_to_diagram`, `remove_object_from_diagram`, `update_position`, `update_size`. Position and size hit `target_type=DIAGRAM_OBJECT` with `coalesce_key=f"diagram_object:{do.id}:position"` and `:size` respectively.
+
+- [ ] **Step 7: Repeat for `comment_service.py` — gated on user toggle**
+
+```python
+if (
+    actor_user is not None
+    and from_diagram_id is not None
+    and (actor_user.undo_settings or {}).get("include_comments_in_undo")
+):
+    # record undo entry for this comment mutation
+    ...
+```
+
+- [ ] **Step 8: Run the full backend suite**
+
+Run: `cd backend && make test-backend` (or `uv run pytest tests -v`)
+Expected: PASS — all existing tests, plus the undo service & endpoint tests.
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add backend/app/services backend/app/schemas backend/app/api/v1
+git commit -m "feat(undo): record undo entries from each canvas mutation site"
+```
+
+---
+
+### Task 10: WS events `user.undo` / `user.redo` + emit on undo/redo
+
+**Files:**
+- Modify: `backend/app/realtime/manager.py`
+- Modify: `backend/app/api/v1/undo.py`
+- Modify: `backend/tests/api/test_undo_endpoints.py`
+
+- [ ] **Step 1: Confirm there's a per-user channel (or add one)**
+
+Open `backend/app/realtime/manager.py` and check whether an existing per-user fanout helper exists (analogous to `fire_and_forget_publish_diagram`). If not, add:
+
+```python
+async def fire_and_forget_publish_user(user_id: uuid.UUID, payload: dict) -> None:
+    """Fan out a payload to all connected sockets for a single user."""
+    asyncio.create_task(
+        manager.publish(f"user:{user_id}", json.dumps(payload))
+    )
+```
+
+The exact name and shape should mirror the existing diagram fanout helper — look at how it's used in `backend/app/api/v1/notifications.py` (notifications already publish per-user).
+
+- [ ] **Step 2: Emit `user.undo` and `user.redo` from the endpoints**
+
+In `backend/app/api/v1/undo.py`, after the successful undo/redo result and `db.commit()`:
+
+```python
+from app.realtime.manager import fire_and_forget_publish_user
+
+# inside undo_endpoint, after db.commit():
+fire_and_forget_publish_user(user.id, {
+    "type": "user.undo",
+    "diagram_id": str(diagram_id),
+    "draft_id": str(draft_id) if draft_id else None,
+    "entry_id": str(result.undone_entry.id) if result.undone_entry else None,
+    "cursor_seq": result.cursor_seq,
+    "redo_count": result.redo_count,
+})
+```
+
+Symmetric in `redo_endpoint` with `"type": "user.redo"`.
+
+- [ ] **Step 3: Test that the event fires**
+
+Append to `test_undo_endpoints.py`:
+
+```python
+@pytest.mark.asyncio
+async def test_undo_emits_user_undo_event(
+    client, auth_headers, diagram, recorded_entry, mock_publisher,
+):
+    """`mock_publisher` patches `fire_and_forget_publish_user`."""
+    await client.post(f"/api/v1/diagrams/{diagram.id}/undo",
+                       headers=auth_headers, json={})
+    types = [c.kwargs["payload"]["type"] for c in mock_publisher.user_calls]
+    assert "user.undo" in types
+```
+
+If `mock_publisher` doesn't exist, add a small fixture in `tests/conftest.py` that monkeypatches the publisher and records calls.
+
+- [ ] **Step 4: Run, expect PASS**
+
+Run: `cd backend && uv run pytest tests/api/test_undo_endpoints.py -v`
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add backend/app/realtime/manager.py backend/app/api/v1/undo.py backend/tests/api backend/tests/conftest.py
+git commit -m "feat(undo): emit user.undo and user.redo WebSocket events"
+```
+
+---
+
+### Task 11: Draft hooks + comment toggle endpoint + sweeper cron
+
+**Files:**
+- Modify: `backend/app/services/draft_service.py`
+- Modify: `backend/app/api/v1/users.py` (or wherever PATCH /users/me lives)
+- Create: `backend/app/jobs/undo_sweeper.py` (small script)
+- Create: `backend/tests/scenarios/test_collab_undo.py` (skeleton)
+
+- [ ] **Step 1: On draft discard / merge, drop that draft's entries**
+
+In `backend/app/services/draft_service.py`, find the discard and merge functions. After the existing logic, add:
+
+```python
+from sqlalchemy import delete as sa_delete
+from app.models.undo_entry import UndoEntry
+
+await db.execute(sa_delete(UndoEntry).where(UndoEntry.draft_id == draft.id))
+```
+
+- [ ] **Step 2: Test the cleanup**
+
+Append to `backend/tests/services/test_draft_service.py` (or create if missing):
+
+```python
+@pytest.mark.asyncio
+async def test_discarding_draft_drops_its_undo_entries(
+    db, user, workspace, diagram, draft,
+):
+    from app.services import undo_service, draft_service
+    from app.models.undo_entry import UndoTargetType, UndoAction, UndoEntry
+    from sqlalchemy import select
+
+    await undo_service.record(
+        db, user_id=user.id, workspace_id=workspace.id,
+        diagram_id=diagram.id, draft_id=draft.id,
+        target_type=UndoTargetType.OBJECT, target_id=diagram.id,
+        action=UndoAction.UPDATE, forward_summary="x",
+        inverse_payload={}, coalesce_key="k",
+    )
+    # Sanity
+    n_before = (await db.execute(
+        select(UndoEntry).where(UndoEntry.draft_id == draft.id)
+    )).all()
+    assert len(n_before) == 1
+
+    await draft_service.discard_draft(db, draft)
+    await db.commit()
+
+    n_after = (await db.execute(
+        select(UndoEntry).where(UndoEntry.draft_id == draft.id)
+    )).all()
+    assert n_after == []
+```
+
+- [ ] **Step 3: Allow PATCH /users/me to update `undo_settings`**
+
+Find the existing user-update endpoint (search for `PATCH` and `UserUpdate` in `backend/app/api/v1/`). Add `undo_settings: dict | None = None` to the `UserUpdate` schema, and in the route assign it to `user.undo_settings` if present.
+
+- [ ] **Step 4: Add a one-shot sweeper script**
+
+Create `backend/app/jobs/undo_sweeper.py`:
+
+```python
+"""Hard-delete undo entries older than the retention window. Schedule via
+cron / a cloud scheduler — once daily is enough."""
+import asyncio
+
+from app.core.db import async_session_factory
+from app.services import undo_service
+
+
+async def main() -> None:
+    async with async_session_factory() as db:
+        deleted = await undo_service.sweep_old_entries(db)
+        print(f"undo_sweeper: deleted {deleted} entries")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+Add a Make target in `Makefile`:
+
+```makefile
+db-sweep-undo:
+	cd backend && uv run python -m app.jobs.undo_sweeper
+```
+
+- [ ] **Step 5: Run all backend tests**
+
+Run: `cd backend && make test-backend`
+Expected: PASS.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add backend Makefile
+git commit -m "feat(undo): draft hooks, undo_settings PATCH, sweeper job"
+```
+
+---
+
+## Phase 3 — Frontend foundation (Tasks 12–15)
+
+### Task 12: Regenerate the typed API client
+
+**Files:**
+- Modify: `frontend/src/lib/api/orval.gen.ts` (auto-generated)
+
+- [ ] **Step 1: Make sure the backend is running so OpenAPI is reachable**
+
+Run: `make dev-backend` (in another terminal) and verify `http://localhost:8000/openapi.json` returns the new undo routes.
+
+- [ ] **Step 2: Regenerate**
+
+Run: `make api-codegen`
+Expected: orval emits typed hooks for `undo`, `redo`, `getDiagramHistory`, `undoTo`. They show up in the generated client.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add frontend/src/lib/api
+git commit -m "chore(api): regen client for undo endpoints"
+```
+
+---
+
+### Task 13: Zustand `undo-store`
+
+**Files:**
+- Create: `frontend/src/stores/undo-store.ts`
+- Create: `frontend/src/stores/undo-store.test.ts`
+
+- [ ] **Step 1: Write the failing test**
+
+Create `frontend/src/stores/undo-store.test.ts`:
+
+```ts
+import { describe, expect, it, beforeEach } from 'vitest';
+import { useUndoStore } from './undo-store';
+
+const ctx = 'diagram-A:live';
+
+describe('undo-store', () => {
+  beforeEach(() => useUndoStore.getState().reset());
+
+  it('starts empty for any context', () => {
+    const s = useUndoStore.getState().getStackInfo(ctx);
+    expect(s.cursorSeq).toBeNull();
+    expect(s.undoCount).toBe(0);
+    expect(s.redoCount).toBe(0);
+  });
+
+  it('setStackInfo merges fields without clobbering', () => {
+    useUndoStore.getState().setStackInfo(ctx, { undoCount: 5 });
+    useUndoStore.getState().setStackInfo(ctx, { redoCount: 2 });
+    const s = useUndoStore.getState().getStackInfo(ctx);
+    expect(s.undoCount).toBe(5);
+    expect(s.redoCount).toBe(2);
+  });
+
+  it('applyUserUndoEvent updates cursor and counts', () => {
+    useUndoStore.getState().applyUserUndoEvent(ctx, {
+      cursor_seq: 12, redo_count: 3,
+    });
+    const s = useUndoStore.getState().getStackInfo(ctx);
+    expect(s.cursorSeq).toBe(12);
+    expect(s.redoCount).toBe(3);
+  });
+});
+```
+
+- [ ] **Step 2: Run, expect failure**
+
+Run: `cd frontend && npm test -- undo-store`
+Expected: FAIL — `undo-store` not found.
+
+- [ ] **Step 3: Implement the store**
+
+Create `frontend/src/stores/undo-store.ts`:
+
+```ts
+import { create } from 'zustand';
+
+export type ContextKey = string; // `${diagramId}:${draftId ?? 'live'}`
+
+export interface HistoryEntry {
+  id: string;
+  seq: number;
+  state: 'active' | 'undone' | 'skipped';
+  target_type: string;
+  target_id: string;
+  forward_summary: string;
+  created_at: string;
+  updated_at: string;
+  undone_at: string | null;
+}
+
+export interface StackInfo {
+  cursorSeq: number | null;
+  undoCount: number;
+  redoCount: number;
+  recentEntries: HistoryEntry[];
+  isInFlight: boolean;
+}
+
+const emptyStack = (): StackInfo => ({
+  cursorSeq: null,
+  undoCount: 0,
+  redoCount: 0,
+  recentEntries: [],
+  isInFlight: false,
+});
+
+interface UndoStore {
+  byContext: Record<ContextKey, StackInfo>;
+  getStackInfo(ctx: ContextKey): StackInfo;
+  setStackInfo(ctx: ContextKey, patch: Partial<StackInfo>): void;
+  setRecentEntries(ctx: ContextKey, entries: HistoryEntry[]): void;
+  applyUserUndoEvent(
+    ctx: ContextKey,
+    evt: { cursor_seq: number | null; redo_count: number },
+  ): void;
+  reset(): void;
+}
+
+export const useUndoStore = create<UndoStore>((set, get) => ({
+  byContext: {},
+  getStackInfo: (ctx) => get().byContext[ctx] ?? emptyStack(),
+  setStackInfo: (ctx, patch) =>
+    set((s) => ({
+      byContext: {
+        ...s.byContext,
+        [ctx]: { ...emptyStack(), ...s.byContext[ctx], ...patch },
+      },
+    })),
+  setRecentEntries: (ctx, entries) =>
+    set((s) => ({
+      byContext: {
+        ...s.byContext,
+        [ctx]: { ...emptyStack(), ...s.byContext[ctx], recentEntries: entries },
+      },
+    })),
+  applyUserUndoEvent: (ctx, evt) =>
+    set((s) => ({
+      byContext: {
+        ...s.byContext,
+        [ctx]: {
+          ...emptyStack(),
+          ...s.byContext[ctx],
+          cursorSeq: evt.cursor_seq,
+          redoCount: evt.redo_count,
+        },
+      },
+    })),
+  reset: () => set({ byContext: {} }),
+}));
+
+export const ctxKey = (diagramId: string, draftId?: string | null): ContextKey =>
+  `${diagramId}:${draftId ?? 'live'}`;
+```
+
+- [ ] **Step 4: Run, expect PASS**
+
+Run: `cd frontend && npm test -- undo-store`
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add frontend/src/stores/undo-store.ts frontend/src/stores/undo-store.test.ts
+git commit -m "feat(undo): zustand undo-store"
+```
+
+---
+
+### Task 14: `useDebouncedMutation` + apply to inline edits
+
+**Files:**
+- Create: `frontend/src/hooks/use-debounced-mutation.ts`
+- Create: `frontend/src/hooks/use-debounced-mutation.test.ts`
+- Modify: `frontend/src/components/canvas/C4Node.tsx`
+- Modify: `frontend/src/components/canvas/C4Edge.tsx`
+
+- [ ] **Step 1: Write the failing test**
+
+Create `frontend/src/hooks/use-debounced-mutation.test.ts`:
+
+```ts
+import { describe, expect, it, vi } from 'vitest';
+import { renderHook, act } from '@testing-library/react';
+import { useDebouncedMutation } from './use-debounced-mutation';
+
+describe('useDebouncedMutation', () => {
+  it('coalesces multiple calls within the window into one', async () => {
+    const mutate = vi.fn().mockResolvedValue(null);
+    const { result } = renderHook(() =>
+      useDebouncedMutation({ mutate, delayMs: 50 }),
+    );
+
+    act(() => {
+      result.current.queue({ name: 'P' });
+      result.current.queue({ name: 'Pa' });
+      result.current.queue({ name: 'Pay' });
+    });
+
+    await new Promise((r) => setTimeout(r, 80));
+    expect(mutate).toHaveBeenCalledTimes(1);
+    expect(mutate).toHaveBeenCalledWith({ name: 'Pay' });
+  });
+
+  it('flush() forces the pending mutation to fire immediately', async () => {
+    const mutate = vi.fn().mockResolvedValue(null);
+    const { result } = renderHook(() =>
+      useDebouncedMutation({ mutate, delayMs: 1000 }),
+    );
+    act(() => {
+      result.current.queue({ name: 'A' });
+      result.current.flush();
+    });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(mutate).toHaveBeenCalledTimes(1);
+  });
+});
+```
+
+- [ ] **Step 2: Run, expect failure**
+
+Run: `cd frontend && npm test -- use-debounced-mutation`
+Expected: FAIL — module not found.
+
+- [ ] **Step 3: Implement**
+
+Create `frontend/src/hooks/use-debounced-mutation.ts`:
+
+```ts
+import { useCallback, useEffect, useRef } from 'react';
+
+interface Options<T> {
+  mutate: (payload: T) => Promise<unknown>;
+  delayMs?: number;
+}
+
+export function useDebouncedMutation<T>({ mutate, delayMs = 500 }: Options<T>) {
+  const pending = useRef<T | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const fire = useCallback(() => {
+    if (pending.current === null) return;
+    const payload = pending.current;
+    pending.current = null;
+    mutate(payload);
+  }, [mutate]);
+
+  const queue = useCallback(
+    (payload: T) => {
+      pending.current = payload;
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = setTimeout(fire, delayMs);
+    },
+    [fire, delayMs],
+  );
+
+  const flush = useCallback(() => {
+    if (timer.current) {
+      clearTimeout(timer.current);
+      timer.current = null;
+    }
+    fire();
+  }, [fire]);
+
+  // Flush on unmount so we don't lose the last edit when the user navigates away.
+  useEffect(() => () => flush(), [flush]);
+
+  return { queue, flush };
+}
+```
+
+- [ ] **Step 4: Run, expect PASS**
+
+Run: `cd frontend && npm test -- use-debounced-mutation`
+Expected: PASS — both tests green.
+
+- [ ] **Step 5: Apply to inline rename in `C4Node.tsx`**
+
+Find the existing inline-rename input that calls `updateObject.mutate(...)` per keystroke. Replace with:
+
+```tsx
+const updateObject = useUpdateObject(...);
+const debounced = useDebouncedMutation({
+  mutate: (patch: ObjectUpdate) => updateObject.mutateAsync({ id: object.id, ...patch }),
+  delayMs: 500,
+});
+
+<input
+  value={localName}
+  onChange={(e) => {
+    setLocalName(e.target.value);
+    debounced.queue({ name: e.target.value, from_diagram_id: diagramId });
+  }}
+  onBlur={() => debounced.flush()}
+/>
+```
+
+- [ ] **Step 6: Apply to inline edge label edit in `C4Edge.tsx`**
+
+Same pattern around the edge label input.
+
+- [ ] **Step 7: Manually smoke-test**
+
+Run: `make dev`. Open a diagram, rename an object, watch the network tab. Expect ONE `PUT /objects/{id}` per coherent name typing burst, not one per keystroke. Verify activity_log shows one entry per rename.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add frontend/src/hooks/use-debounced-mutation.ts frontend/src/hooks/use-debounced-mutation.test.ts frontend/src/components/canvas/C4Node.tsx frontend/src/components/canvas/C4Edge.tsx
+git commit -m "feat(canvas): debounced mutations for inline rename and edge label"
+```
+
+---
+
+### Task 15: `useUndoController` + the four undo/redo hooks
+
+**Files:**
+- Create: `frontend/src/hooks/use-undo.ts`
+- Create: `frontend/src/hooks/use-undo.test.tsx`
+
+- [ ] **Step 1: Write the failing test**
+
+Create `frontend/src/hooks/use-undo.test.tsx`:
+
+```tsx
+import { describe, expect, it, vi } from 'vitest';
+import { render, fireEvent } from '@testing-library/react';
+import { useUndoController } from './use-undo';
+
+function Probe({ onUndo }: { onUndo: () => void }) {
+  useUndoController({ diagramId: 'd1', onUndo, onRedo: () => {} });
+  return <input data-testid="input" />;
+}
+
+describe('useUndoController', () => {
+  it('fires onUndo when Cmd+Z pressed outside an input', () => {
+    const onUndo = vi.fn();
+    render(<Probe onUndo={onUndo} />);
+    fireEvent.keyDown(document.body, { key: 'z', metaKey: true });
+    expect(onUndo).toHaveBeenCalledOnce();
+  });
+
+  it('does NOT fire onUndo when focus is in an input', () => {
+    const onUndo = vi.fn();
+    const { getByTestId } = render(<Probe onUndo={onUndo} />);
+    getByTestId('input').focus();
+    fireEvent.keyDown(getByTestId('input'), { key: 'z', metaKey: true });
+    expect(onUndo).not.toHaveBeenCalled();
+  });
+});
+```
+
+- [ ] **Step 2: Run, expect failure**
+
+Run: `cd frontend && npm test -- use-undo`
+Expected: FAIL — module not found.
+
+- [ ] **Step 3: Implement**
+
+Create `frontend/src/hooks/use-undo.ts`:
+
+```ts
+import { useEffect } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+
+import { undo, redo, undoTo, getDiagramHistory } from '@/lib/api/orval.gen';
+import { ctxKey, useUndoStore, type HistoryEntry } from '@/stores/undo-store';
+
+interface ControllerOptions {
+  diagramId: string;
+  draftId?: string | null;
+  onUndo: () => void;
+  onRedo: () => void;
+}
+
+const isEditableTarget = (el: EventTarget | null): boolean => {
+  if (!(el instanceof HTMLElement)) return false;
+  const tag = el.tagName;
+  return (
+    tag === 'INPUT' ||
+    tag === 'TEXTAREA' ||
+    el.isContentEditable
+  );
+};
+
+export function useUndoController({
+  diagramId, draftId, onUndo, onRedo,
+}: ControllerOptions) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (isEditableTarget(e.target)) return;
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+
+      if (e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        onUndo();
+      } else if ((e.key === 'z' && e.shiftKey) || e.key === 'y') {
+        e.preventDefault();
+        onRedo();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onUndo, onRedo]);
+}
+
+
+export function useUndoMutation(diagramId: string, draftId?: string | null) {
+  const qc = useQueryClient();
+  const ctx = ctxKey(diagramId, draftId);
+  const setStackInfo = useUndoStore((s) => s.setStackInfo);
+
+  return useMutation({
+    mutationFn: async () => {
+      setStackInfo(ctx, { isInFlight: true });
+      const expected_seq = useUndoStore.getState().getStackInfo(ctx).cursorSeq;
+      return undo(diagramId, { expected_seq: expected_seq ?? undefined }, { draft_id: draftId ?? undefined });
+    },
+    onSettled: async (data) => {
+      setStackInfo(ctx, { isInFlight: false });
+      if (data) {
+        setStackInfo(ctx, {
+          cursorSeq: data.cursor_seq,
+          undoCount: data.remaining_undo_count,
+          redoCount: data.redo_count,
+        });
+      }
+      // Existing entity caches will be patched by the WS handler from the
+      // inverse mutation, but invalidate as a safety net for any client that
+      // missed the WS event.
+      await qc.invalidateQueries({ queryKey: ['diagram', diagramId] });
+    },
+    onError: async (err: any) => {
+      if (err?.response?.status === 409) {
+        // Stack drift — refetch history and reconcile.
+        await qc.invalidateQueries({ queryKey: ['diagram-history', diagramId] });
+      }
+    },
+  });
+}
+
+
+export function useRedoMutation(diagramId: string, draftId?: string | null) {
+  const qc = useQueryClient();
+  const ctx = ctxKey(diagramId, draftId);
+  const setStackInfo = useUndoStore((s) => s.setStackInfo);
+
+  return useMutation({
+    mutationFn: async () => {
+      setStackInfo(ctx, { isInFlight: true });
+      return redo(diagramId, {}, { draft_id: draftId ?? undefined });
+    },
+    onSettled: async (data) => {
+      setStackInfo(ctx, { isInFlight: false });
+      if (data) {
+        setStackInfo(ctx, {
+          cursorSeq: data.cursor_seq,
+          undoCount: data.remaining_undo_count,
+          redoCount: data.redo_count,
+        });
+      }
+      await qc.invalidateQueries({ queryKey: ['diagram', diagramId] });
+    },
+  });
+}
+
+
+export function useUndoTo(diagramId: string, draftId?: string | null) {
+  const qc = useQueryClient();
+  const ctx = ctxKey(diagramId, draftId);
+
+  return useMutation({
+    mutationFn: async ({
+      entryId, expectedPathLength,
+    }: { entryId: string; expectedPathLength?: number }) => {
+      return undoTo(diagramId, entryId, {
+        expected_path_length: expectedPathLength,
+      }, { draft_id: draftId ?? undefined });
+    },
+    onSettled: async (data) => {
+      if (data) {
+        useUndoStore.getState().setStackInfo(ctx, {
+          cursorSeq: data.cursor_seq,
+        });
+      }
+      await qc.invalidateQueries({ queryKey: ['diagram', diagramId] });
+      await qc.invalidateQueries({ queryKey: ['diagram-history', diagramId] });
+    },
+  });
+}
+
+
+export function useDiagramHistory(
+  diagramId: string,
+  draftId?: string | null,
+  enabled: boolean = false,
+) {
+  const setRecentEntries = useUndoStore((s) => s.setRecentEntries);
+  const ctx = ctxKey(diagramId, draftId);
+
+  return useQuery({
+    queryKey: ['diagram-history', diagramId, draftId ?? 'live'],
+    queryFn: async () => {
+      const data = await getDiagramHistory(diagramId, {
+        draft_id: draftId ?? undefined, limit: 50,
+      });
+      setRecentEntries(ctx, data.entries as HistoryEntry[]);
+      return data;
+    },
+    enabled,
+  });
+}
+```
+
+- [ ] **Step 4: Run, expect PASS**
+
+Run: `cd frontend && npm test -- use-undo`
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add frontend/src/hooks/use-undo.ts frontend/src/hooks/use-undo.test.tsx
+git commit -m "feat(undo): undo controller and mutation hooks"
+```
+
+---
+
+## Phase 4 — Frontend UI (Tasks 16–18)
+
+### Task 16: `UndoToolbarButtons` component
+
+**Files:**
+- Create: `frontend/src/components/canvas/UndoToolbarButtons.tsx`
+- Create: `frontend/src/components/canvas/UndoToolbarButtons.test.tsx`
+
+- [ ] **Step 1: Write the failing test**
+
+Create the test:
+
+```tsx
+import { describe, expect, it } from 'vitest';
+import { render } from '@testing-library/react';
+import { useUndoStore, ctxKey } from '@/stores/undo-store';
+import { UndoToolbarButtons } from './UndoToolbarButtons';
+
+describe('UndoToolbarButtons', () => {
+  it('disables undo when undoCount is 0', () => {
+    useUndoStore.getState().reset();
+    const { getByLabelText } = render(
+      <UndoToolbarButtons diagramId="d1" />,
+    );
+    expect(getByLabelText('Undo')).toBeDisabled();
+    expect(getByLabelText('Redo')).toBeDisabled();
+  });
+
+  it('enables undo when undoCount > 0', () => {
+    useUndoStore.getState().reset();
+    useUndoStore.getState().setStackInfo(ctxKey('d1'), { undoCount: 3 });
+    const { getByLabelText } = render(
+      <UndoToolbarButtons diagramId="d1" />,
+    );
+    expect(getByLabelText('Undo')).not.toBeDisabled();
+  });
+});
+```
+
+- [ ] **Step 2: Run, expect failure**
+
+Run: `cd frontend && npm test -- UndoToolbarButtons`
+Expected: FAIL — module not found.
+
+- [ ] **Step 3: Implement**
+
+Create `UndoToolbarButtons.tsx`:
+
+```tsx
+import { useState } from 'react';
+import { Undo2, Redo2, ChevronDown } from 'lucide-react';
+
+import { ctxKey, useUndoStore } from '@/stores/undo-store';
+import { useUndoMutation, useRedoMutation } from '@/hooks/use-undo';
+import { HistoryPopover } from './HistoryPopover';
+
+interface Props {
+  diagramId: string;
+  draftId?: string | null;
+}
+
+export function UndoToolbarButtons({ diagramId, draftId }: Props) {
+  const [popoverOpen, setPopoverOpen] = useState(false);
+  const stack = useUndoStore((s) => s.getStackInfo(ctxKey(diagramId, draftId)));
+
+  const undoMut = useUndoMutation(diagramId, draftId);
+  const redoMut = useRedoMutation(diagramId, draftId);
+
+  const canUndo = stack.undoCount > 0 && !stack.isInFlight;
+  const canRedo = stack.redoCount > 0 && !stack.isInFlight;
+
+  const topLabel = stack.recentEntries.find((e) => e.state === 'active')
+    ?.forward_summary ?? '';
+  const topUndoneLabel = stack.recentEntries.find((e) => e.state === 'undone')
+    ?.forward_summary ?? '';
+
+  return (
+    <div className="flex items-center gap-1">
+      <button
+        aria-label="Undo"
+        title={canUndo ? `Undo: ${topLabel}` : 'Nothing to undo'}
+        disabled={!canUndo}
+        onClick={() => undoMut.mutate()}
+        className="rounded px-2 py-1 disabled:opacity-40 hover:bg-gray-100"
+      >
+        <Undo2 size={16} />
+      </button>
+      <button
+        aria-label="Show history"
+        onClick={() => setPopoverOpen((v) => !v)}
+        className="rounded px-1 py-1 hover:bg-gray-100"
+      >
+        <ChevronDown size={14} />
+      </button>
+      <button
+        aria-label="Redo"
+        title={canRedo ? `Redo: ${topUndoneLabel}` : 'Nothing to redo'}
+        disabled={!canRedo}
+        onClick={() => redoMut.mutate()}
+        className="rounded px-2 py-1 disabled:opacity-40 hover:bg-gray-100"
+      >
+        <Redo2 size={16} />
+      </button>
+      {popoverOpen && (
+        <HistoryPopover
+          diagramId={diagramId}
+          draftId={draftId}
+          onClose={() => setPopoverOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
+```
+
+- [ ] **Step 4: Run, expect PASS**
+
+Run: `cd frontend && npm test -- UndoToolbarButtons`
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add frontend/src/components/canvas/UndoToolbarButtons.tsx frontend/src/components/canvas/UndoToolbarButtons.test.tsx
+git commit -m "feat(canvas): undo/redo toolbar buttons with popover trigger"
+```
+
+---
+
+### Task 17: `HistoryPopover` component
+
+**Files:**
+- Create: `frontend/src/components/canvas/HistoryPopover.tsx`
+- Create: `frontend/src/components/canvas/HistoryPopover.test.tsx`
+
+- [ ] **Step 1: Write the failing test**
+
+```tsx
+import { describe, expect, it, vi } from 'vitest';
+import { render, fireEvent, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useUndoStore, ctxKey } from '@/stores/undo-store';
+import { HistoryPopover } from './HistoryPopover';
+import * as api from '@/lib/api/orval.gen';
+
+vi.mock('@/lib/api/orval.gen');
+
+function wrap(ui: React.ReactNode) {
+  return render(
+    <QueryClientProvider client={new QueryClient()}>{ui}</QueryClientProvider>,
+  );
+}
+
+describe('HistoryPopover', () => {
+  it('shows a divider between active and undone entries', async () => {
+    useUndoStore.getState().reset();
+    useUndoStore.getState().setRecentEntries(ctxKey('d1'), [
+      { id: '1', seq: 3, state: 'active', forward_summary: 'A',
+        target_type: 'object', target_id: 'x', created_at: '', updated_at: '',
+        undone_at: null },
+      { id: '2', seq: 2, state: 'undone', forward_summary: 'B',
+        target_type: 'object', target_id: 'x', created_at: '', updated_at: '',
+        undone_at: null },
+    ]);
+    vi.mocked(api.getDiagramHistory).mockResolvedValue({
+      entries: useUndoStore.getState().getStackInfo(ctxKey('d1')).recentEntries,
+      cursor_seq: 3,
+    });
+    const { findByText, findByTestId } = wrap(
+      <HistoryPopover diagramId="d1" onClose={() => {}} />,
+    );
+    await findByText('A');
+    await findByText('B');
+    await findByTestId('history-cursor-divider');
+  });
+});
+```
+
+- [ ] **Step 2: Run, expect failure**
+
+Run: `cd frontend && npm test -- HistoryPopover`
+Expected: FAIL — module not found.
+
+- [ ] **Step 3: Implement**
+
+```tsx
+import { useEffect } from 'react';
+
+import { ctxKey, useUndoStore, type HistoryEntry } from '@/stores/undo-store';
+import { useDiagramHistory, useUndoTo } from '@/hooks/use-undo';
+
+interface Props {
+  diagramId: string;
+  draftId?: string | null;
+  onClose: () => void;
+}
+
+export function HistoryPopover({ diagramId, draftId, onClose }: Props) {
+  const ctx = ctxKey(diagramId, draftId);
+  const stack = useUndoStore((s) => s.getStackInfo(ctx));
+  useDiagramHistory(diagramId, draftId, true);
+  const undoTo = useUndoTo(diagramId, draftId);
+
+  useEffect(() => {
+    const onEsc = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onEsc);
+    return () => window.removeEventListener('keydown', onEsc);
+  }, [onClose]);
+
+  const entries = stack.recentEntries;
+  const cursorIndex = entries.findIndex((e) => e.state === 'undone');
+
+  const handleClick = (entry: HistoryEntry, indexFromTop: number) => {
+    // expectedPathLength: how many steps from the current cursor position.
+    // The cursor is at `cursorIndex` boundary. Distance:
+    //   active → click on active at index i:   pathLength = cursorIndex - i (where cursorIndex = entries-on-active-side)
+    //   undone → click on undone at index i:   pathLength = i - cursorIndex + 1
+    const pathLength = entry.state === 'active'
+      ? (cursorIndex === -1 ? entries.length : cursorIndex) - indexFromTop
+      : indexFromTop - (cursorIndex === -1 ? entries.length : cursorIndex) + 1;
+
+    undoTo.mutate({ entryId: entry.id, expectedPathLength: Math.abs(pathLength) });
+  };
+
+  return (
+    <div
+      role="menu"
+      aria-label="My history"
+      className="absolute top-full mt-2 w-80 rounded border bg-white shadow-lg z-50"
+    >
+      <div className="px-3 py-2 border-b text-sm font-medium">
+        My history · {draftId ? 'draft' : 'live diagram'}
+      </div>
+      <ul className="max-h-96 overflow-y-auto">
+        {entries.map((e, i) => (
+          <li key={e.id}>
+            {i === cursorIndex && i !== 0 && (
+              <div
+                data-testid="history-cursor-divider"
+                className="border-t border-dashed my-1 mx-3"
+              />
+            )}
+            <button
+              onClick={() => handleClick(e, i)}
+              className={`w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 ${
+                e.state === 'undone' ? 'text-gray-400' : ''
+              }`}
+            >
+              {e.state === 'active' ? '↻ ' : '↶ '}
+              {e.forward_summary}
+            </button>
+          </li>
+        ))}
+      </ul>
+      <div className="px-3 py-2 border-t text-xs text-gray-500">
+        Entries older than 3 days expire
+      </div>
+    </div>
+  );
+}
+```
+
+- [ ] **Step 4: Run, expect PASS**
+
+Run: `cd frontend && npm test -- HistoryPopover`
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add frontend/src/components/canvas/HistoryPopover.tsx frontend/src/components/canvas/HistoryPopover.test.tsx
+git commit -m "feat(canvas): history popover with click-to-undo-to-point"
+```
+
+---
+
+### Task 18: Integrate into `ArchFlowCanvas` + handle WS events
+
+**Files:**
+- Modify: `frontend/src/components/canvas/ArchFlowCanvas.tsx`
+- Modify: `frontend/src/hooks/use-realtime.ts`
+
+- [ ] **Step 1: Mount the controller and buttons**
+
+Open `ArchFlowCanvas.tsx`. Near the top of the component:
+
+```tsx
+import { UndoToolbarButtons } from './UndoToolbarButtons';
+import { useUndoController, useUndoMutation, useRedoMutation } from '@/hooks/use-undo';
+
+// inside the component:
+const undoMut = useUndoMutation(diagramId, draftId);
+const redoMut = useRedoMutation(diagramId, draftId);
+useUndoController({
+  diagramId,
+  draftId,
+  onUndo: () => undoMut.mutate(),
+  onRedo: () => redoMut.mutate(),
+});
+```
+
+In the toolbar JSX, render `<UndoToolbarButtons diagramId={diagramId} draftId={draftId} />` next to the existing canvas toolbar items.
+
+- [ ] **Step 2: Pass `from_diagram_id` / `from_draft_id` into mutation calls**
+
+For every existing call site that triggers an object/connection/diagram-object mutation in this component, add `from_diagram_id: diagramId, from_draft_id: draftId ?? undefined` to the request body. Critical sites: `onNodeDragStop` (saveDiagramPosition), `onNodeResizeEnd` (saveDiagramSize), property updates from sidebar.
+
+- [ ] **Step 3: Handle `user.undo` / `user.redo` in `use-realtime.ts`**
+
+In `frontend/src/hooks/use-realtime.ts`, alongside the existing event handlers:
+
+```ts
+case 'user.undo':
+case 'user.redo':
+  useUndoStore.getState().applyUserUndoEvent(
+    ctxKey(evt.diagram_id, evt.draft_id),
+    { cursor_seq: evt.cursor_seq, redo_count: evt.redo_count },
+  );
+  // The actual canvas change is already incoming via the inverse mutation's
+  // own `object.updated` / etc. event — handled by existing case branches.
+  break;
+```
+
+- [ ] **Step 4: Manual smoke test — single-tab**
+
+Run `make dev`. On a diagram, do these things in order, and verify the result of each:
+
+- Move an object, press Cmd+Z → object snaps back.
+- Cmd+Shift+Z → object moves forward again.
+- Rename an object via inline rename, type 11 chars → wait for debounce → press Cmd+Z. Name reverts to the **original** in one undo.
+- Multi-select 3 objects, drag them → press Cmd+Z. All 3 revert in one press.
+- Click the ▾ on the undo button → popover appears with the recent actions, newest at top.
+- Click an entry 3 steps back in the popover → 3 undos applied atomically.
+
+- [ ] **Step 5: Manual smoke test — two-tab**
+
+Open the same diagram in two browser tabs (same user). Do the canvas action in tab 1, switch to tab 2 — see the change. Press Cmd+Z in tab 1; tab 2 should also visually update (via existing realtime fanout) AND tab 2's undo button state should reflect the new cursor (via `user.undo` event).
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add frontend/src/components/canvas/ArchFlowCanvas.tsx frontend/src/hooks/use-realtime.ts
+git commit -m "feat(canvas): mount undo controller and handle user.undo/redo events"
+```
+
+---
+
+## Phase 5 — Multi-user scenarios + polish (Tasks 19–21)
+
+### Task 19: Backend multi-user scenario tests
+
+**Files:**
+- Create / extend: `backend/tests/scenarios/test_collab_undo.py`
+
+These are the "real bug catchers" — they exercise the cases that unit tests can't see.
+
+- [ ] **Step 1: Test — Alice update X, Bob update X, Alice undo (LWW)**
+
+```python
+@pytest.mark.asyncio
+async def test_alice_undo_overwrites_bob_in_phase1(
+    db, alice, bob, workspace, diagram,
+):
+    """Phase 1 deliberately uses last-write-wins. Lock this in so a future
+    Phase 2 enable doesn't silently regress it."""
+    from app.models.object import ModelObject
+    from app.services import object_service, undo_service
+    from app.schemas.object import ObjectUpdate
+
+    obj = ModelObject(name="Original", type="system",
+                       workspace_id=workspace.id)
+    db.add(obj); await db.flush()
+
+    # Alice renames it
+    await object_service.update_object(
+        db, obj, ObjectUpdate(name="Alice's value"),
+        actor_user=alice, from_diagram_id=diagram.id,
+    )
+    # Bob renames it
+    await object_service.update_object(
+        db, obj, ObjectUpdate(name="Bob's value"),
+        actor_user=bob, from_diagram_id=diagram.id,
+    )
+
+    # Alice undoes
+    await undo_service.undo(
+        db, user_id=alice.id, diagram_id=diagram.id, draft_id=None,
+        actor_user=alice,
+    )
+    await db.refresh(obj)
+    # Phase 1 LWW: Alice's old name wins, Bob's value is overwritten.
+    assert obj.name == "Original"
+```
+
+- [ ] **Step 2: Test — Alice deletes X, Alice undoes → X restored with same UUID**
+
+```python
+@pytest.mark.asyncio
+async def test_alice_undo_recreates_deleted_object_with_same_uuid(
+    db, alice, workspace, diagram,
+):
+    from app.models.object import ModelObject
+    from app.services import object_service, undo_service
+
+    obj = ModelObject(name="X", type="system", workspace_id=workspace.id)
+    db.add(obj); await db.flush()
+    obj_id = obj.id
+
+    await object_service.delete_object(
+        db, obj, actor_user=alice, from_diagram_id=diagram.id,
+    )
+    # Verify gone
+    assert (await db.get(ModelObject, obj_id)) is None
+
+    await undo_service.undo(
+        db, user_id=alice.id, diagram_id=diagram.id, draft_id=None,
+        actor_user=alice,
+    )
+    restored = await db.get(ModelObject, obj_id)
+    assert restored is not None
+    assert restored.id == obj_id
+    assert restored.name == "X"
+```
+
+- [ ] **Step 3: Test — concurrent Cmd+Z from two tabs**
+
+```python
+@pytest.mark.asyncio
+async def test_concurrent_undo_first_wins_second_409s(
+    client, auth_headers, diagram, recorded_entry,
+):
+    res1, res2 = await asyncio.gather(
+        client.post(f"/api/v1/diagrams/{diagram.id}/undo",
+                     headers=auth_headers,
+                     json={"expected_seq": recorded_entry.seq}),
+        client.post(f"/api/v1/diagrams/{diagram.id}/undo",
+                     headers=auth_headers,
+                     json={"expected_seq": recorded_entry.seq}),
+    )
+    statuses = sorted([res1.status_code, res2.status_code])
+    assert statuses == [200, 409]
+```
+
+- [ ] **Step 4: Test — Phase 2 stale-detection placeholder**
+
+Skipped from v1 with `@pytest.mark.skip(reason="Phase 2 — stale detection")`. Documents the intent so future-us doesn't forget.
+
+- [ ] **Step 5: Run all scenario tests**
+
+Run: `cd backend && uv run pytest tests/scenarios -v`
+Expected: PASS — 3 tests run, 1 skipped.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add backend/tests/scenarios
+git commit -m "test(undo): multi-user scenarios — LWW, delete-undo, concurrent races"
+```
+
+---
+
+### Task 20: Manual smoke checklist in CONTRIBUTING.md
+
+**Files:**
+- Modify: `CONTRIBUTING.md`
+
+- [ ] **Step 1: Append the smoke checklist**
+
+```markdown
+## Per-user undo smoke check
+
+Run before each release to catch the bits hard to assert in unit tests:
+
+- [ ] Cmd+Z in name-input field undoes text, not canvas
+- [ ] Typing "Payments DB" then Cmd+Z reverts to original name (not 11 keystrokes back)
+- [ ] Drag 3 objects in a multi-select; Cmd+Z reverts all 3 in one press
+- [ ] Same diagram in two tabs of one browser; undo in tab 1 visually updates tab 2
+- [ ] Redo button greys out after any new action
+- [ ] Comments toggle off → editing a comment doesn't show on the popover; toggle on → next comment edit shows
+- [ ] History popover renders 50 entries smoothly; clicking item 25 traverses correctly
+- [ ] Open a draft of a diagram → Cmd+Z in the draft only undoes draft actions; switching back to live shows the live stack untouched
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add CONTRIBUTING.md
+git commit -m "docs: per-user undo smoke checklist"
+```
+
+---
+
+### Task 21: README + roadmap update
+
+**Files:**
+- Modify: `README.md`
+
+- [ ] **Step 1: Add to the features list**
+
+Under the "Visual-first canvas" section, add:
+
+```markdown
+- **Per-user undo / redo** with `Cmd/Ctrl+Z` — server-backed stack scoped to your own actions, separate per diagram and per draft. History popover lets you undo to a specific past action.
+```
+
+In the Roadmap, mark the Phase 1 box as complete and add:
+
+```markdown
+- [x] Per-user undo & redo (Phase 1)
+- [ ] Per-user undo — stale-detection (Phase 2)
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add README.md
+git commit -m "docs: README — per-user undo feature mention"
+```
+
+---
+
+## Self-Review (executed inline by the planner)
+
+**Spec coverage:**
+- §2 decisions → Task 1 (migration), 4 (record/coalesce/cap), 5 (undo/redo + Figma trick), 6 (history + 3-day filter), 9 (mutation hooks), 11 (drafts + comments toggle), 18 (UI keybinds), 19 (LWW + delete-undo)
+- §3 architecture → 9 (mutation pipeline reuse), 5 (`_apply` helper)
+- §4 data model → 1 (table), 2 (model), 4 (coalesce), 11 (cap, sweep)
+- §5 API → 8 (REST), 10 (WS)
+- §6 frontend → 13 (store), 14 (debounce), 15 (hooks), 16 (buttons), 17 (popover), 18 (integration)
+- §7 conflict handling → 5 (skip-on-missing), 19 (LWW lock-in test). Phase 2 placeholder skipped — covered.
+- §8 testing → spread across each task; multi-user in 19; manual smoke in 20.
+- §9 phasing → Task 21 README update.
+
+All spec sections accounted for.
+
+**Placeholder scan:** done — replaced one over-complicated test (Task 5 step 8) with a simpler version (step 9). No "TBD" / "TODO" / "implement later" remain.
+
+**Type consistency:**
+- `UndoTargetType`, `UndoAction`, `UndoState` — defined Task 2, used consistently in 4/5/6/7/8/9/19.
+- `UndoEntry.state` values: `active`, `undone`, `skipped` — consistent.
+- `coalesce_key` format `"{target_type}:{target_id}:{field|action}"` — consistent across record callers in Task 9.
+- WebSocket event types: `user.undo`, `user.redo` — consistent in Task 10 emit and Task 18 handler.
+- Frontend `ContextKey` shape `${diagramId}:${draftId ?? 'live'}` — consistent across `ctxKey()` definition (Task 13) and consumers (15, 16, 17, 18).
+
+No drift found.
+
+---
+
+## Execution
+
+**Plan complete and saved to `docs/superpowers/plans/2026-05-04-per-user-undo.md`.**
+
+Two execution options:
+
+**1. Subagent-Driven (recommended)** — I dispatch a fresh subagent per task, review between tasks, fast iteration
+
+**2. Inline Execution** — Execute tasks in this session using executing-plans, batch execution with checkpoints
+
+Which approach?
