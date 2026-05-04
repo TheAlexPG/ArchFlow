@@ -249,3 +249,47 @@ async def test_undo_skips_when_target_missing(db, user, workspace, diagram):
         select(UndoEntry).where(UndoEntry.target_id == obj_id)
     )).scalar_one()
     assert skipped.state == UndoState.SKIPPED
+
+
+from datetime import datetime, timedelta, timezone
+
+
+@pytest.mark.asyncio
+async def test_history_returns_entries_in_reverse_seq_order(
+    db, user, workspace, diagram
+):
+    for i in range(3):
+        await undo_service.record(
+            db, user_id=user.id, workspace_id=workspace.id,
+            diagram_id=diagram.id, draft_id=None,
+            target_type=UndoTargetType.OBJECT, target_id=diagram.id,
+            action=UndoAction.UPDATE,
+            forward_summary=f"a{i}",
+            inverse_payload={}, coalesce_key=f"k{i}",
+        )
+    h = await undo_service.history(
+        db, user_id=user.id, diagram_id=diagram.id, draft_id=None, limit=10,
+    )
+    assert [e.forward_summary for e in h.entries] == ["a2", "a1", "a0"]
+    assert h.cursor_seq == 3
+
+
+@pytest.mark.asyncio
+async def test_history_excludes_entries_older_than_retention(
+    db, user, workspace, diagram
+):
+    e = await undo_service.record(
+        db, user_id=user.id, workspace_id=workspace.id,
+        diagram_id=diagram.id, draft_id=None,
+        target_type=UndoTargetType.OBJECT, target_id=diagram.id,
+        action=UndoAction.UPDATE,
+        forward_summary="ancient",
+        inverse_payload={}, coalesce_key="k",
+    )
+    e.created_at = datetime.now(timezone.utc) - timedelta(days=4)
+    await db.flush()
+
+    h = await undo_service.history(
+        db, user_id=user.id, diagram_id=diagram.id, draft_id=None, limit=10,
+    )
+    assert h.entries == []
