@@ -379,3 +379,45 @@ async def test_undo_to_rejects_cross_draft_entry(db, user, workspace, diagram):
             draft_id=fake_draft_id,  # caller context = some draft
             actor_user=user, entry_id=entry.id,  # entry context = live
         )
+
+
+@pytest.mark.asyncio
+async def test_discarding_draft_drops_its_undo_entries(db, user, workspace, diagram):
+    """When a draft is discarded, all undo entries scoped to that draft are
+    hard-deleted. Live-stack entries (draft_id IS NULL) are untouched."""
+    from app.models.draft import Draft, DraftStatus
+    from app.services import draft_service
+
+    draft = Draft(
+        name="Test Draft",
+        status=DraftStatus.OPEN,
+        author_id=user.id,
+    )
+    db.add(draft)
+    await db.flush()
+
+    # One draft-scoped entry, one live entry (draft_id=None).
+    await undo_service.record(
+        db, user_id=user.id, workspace_id=workspace.id,
+        diagram_id=diagram.id, draft_id=draft.id,
+        target_type=UndoTargetType.OBJECT, target_id=diagram.id,
+        action=UndoAction.UPDATE, forward_summary="draft edit",
+        inverse_payload={}, coalesce_key=f"object:{diagram.id}:draft",
+    )
+    await undo_service.record(
+        db, user_id=user.id, workspace_id=workspace.id,
+        diagram_id=diagram.id, draft_id=None,
+        target_type=UndoTargetType.OBJECT, target_id=diagram.id,
+        action=UndoAction.UPDATE, forward_summary="live edit",
+        inverse_payload={}, coalesce_key=f"object:{diagram.id}:live",
+    )
+    await db.flush()
+
+    await draft_service.discard_draft(db, draft)
+    await db.flush()
+
+    rows = (await db.execute(
+        select(UndoEntry).where(UndoEntry.diagram_id == diagram.id)
+    )).scalars().all()
+    assert len(rows) == 1
+    assert rows[0].draft_id is None

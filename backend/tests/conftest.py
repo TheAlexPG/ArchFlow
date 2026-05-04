@@ -40,6 +40,8 @@ async def client():
 # dependent rows go too. Order doesn't matter with CASCADE.
 _SERVICE_TEST_TABLES = (
     "undo_entries",
+    "draft_diagrams",
+    "drafts",
     "diagram_objects",
     "diagrams",
     "workspace_members",
