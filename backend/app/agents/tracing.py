@@ -283,6 +283,15 @@ class AgentTracer:
         # the trace boundary (~25s by default) which made it look like the
         # node was hung when it had actually completed.
         self._spans: dict[str, Any] = {}
+        # Most recent supervisor span id — sub-agent spans (planner /
+        # researcher / diagram / critic) hang off this so the trace tree
+        # shows ``supervisor → researcher → tool:…`` instead of every node
+        # sitting at the root level.
+        self._last_supervisor_span_id: str | None = None
+        # Cache of the verbatim user message so we can re-assert it on the
+        # trace root at finish() — LiteLLM's langfuse callback otherwise
+        # overwrites trace.input with the first generation's messages payload.
+        self._chat_input: str | None = chat_input
         if self._client is None:
             return
         suffix = trace_name_suffix()
@@ -312,13 +321,29 @@ class AgentTracer:
         return self._trace is not None
 
     def start_node_span(
-        self, *, name: str, parent_id: str | None = None
+        self,
+        *,
+        name: str,
+        parent_id: str | None = None,
+        input_payload: Any | None = None,
+        role: str | None = None,
     ) -> str | None:
         """Open a span for a node visit. Returns the span's observation id
         (or ``None`` when tracing is disabled / fails).
+
+        ``role`` shapes hierarchy:
+          * ``"supervisor"`` — root-level (parent_id=None unless caller
+            overrides) AND remembered as the parent for subsequent sub-agent
+            spans within this invocation.
+          * ``"subagent"``   — defaults parent_id to the most recent
+            supervisor span so the trace tree reads
+            ``supervisor → researcher`` instead of two siblings.
+          * ``None``         — neutral; uses ``parent_id`` verbatim.
         """
         if self._client is None or self._trace is None:
             return None
+        if role == "subagent" and parent_id is None:
+            parent_id = self._last_supervisor_span_id
         span_id = str(uuid4())
         try:
             handle = self._client.span(
@@ -326,11 +351,14 @@ class AgentTracer:
                 trace_id=self.trace_id,
                 parent_observation_id=parent_id,
                 name=name,
+                input=_coerce_jsonable(input_payload) if input_payload is not None else None,
             )
         except Exception as exc:  # pragma: no cover — defensive
             logger.debug("AgentTracer: span(%s) failed: %s", name, exc)
             return None
         self._spans[span_id] = handle
+        if role == "supervisor":
+            self._last_supervisor_span_id = span_id
         return span_id
 
     def end_node_span(
@@ -385,11 +413,21 @@ class AgentTracer:
             logger.debug("AgentTracer: tool event failed: %s", exc)
 
     def finish(self, *, output: Any | None = None) -> None:
-        """Mark the root trace finished with optional output."""
+        """Mark the root trace finished with optional output.
+
+        Also re-asserts the verbatim user ``chat_input`` on the trace root.
+        Without this LiteLLM's langfuse callback clobbers ``trace.input``
+        with the first generation's full messages-array payload (system
+        prompt + history) — useful for debugging that LLM call but useless
+        as the user-facing trace input.
+        """
         if self._trace is None:
             return
+        update_kwargs: dict[str, Any] = {"output": output}
+        if self._chat_input:
+            update_kwargs["input"] = self._chat_input
         try:
-            self._trace.update(output=output)
+            self._trace.update(**update_kwargs)
         except Exception as exc:  # pragma: no cover — defensive
             logger.debug("AgentTracer: trace update failed: %s", exc)
         try:

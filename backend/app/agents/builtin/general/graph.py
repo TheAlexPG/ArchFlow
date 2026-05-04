@@ -235,6 +235,133 @@ def _get_tracer(config: Optional[RunnableConfig]) -> Any | None:
     return None
 
 
+def _supervisor_span_input(state: AgentState) -> dict | None:
+    """Build the supervisor span's input payload for Langfuse.
+
+    First visit: the user's verbatim message. Subsequent visits: a short
+    summary of the most recent sub-agent's tool result so the trace shows
+    *what the supervisor saw* on this hop, not the entire history.
+    """
+    messages = state.get("messages") or []
+    if not messages:
+        return None
+    last_user: str | None = None
+    for msg in messages:
+        if msg.get("role") == "user" and isinstance(msg.get("content"), str):
+            last_user = msg["content"]
+    last_tool: dict | None = None
+    for msg in reversed(messages):
+        if msg.get("role") == "tool":
+            last_tool = msg
+            break
+    payload: dict = {}
+    if last_user:
+        payload["user_message"] = last_user
+    if last_tool is not None:
+        content = last_tool.get("content")
+        # Tool results can be huge JSON dumps; clip so the span stays readable.
+        if isinstance(content, str) and len(content) > 1500:
+            content = content[:1500] + "…"
+        payload["last_subagent_result"] = {
+            "tool_call_id": last_tool.get("tool_call_id"),
+            "content": content,
+        }
+    visit = state.get("supervisor_visits") or 0
+    if visit:
+        payload["visit"] = int(visit) + 1  # this call is the next visit
+    return payload or None
+
+
+def _supervisor_span_output(output: Any | None, forced: str | None) -> dict:
+    """Distil the supervisor's output for Langfuse — the assistant text it
+    produced and the delegate_to_*/finalize tool call it dispatched."""
+    summary: dict = {"forced_finalize": forced}
+    if output is None:
+        return summary
+    state_patch = getattr(output, "state_patch", {}) or {}
+    delegate = state_patch.get("delegate_brief")
+    if delegate:
+        kind = (
+            delegate.get("kind")
+            if isinstance(delegate, dict)
+            else getattr(delegate, "kind", None)
+        )
+        instr = (
+            delegate.get("instruction")
+            if isinstance(delegate, dict)
+            else getattr(delegate, "instruction", None)
+        )
+        summary["delegated_to"] = kind
+        if instr:
+            summary["instruction"] = instr if len(instr) <= 800 else instr[:800] + "…"
+    final_msg = state_patch.get("final_message")
+    if final_msg:
+        summary["final_message"] = (
+            final_msg if len(final_msg) <= 800 else final_msg[:800] + "…"
+        )
+    elif getattr(output, "text", None):
+        text = output.text or ""
+        summary["text"] = text if len(text) <= 800 else text[:800] + "…"
+    summary["tool_calls_made"] = getattr(output, "tool_calls_made", 0)
+    return summary
+
+
+def _subagent_span_input(state: AgentState) -> dict | None:
+    """Build the sub-agent span's input — the supervisor's brief verbatim."""
+    brief = state.get("delegate_brief")
+    if not brief:
+        return None
+    if isinstance(brief, dict):
+        kind = brief.get("kind")
+        instruction = brief.get("instruction")
+        reason = brief.get("reason")
+    else:
+        kind = getattr(brief, "kind", None)
+        instruction = getattr(brief, "instruction", None)
+        reason = getattr(brief, "reason", None)
+    payload: dict = {}
+    if kind:
+        payload["kind"] = kind
+    if instruction:
+        payload["instruction"] = instruction
+    if reason:
+        payload["reason"] = reason
+    return payload or None
+
+
+def _subagent_span_output(
+    output: Any | None,
+    forced: str | None,
+    *,
+    kind: str,
+    state_patch: dict | None = None,
+) -> dict:
+    """Distil the sub-agent's output — the structured artefact it produced
+    (Findings / Plan / Critique / applied_changes summary)."""
+    summary: dict = {"forced_finalize": forced, "kind": kind}
+    if output is None:
+        return summary
+    structured = getattr(output, "structured", None)
+    if structured is not None and hasattr(structured, "model_dump"):
+        try:
+            summary["structured"] = structured.model_dump(mode="json")
+        except Exception:  # pragma: no cover — defensive
+            summary["structured"] = str(structured)
+    summary["tool_calls_made"] = getattr(output, "tool_calls_made", 0)
+    if kind == "diagram":
+        applied = (state_patch or {}).get("applied_changes") or []
+        summary["applied_changes_count"] = len(applied)
+        # Surface a short preview of actions so the span is glanceable.
+        summary["applied_changes_preview"] = [
+            {
+                "action": (c.get("action") if isinstance(c, dict) else getattr(c, "action", None)),
+                "name": (c.get("name") if isinstance(c, dict) else getattr(c, "name", None)),
+            }
+            for c in applied[:10]
+        ]
+    return summary
+
+
 def _strip_subagent_messages(patch: dict) -> dict:
     """Remove ``messages`` from a sub-agent's state_patch.
 
@@ -290,6 +417,9 @@ async def _drain_with_tracing(
     tracer: Any,
     span_name: str,
     base_call_meta: Any,
+    role: str | None = None,
+    input_payload: Any | None = None,
+    output_builder=None,
 ):
     """Drive a node's run() iterator while opening a Langfuse span around it.
 
@@ -298,14 +428,29 @@ async def _drain_with_tracing(
     that LiteLLM auto-traces nest under the span via the
     ``parent_observation_id`` carried on ``call_meta_for_node``.
 
-    Callers wrap their own ``node.run(...)`` with this helper instead of
-    iterating the events directly.
+    ``role``:
+      * ``"supervisor"`` — span sits at trace root and is remembered as the
+        default parent for subsequent sub-agent spans within this trace.
+      * ``"subagent"``   — span auto-nests under the most recent supervisor
+        span so researcher / planner / diagram / critic appear inside the
+        supervisor that delegated to them, not as siblings.
+
+    ``input_payload`` is set on span open (e.g. user message for supervisor,
+    delegate brief for sub-agents). ``output_builder`` is invoked at the
+    end with the drained ``NodeOutput`` and ``forced`` reason and should
+    return a JSON-friendly value to record on the span as ``output``. When
+    omitted, falls back to a short ``{forced_finalize, tool_calls_made}``
+    summary.
     """
     from dataclasses import replace as _replace
 
     span_id: str | None = None
     if tracer is not None and tracer.enabled:
-        span_id = tracer.start_node_span(name=span_name)
+        span_id = tracer.start_node_span(
+            name=span_name,
+            input_payload=input_payload,
+            role=role,
+        )
 
     call_meta_for_node = (
         _replace(base_call_meta, parent_observation_id=span_id)
@@ -343,12 +488,22 @@ async def _drain_with_tracing(
                 output = ev.payload["output"]
     finally:
         if tracer is not None:
-            tracer.end_node_span(
-                span_id=span_id,
-                output={
+            if output_builder is not None:
+                try:
+                    span_output = output_builder(output, forced)
+                except Exception:  # pragma: no cover — defensive
+                    span_output = {
+                        "forced_finalize": forced,
+                        "tool_calls_made": getattr(output, "tool_calls_made", 0),
+                    }
+            else:
+                span_output = {
                     "forced_finalize": forced,
                     "tool_calls_made": getattr(output, "tool_calls_made", 0),
-                },
+                }
+            tracer.end_node_span(
+                span_id=span_id,
+                output=span_output,
                 level="ERROR" if forced else None,
             )
 
@@ -382,8 +537,11 @@ async def supervisor_node(state: AgentState, config: Optional[RunnableConfig] = 
             call_metadata_base=meta,
         ),
         tracer=tracer,
-        span_name="supervisor",
+        span_name="agent:supervisor",
         base_call_meta=call_meta,
+        role="supervisor",
+        input_payload=_supervisor_span_input(state),
+        output_builder=_supervisor_span_output,
     )
 
     patch: dict = dict(output.state_patch) if output else {}
@@ -421,8 +579,11 @@ async def planner_node(state: AgentState, config: Optional[RunnableConfig] = Non
             call_metadata_base=meta,
         ),
         tracer=tracer,
-        span_name="planner",
+        span_name="agent:planner",
         base_call_meta=call_meta,
+        role="subagent",
+        input_payload=_subagent_span_input(state),
+        output_builder=lambda o, f: _subagent_span_output(o, f, kind="planner"),
     )
 
     patch: dict = _strip_subagent_messages(dict(output.state_patch) if output else {})
@@ -461,8 +622,14 @@ async def diagram_node(state: AgentState, config: Optional[RunnableConfig] = Non
             call_metadata_base=meta,
         ),
         tracer=tracer,
-        span_name="diagram",
+        span_name="agent:diagram",
         base_call_meta=call_meta,
+        role="subagent",
+        input_payload=_subagent_span_input(state),
+        output_builder=lambda o, f: _subagent_span_output(
+            o, f, kind="diagram",
+            state_patch=getattr(o, "state_patch", None) if o is not None else None,
+        ),
     )
 
     patch: dict = _strip_subagent_messages(dict(output.state_patch) if output else {})
@@ -504,8 +671,11 @@ async def researcher_node(state: AgentState, config: Optional[RunnableConfig] = 
             call_metadata_base=meta,
         ),
         tracer=tracer,
-        span_name="researcher",
+        span_name="agent:researcher",
         base_call_meta=call_meta,
+        role="subagent",
+        input_payload=_subagent_span_input(state),
+        output_builder=lambda o, f: _subagent_span_output(o, f, kind="researcher"),
     )
 
     patch: dict = _strip_subagent_messages(dict(output.state_patch) if output else {})
@@ -556,8 +726,11 @@ async def critic_node(state: AgentState, config: Optional[RunnableConfig] = None
             call_metadata_base=meta,
         ),
         tracer=tracer,
-        span_name="critic",
+        span_name="agent:critic",
         base_call_meta=call_meta,
+        role="subagent",
+        input_payload=_subagent_span_input(state),
+        output_builder=lambda o, f: _subagent_span_output(o, f, kind="critic"),
     )
 
     patch: dict = _strip_subagent_messages(dict(output.state_patch) if output else {})
