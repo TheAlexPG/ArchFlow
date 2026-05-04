@@ -17,8 +17,7 @@ class UndoEntryRead(BaseModel):
     updated_at: datetime
     undone_at: datetime | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class UndoActionRequest(BaseModel):
