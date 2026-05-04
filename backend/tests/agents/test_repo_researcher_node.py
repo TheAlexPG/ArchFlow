@@ -180,6 +180,115 @@ def test_build_repo_delegation_tools_renders_one_per_manifest_entry():
     assert names == {"delegate_to_repo_auth", "delegate_to_repo_billing"}
 
 
+def test_supervisor_sees_multiple_repo_targets():
+    """D3: with three manifest entries the supervisor must see three
+    distinct ``delegate_to_repo_<slug>`` tools — one per entry — and the
+    rendered system block must list all three."""
+    state = {
+        "repo_manifest": [
+            {
+                "node_id": str(uuid4()),
+                "node_name": "Auth Service",
+                "node_type": "app",
+                "repo_url": "https://github.com/acme/auth",
+                "repo_branch": "main",
+                "slug": "auth-service",
+            },
+            {
+                "node_id": str(uuid4()),
+                "node_name": "Billing System",
+                "node_type": "system",
+                "repo_url": "https://github.com/acme/billing",
+                "repo_branch": None,
+                "slug": "billing-system",
+            },
+            {
+                "node_id": str(uuid4()),
+                "node_name": "Data Warehouse",
+                "node_type": "store",
+                "repo_url": "https://github.com/acme/dwh",
+                "repo_branch": "develop",
+                "slug": "data-warehouse",
+            },
+        ]
+    }
+    tools = sv_module.build_repo_delegation_tools(state)  # type: ignore[arg-type]
+    names = {(t.get("function") or {}).get("name") for t in tools}
+    assert names == {
+        "delegate_to_repo_auth-service",
+        "delegate_to_repo_billing-system",
+        "delegate_to_repo_data-warehouse",
+    }
+    # System block lists every entry by slug.
+    block = sv_module.render_repo_manifest_block(state)  # type: ignore[arg-type]
+    assert "repo:auth-service" in block
+    assert "repo:billing-system" in block
+    assert "repo:data-warehouse" in block
+    # Tool descriptions carry the per-repo metadata so the LLM doesn't
+    # need to cross-reference the system block at delegation time.
+    descs = {
+        (t.get("function") or {}).get("name"): (t.get("function") or {}).get("description")
+        for t in tools
+    }
+    assert "acme/auth" in descs["delegate_to_repo_auth-service"]
+    assert "acme/billing" in descs["delegate_to_repo_billing-system"]
+    assert "acme/dwh" in descs["delegate_to_repo_data-warehouse"]
+
+
+def test_supervisor_resolves_correct_repo_context_for_each_slug():
+    """Three separate ``delegate_to_repo_<slug>`` calls each route to the
+    matching manifest entry — no cross-talk, each delegation gets the
+    right repo_url / repo_branch / node_name."""
+    auth_id, billing_id, dwh_id = str(uuid4()), str(uuid4()), str(uuid4())
+    manifest = [
+        {
+            "node_id": auth_id,
+            "node_name": "Auth Service",
+            "node_type": "app",
+            "repo_url": "https://github.com/acme/auth",
+            "repo_branch": "main",
+            "slug": "auth-service",
+        },
+        {
+            "node_id": billing_id,
+            "node_name": "Billing System",
+            "node_type": "system",
+            "repo_url": "https://github.com/acme/billing",
+            "repo_branch": None,
+            "slug": "billing-system",
+        },
+        {
+            "node_id": dwh_id,
+            "node_name": "Data Warehouse",
+            "node_type": "store",
+            "repo_url": "https://github.com/acme/dwh",
+            "repo_branch": "develop",
+            "slug": "data-warehouse",
+        },
+    ]
+    expected = {
+        "auth-service": ("https://github.com/acme/auth", "main", "Auth Service", "app"),
+        "billing-system": ("https://github.com/acme/billing", None, "Billing System", "system"),
+        "data-warehouse": ("https://github.com/acme/dwh", "develop", "Data Warehouse", "store"),
+    }
+    for slug, (repo_url, branch, node_name, node_type) in expected.items():
+        state = {
+            "delegate_brief": {
+                "kind": f"repo:{slug}",
+                "instruction": "explain it",
+                "reason": None,
+            },
+            "repo_manifest": manifest,
+        }
+        rc = _resolve_repo_context_from_brief(state)  # type: ignore[arg-type]
+        assert rc is not None, f"failed to resolve repo:{slug}"
+        assert rc["slug"] == slug
+        assert rc["repo_url"] == repo_url
+        assert rc["repo_branch"] == branch
+        assert rc["repo_node_name"] == node_name
+        assert rc["repo_node_type"] == node_type
+
+
 def test_supervisor_brief_extractor_recognises_repo_delegation():
     messages = [
         {"role": "user", "content": "describe auth"},
