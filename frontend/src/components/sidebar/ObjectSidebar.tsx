@@ -24,6 +24,7 @@ import { TechnologyPicker, TechBadge } from '../tech'
 import { useTechnologies } from '../../hooks/use-api'
 import { useWorkspaceStore } from '../../stores/workspace-store'
 import { cn } from '../../utils/cn'
+import { GitHubRepoField } from './GitHubRepoField'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -259,6 +260,17 @@ export function ObjectSidebar({
                 placeholder="Add technology…"
               />
             </div>
+
+            {/* GitHub repo — Container/System types only */}
+            <GitHubRepoField
+              obj={{
+                id: obj.id,
+                type: obj.type,
+                repo_url: obj.repo_url ?? null,
+                repo_branch: obj.repo_branch ?? null,
+              }}
+              onChange={(patch) => updateObject.mutate({ id: obj.id, ...patch })}
+            />
 
             {/* Tags */}
             <div>
