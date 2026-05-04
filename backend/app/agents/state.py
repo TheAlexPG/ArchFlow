@@ -233,8 +233,22 @@ class AgentState(TypedDict, total=False):
     supervisor_visits: int
     compaction_stage: int
     # Brief from the supervisor's most recent delegate_to_* tool call. Sub-agents
-    # (researcher / planner / diagram / critic) read this so they receive the
-    # supervisor's specific instruction, not just the raw user input.
-    # Shape: {"kind": "researcher"|"planner"|"diagram"|"critic",
+    # (researcher / planner / diagram / critic / repo_researcher) read this so
+    # they receive the supervisor's specific instruction, not just the raw user
+    # input.
+    # Shape: {"kind": "researcher"|"planner"|"diagram"|"critic"|"repo:<slug>",
     #         "instruction": str, "reason": str | None}
     delegate_brief: dict | None
+    # Per-turn manifest of repo-linked objects on the active diagram. Populated
+    # by ``app.agents.builtin.general.manifest.collect_repo_manifest`` at
+    # invocation start. Each entry is a serialized
+    # ``app.agents.builtin.general.manifest.RepoLink`` dict (so the state stays
+    # JSON-friendly across LangGraph checkpoints).
+    repo_manifest: list[dict]
+    # Resolved repo context for the active ``repo_researcher`` invocation —
+    # populated by the graph wrapper just before ``repo_researcher.run`` is
+    # entered. Shape mirrors a ``RepoLink`` minus the manifest-only fields.
+    repo_context: dict | None
+    # Free-form markdown answer produced by the repo_researcher node — surfaced
+    # in the supervisor's history via ``rewrite_subagent_tool_result``.
+    repo_response: str | None
