@@ -154,10 +154,16 @@ export function ChatComposer() {
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/60',
             )}
           >
-            {/* Pulsing ring around the button — "processing" indicator */}
+            {/* Softer ring around the button — "processing" indicator. The
+                default Tailwind animate-ping flashes at full opacity which
+                reads as alarm rather than activity; archflow-cancel-ring
+                tops out at 0.5 opacity and stays inside a 1.6× footprint. */}
             <span
               aria-hidden
-              className="absolute inset-0 rounded-full ring-2 ring-red-500/40 animate-ping"
+              className="absolute inset-0 rounded-full ring-2 ring-red-500/50 pointer-events-none"
+              style={{
+                animation: 'archflow-cancel-ring 1.6s cubic-bezier(0.16, 1, 0.3, 1) infinite',
+              }}
             />
             {/* Filled square = stop */}
             <svg
