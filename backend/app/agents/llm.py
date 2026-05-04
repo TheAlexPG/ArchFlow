@@ -358,11 +358,27 @@ class LLMClient:
             # api_base is the parameter name LiteLLM uses across all providers;
             # base_url alone is honored only by some routes.
             kwargs["api_base"] = self._settings.litellm_base_url
+
+        provider = (self._settings.litellm_provider or "").lower()
+        base_url = self._settings.litellm_base_url or ""
+        # OpenRouter is OpenAI-compatible but our model names look like
+        # ``anthropic/...`` / ``openai/...`` (matching OpenRouter's own
+        # catalog). Without an explicit override LiteLLM routes by model
+        # prefix and tries the native Anthropic / OpenAI SDK against the
+        # OpenRouter URL — yielding ``AnthropicException: Unable to get
+        # json response`` and an HTML 404 in the body. Treat both
+        # ``provider=openrouter`` and any base_url that points at
+        # ``openrouter.ai`` as OpenAI-protocol.
+        is_openrouter = provider == "openrouter" or "openrouter.ai" in base_url
+        if is_openrouter:
+            kwargs["custom_llm_provider"] = "openai"
+            if not kwargs.get("api_base"):
+                kwargs["api_base"] = "https://openrouter.ai/api/v1"
         # For provider=custom (LM Studio / Ollama / vLLM / any OpenAI-compatible
         # endpoint) force OpenAI protocol regardless of model name prefix —
         # otherwise LiteLLM routes by prefix (e.g. "qwen/..." → Alibaba Qwen
         # DashScope API) and ignores the custom base URL.
-        if self._settings.litellm_provider == "custom":
+        elif provider == "custom":
             kwargs["custom_llm_provider"] = "openai"
             # Many local servers don't enforce auth — pass a placeholder so the
             # OpenAI client doesn't refuse to send a request without one.

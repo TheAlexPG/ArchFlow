@@ -252,6 +252,73 @@ def test_context_window_unknown_model_falls_back(
     assert c.context_window() == 8192
 
 
+def _build_kwargs(client: LLMClient) -> dict:
+    """Helper — invoke the private kwargs builder with a minimal payload."""
+    meta = LLMCallMetadata(
+        workspace_id=uuid4(),
+        agent_id="general",
+        session_id=uuid4(),
+        actor_id=uuid4(),
+        analytics_consent="off",
+    )
+    return client._build_call_kwargs(
+        messages=[{"role": "user", "content": "hi"}],
+        tools=None,
+        tool_choice=None,
+        response_format=None,
+        metadata=meta,
+        model_override=None,
+        max_tokens=None,
+        temperature=None,
+        timeout=60.0,
+        stream=False,
+    )
+
+
+def test_openrouter_provider_forces_openai_protocol(
+    settings: ResolvedAgentSettings,
+):
+    """``provider="openrouter"`` + an ``anthropic/...`` model must NOT
+    route through LiteLLM's native Anthropic SDK — that yields HTTP 404
+    HTML when pointed at openrouter.ai. Instead force OpenAI-compat
+    transport and default the base_url."""
+    settings.litellm_provider = "openrouter"
+    settings.litellm_model = "anthropic/claude-haiku-4.5"
+    client = LLMClient(settings)
+    kwargs = _build_kwargs(client)
+    assert kwargs["custom_llm_provider"] == "openai"
+    assert kwargs["api_base"] == "https://openrouter.ai/api/v1"
+
+
+def test_openrouter_inferred_from_base_url(
+    settings: ResolvedAgentSettings,
+):
+    """Even when the user picked ``provider=openai`` explicitly, an
+    openrouter.ai base_url tells us we need OpenAI-compat transport so
+    Anthropic-prefixed model names don't trigger the native SDK."""
+    settings.litellm_provider = "openai"
+    settings.litellm_base_url = "https://openrouter.ai/api/v1"
+    settings.litellm_model = "anthropic/claude-haiku-4.5"
+    client = LLMClient(settings)
+    kwargs = _build_kwargs(client)
+    assert kwargs["custom_llm_provider"] == "openai"
+    assert kwargs["api_base"] == "https://openrouter.ai/api/v1"
+
+
+def test_custom_provider_unaffected_by_openrouter_branch(
+    settings: ResolvedAgentSettings,
+):
+    """LM Studio / Ollama path stays as-is."""
+    settings.litellm_provider = "custom"
+    settings.litellm_base_url = "http://192.168.0.146:11434/v1"
+    settings.litellm_model = "qwen/qwen3.6-35b-a3b"
+    client = LLMClient(settings)
+    kwargs = _build_kwargs(client)
+    assert kwargs["custom_llm_provider"] == "openai"
+    assert kwargs["api_base"] == "http://192.168.0.146:11434/v1"
+    assert kwargs.get("api_key") == "lm-studio"
+
+
 # ---------------------------------------------------------------------------
 # _build_langfuse_metadata
 # ---------------------------------------------------------------------------
