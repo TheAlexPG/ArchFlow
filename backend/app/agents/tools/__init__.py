@@ -17,6 +17,7 @@ from app.agents.tools import (  # noqa: F401 — side-effect imports
     drafts_tools,
     model_tools,
     reasoning_tools,
+    repo_tools,
     search_tools,
     view_tools,
     web_fetch,
