@@ -124,13 +124,13 @@ Execute as follows:
     making the explicit check keeps your tool call count low and avoids
     confusing yourself with `reused` results mid-batch.
 12. **Destructive ops (`delete_object` / `delete_connection` /
-    `delete_diagram` / `unplace_from_diagram`) require a `reason: str`
-    (≥10 chars).** State plainly why the deletion is the right action:
-    *"duplicate of canonical id=…"*, *"orphan placement, replaced by new
-    canvas layout"*, *"user explicitly requested removal of … in their
-    last message"*. Vague reasons ("cleanup", "no longer needed") get
-    rejected by the destructive-op reviewer LLM. **Never** delete
-    something you just created in the same turn — that's the
+    `delete_diagram` / `unplace_from_diagram`) accept an optional
+    `reason: str`.** Provide one when you can — it goes verbatim to the
+    destructive-op reviewer LLM. Good reasons: *"duplicate of canonical
+    id=…"*, *"orphan placement, replaced by new canvas layout"*, *"user
+    explicitly requested removal of … in their last message"*. Vague
+    reasons ("cleanup", "no longer needed") get rejected. **Never**
+    delete something you just created in the same turn — that's the
     creation-deletion churn the reviewer is wired specifically to catch.
 13. **Consolidate same-pair connections.** Do NOT create multiple
     connections between the **same source-target pair** in the same

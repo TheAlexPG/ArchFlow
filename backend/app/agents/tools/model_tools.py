@@ -80,16 +80,16 @@ class DeleteObjectInput(BaseModel):
     object_id: UUID
     confirmed: bool = False
     reason: str = Field(
-        ...,
-        min_length=10,
+        default="",
         max_length=1000,
         description=(
-            "REQUIRED. ≥10 chars. Justify why this delete is correct. The "
-            "destructive-op reviewer LLM reads this verbatim and rejects "
-            "vague reasons like 'cleanup' or 'no longer needed'. Good "
-            "reasons cite specifics: 'duplicate of canonical id=…', "
-            "'user explicitly asked to remove X in their last message', "
-            "'orphan placement after layout refactor'."
+            "Justify why this delete is correct. Optional but strongly "
+            "recommended — the destructive-op reviewer LLM reads it "
+            "verbatim. Good reasons cite specifics: 'duplicate of "
+            "canonical id=…', 'user explicitly asked to remove X', "
+            "'orphan placement after layout refactor'. When omitted, the "
+            "reviewer falls back to inspecting the agent's recent "
+            "activity, which is weaker."
         ),
     )
 
@@ -124,15 +124,15 @@ class DeleteConnectionInput(BaseModel):
     connection_id: UUID
     confirmed: bool = False
     reason: str = Field(
-        ...,
-        min_length=10,
+        default="",
         max_length=1000,
         description=(
-            "REQUIRED. ≥10 chars. Justify why this delete is correct. The "
-            "destructive-op reviewer LLM reads this verbatim and rejects "
-            "vague reasons. Cite specifics: 'duplicate edge — same source/"
-            "target and label as connection X', 'user removed link in their "
-            "last message', 'wrong direction, replaced by new connection Y'."
+            "Justify why this delete is correct. Optional but strongly "
+            "recommended — the destructive-op reviewer LLM reads it "
+            "verbatim. Good reasons cite specifics: 'duplicate edge — "
+            "same source/target as X', 'user removed link in their last "
+            "message', 'wrong direction, replaced by Y'. When omitted, "
+            "the reviewer falls back to recent activity, which is weaker."
         ),
     )
 
@@ -878,8 +878,9 @@ async def update_object(args: UpdateObjectInput, ctx: ToolContext) -> dict:
     description=(
         "Delete a model object. Will cascade to its connections + placements. "
         "First call without confirmed=True returns a preview with impact. "
-        "Call again with confirmed=True AND a `reason` (≥10 chars, specific) "
-        "to execute. The reason is required and reviewed by an LLM — vague "
+        "Call again with confirmed=True to execute. Pass a `reason` string "
+        "(specific, e.g. 'duplicate of X', 'user explicitly asked to remove') "
+        "so the destructive-op reviewer can sanity-check the delete; vague "
         "reasons get rejected."
     ),
     input_schema=DeleteObjectInput,
@@ -1161,9 +1162,10 @@ async def update_connection(args: UpdateConnectionInput, ctx: ToolContext) -> di
     name="delete_connection",
     description=(
         "Delete a connection. First call without confirmed returns preview. "
-        "Re-call with confirmed=True AND a `reason` (≥10 chars, specific) to "
-        "execute. The reason is required and reviewed by an LLM — vague "
-        "reasons get rejected."
+        "Re-call with confirmed=True to execute. Pass a `reason` string "
+        "(specific, e.g. 'duplicate edge', 'user removed this link') so the "
+        "destructive-op reviewer can sanity-check the delete; vague reasons "
+        "get rejected."
     ),
     input_schema=DeleteConnectionInput,
     permission="diagram:manage",

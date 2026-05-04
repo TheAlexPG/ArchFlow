@@ -89,15 +89,15 @@ class UnplaceFromDiagramInput(BaseModel):
     object_id: UUID
     confirmed: bool = False
     reason: str = Field(
-        ...,
-        min_length=10,
+        default="",
         max_length=1000,
         description=(
-            "REQUIRED. ≥10 chars. Justify why removing this placement is "
-            "correct. The destructive-op reviewer LLM rejects vague "
-            "reasons. Cite specifics: 'duplicate placement on same "
+            "Justify why removing this placement is correct. Optional but "
+            "strongly recommended — the destructive-op reviewer LLM reads "
+            "it verbatim. Cite specifics: 'duplicate placement on same "
             "diagram', 'user asked to remove X from this view', "
-            "'placement belongs on child diagram, not here'."
+            "'placement belongs on child diagram'. When omitted, the "
+            "reviewer falls back to recent activity, which is weaker."
         ),
     )
 
@@ -124,15 +124,15 @@ class DeleteDiagramInput(BaseModel):
     diagram_id: UUID
     confirmed: bool = False
     reason: str = Field(
-        ...,
-        min_length=10,
+        default="",
         max_length=1000,
         description=(
-            "REQUIRED. ≥10 chars. Justify why deleting this diagram is "
-            "correct. The destructive-op reviewer LLM rejects vague "
-            "reasons. Cite specifics: 'duplicate of diagram X for the "
-            "same scope object', 'user asked to drop empty draft scratch "
-            "diagram', 'replaced by new layout in diagram Y'."
+            "Justify why deleting this diagram is correct. Optional but "
+            "strongly recommended — the destructive-op reviewer LLM reads "
+            "it verbatim. Cite specifics: 'duplicate of diagram X for "
+            "the same scope object', 'user asked to drop empty draft', "
+            "'replaced by new layout in Y'. When omitted, the reviewer "
+            "falls back to recent activity, which is weaker."
         ),
     )
 
@@ -511,9 +511,10 @@ async def move_on_diagram(args: MoveOnDiagramInput, ctx: ToolContext) -> dict:
     description=(
         "Remove an object's visual placement from a diagram (does not delete the "
         "object). First call without confirmed=True returns a preview of orphaned "
-        "connections on this diagram. Re-call with confirmed=True AND a `reason` "
-        "(≥10 chars, specific) to execute. The reason is required and reviewed "
-        "by an LLM — vague reasons get rejected."
+        "connections on this diagram. Re-call with confirmed=True to execute. "
+        "Pass a `reason` string (specific, e.g. 'duplicate placement', 'user asked "
+        "to remove from this view') so the destructive-op reviewer can sanity-"
+        "check the delete; vague reasons get rejected."
     ),
     input_schema=UnplaceFromDiagramInput,
     permission="diagram:manage",
@@ -712,10 +713,12 @@ async def update_diagram(args: UpdateDiagramInput, ctx: ToolContext) -> dict:
     name="delete_diagram",
     description=(
         "Delete a diagram. First call returns impact preview (placements + "
-        "child-diagram-of-object linkage). Re-call with confirmed=True AND a "
-        "`reason` (≥10 chars, specific) to execute. The reason is required and "
-        "reviewed by an LLM — vague reasons get rejected. The model objects "
-        "themselves are NOT deleted, only the diagram and its placements."
+        "child-diagram-of-object linkage). Re-call with confirmed=True to "
+        "execute. Pass a `reason` string (specific, e.g. 'duplicate diagram', "
+        "'user asked to drop empty draft') so the destructive-op reviewer can "
+        "sanity-check the delete; vague reasons get rejected. The model "
+        "objects themselves are NOT deleted, only the diagram and its "
+        "placements."
     ),
     input_schema=DeleteDiagramInput,
     permission="diagram:manage",

@@ -147,12 +147,17 @@ async def review_destructive_op(
     # Strip the noisy ``confirmed`` echo from the args we feed the LLM.
     args_dict.pop("confirmed", None)
 
+    reason_line = (
+        f"- agent's stated reason: {reason!r}"
+        if (reason or "").strip()
+        else "- agent's stated reason: (none — judge from recent activity below)"
+    )
     user_block = "\n".join(
         [
             f"## Proposed mutation",
             f"- tool: `{tool_name}`",
             f"- args: `{_short(args_dict, 400)}`",
-            f"- agent's stated reason: {reason!r}",
+            reason_line,
             f"- target summary: {target_summary or '(none)'}",
             "",
             f"## Impact preview",
