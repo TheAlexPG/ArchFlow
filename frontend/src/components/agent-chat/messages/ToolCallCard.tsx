@@ -24,11 +24,13 @@ const STATUS_META: Record<ToolStatus, { icon: string; label: string; tone: strin
 
 // Spinner SVG used for the running state — animated via Tailwind
 // ``animate-spin`` so the tool card visibly pulses while the call is
-// in flight (replaces the static "⏳" emoji).
+// in flight (replaces the static "⏳" emoji). Sized at 16px on a
+// 20px slot so the icon reads at a glance against the surrounding
+// row.
 function ToolSpinner() {
   return (
     <svg
-      className="w-3.5 h-3.5 animate-spin text-coral"
+      className="w-4 h-4 animate-spin text-coral"
       viewBox="0 0 24 24"
       aria-hidden
     >
@@ -37,7 +39,7 @@ function ToolSpinner() {
         cy="12"
         r="9"
         stroke="currentColor"
-        strokeOpacity="0.25"
+        strokeOpacity="0.2"
         strokeWidth="3"
         fill="none"
       />
@@ -49,6 +51,25 @@ function ToolSpinner() {
         fill="none"
       />
     </svg>
+  )
+}
+
+// Indeterminate top-edge progress sweep — the strongest "running" signal
+// on the card. A 40%-wide coral sliver translates across the top border;
+// keyed by ``archflow-tool-progress`` in index.css.
+function ToolProgressBar() {
+  return (
+    <span
+      aria-hidden
+      className="absolute inset-x-0 top-0 h-[2px] overflow-hidden pointer-events-none rounded-t-lg"
+    >
+      <span
+        className="block h-full w-[40%] bg-gradient-to-r from-transparent via-coral to-transparent"
+        style={{
+          animation: 'archflow-tool-progress 1.4s cubic-bezier(0.16, 1, 0.3, 1) infinite',
+        }}
+      />
+    </span>
   )
 }
 
@@ -72,26 +93,30 @@ export function ToolCallCard({ id, name, args, status, preview, result }: ToolCa
       data-testid="tool-call-card"
       data-tool-status={status}
       className={cn(
-        'rounded-lg border bg-surface text-[12px] overflow-hidden',
+        'relative rounded-lg border bg-surface text-[12px] overflow-hidden',
+        'transition-[border-color,box-shadow] duration-300 ease-out',
         status === 'error' || status === 'denied' ? 'border-red-500/40' : 'border-border-base',
         status === 'awaiting_confirmation' && 'border-amber-500/40',
-        // Subtle outer ring while running so the card itself signals activity.
-        isPending && 'border-coral/40 shadow-[0_0_0_1px_var(--color-coral-glow)]',
+        // While running: warmer border + coral-tinted surface so the card
+        // itself reads "active" without a competing pulse animation. The
+        // top-edge progress sweep below is the focal motion.
+        isPending && 'border-coral/50 bg-[color-mix(in_srgb,var(--color-coral)_4%,var(--color-surface))]',
       )}
     >
+      {isPending && <ToolProgressBar />}
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
         data-testid="tool-call-card-toggle"
         className={cn(
           'w-full flex items-center gap-2 px-3 py-2 text-left',
-          'hover:bg-surface-hi transition-colors duration-100',
+          'hover:bg-surface-hi transition-colors duration-150 ease-out',
           'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-coral/50',
         )}
         aria-expanded={expanded}
       >
         <span
-          className={cn('inline-flex items-center justify-center w-4 h-4', meta.tone)}
+          className={cn('inline-flex items-center justify-center w-5 h-5', meta.tone)}
           aria-label={meta.label}
         >
           {isPending ? <ToolSpinner /> : <span className="text-[13px]">{meta.icon}</span>}
@@ -105,10 +130,8 @@ export function ToolCallCard({ id, name, args, status, preview, result }: ToolCa
           </span>
         )}
         {isPending && !preview && (
-          <span className="text-text-3 truncate flex-1 flex items-center gap-1">
-            <span className="inline-block w-1 h-1 rounded-full bg-coral animate-pulse" />
-            <span className="inline-block w-1 h-1 rounded-full bg-coral animate-pulse [animation-delay:120ms]" />
-            <span className="inline-block w-1 h-1 rounded-full bg-coral animate-pulse [animation-delay:240ms]" />
+          <span className="text-coral/80 text-[11px] font-mono truncate flex-1">
+            running…
           </span>
         )}
         <span className="text-text-4 text-[11px]">{expanded ? '▾' : '▸'}</span>
