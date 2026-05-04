@@ -3,10 +3,12 @@ Used as a node in the `general` graph AND as the sole node in the `researcher` s
 
 from __future__ import annotations
 
+import logging
+import re
 from collections.abc import AsyncIterator, Callable
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from app.agents.nodes.base import (
     NodeConfig,
@@ -22,6 +24,8 @@ if TYPE_CHECKING:
     from app.agents.context_manager import ContextManager
     from app.agents.limits import LimitsEnforcer
     from app.agents.llm import LLMCallMetadata
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Phase 1: read-only tool set — NO create/update/delete/place.
@@ -77,16 +81,19 @@ _FORBIDDEN_TOOL_PREFIXES = frozenset(
 # ---------------------------------------------------------------------------
 
 
+# Hard ceiling on summary length. Findings is in-memory only (supervisor
+# context + final reply text) — no DB column constrains it — so the cap
+# exists purely to avoid runaway prompts. Bumped 16k -> 32k after rich
+# repo answers tripped string_too_long. Token budget is the real guard.
+FINDINGS_SUMMARY_MAX_LEN = 32000
+
+
 class Findings(BaseModel):
     """What researcher returns. Free-form markdown body + structured citations."""
 
     summary: str = Field(
         ...,
-        # Generous cap — researcher answers about diagrams with many objects
-        # routinely run 4-12k chars. Truncating crashed the run with
-        # ``string_too_long``. The token budget (workspace-level) is the
-        # real cost guard.
-        max_length=16000,
+        max_length=FINDINGS_SUMMARY_MAX_LEN,
         description="Markdown body, primary deliverable",
     )
     citations: list[dict] = Field(
@@ -99,6 +106,47 @@ class Findings(BaseModel):
         "medium",
         description="'low' | 'medium' | 'high'",
     )
+
+
+# Strip an outer ```json ... ``` (or plain ```...```) fence the LLM sometimes
+# wraps its full response in. Anchored at start/end of the stripped text.
+_MD_FENCE_RE = re.compile(
+    r"\A```(?:json|markdown|md)?\s*\n?(.*?)\n?\s*```\Z",
+    re.DOTALL | re.IGNORECASE,
+)
+
+
+def _strip_markdown_fence(text: str) -> str:
+    """Remove an outer ```...``` wrapper if present; return ``text`` otherwise."""
+    if not text:
+        return text
+    stripped = text.strip()
+    m = _MD_FENCE_RE.match(stripped)
+    return m.group(1).strip() if m else stripped
+
+
+def _safe_findings_from_text(text: str, *, confidence: str = "low") -> Findings:
+    """Build a best-effort Findings from raw LLM text without ever raising.
+
+    Used in the fallback path where structured output parsing failed.
+    Strips a wrapping markdown fence and truncates ``summary`` to the model's
+    cap so Pydantic validation never blows up the entire agent turn.
+    """
+    body = _strip_markdown_fence(text or "").strip()
+    cap = FINDINGS_SUMMARY_MAX_LEN
+    if len(body) > cap:
+        # Keep the head — that's where the LLM normally puts the answer.
+        body = body[: cap - 64].rstrip() + "\n\n…[truncated by researcher cap]"
+    try:
+        return Findings(summary=body, citations=[], confidence=confidence)
+    except ValidationError as exc:  # pragma: no cover — defensive
+        logger.warning("researcher: Findings fallback validation failed: %s", exc)
+        return Findings(
+            summary="Researcher returned an unparseable response; the raw "
+            "output exceeded the safety cap and could not be salvaged.",
+            citations=[],
+            confidence="low",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -226,11 +274,11 @@ async def run(  # type: ignore[return]
                 # markdown instead of the Findings JSON envelope. Salvage
                 # the prose as findings.summary at low confidence so the
                 # supervisor can surface it to the user instead of falling
-                # back to "No changes were applied".
-                output.state_patch["findings"] = Findings(
-                    summary=output.text.strip(),
-                    citations=[],
-                    confidence="low",
+                # back to "No changes were applied". ``_safe_findings_from_text``
+                # strips an outer ```json fence and truncates if the body
+                # exceeds the cap so we never crash the turn here.
+                output.state_patch["findings"] = _safe_findings_from_text(
+                    output.text, confidence="low"
                 )
             else:
                 # No structured output AND no text — usually because the LLM

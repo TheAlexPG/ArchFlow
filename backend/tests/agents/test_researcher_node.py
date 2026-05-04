@@ -152,16 +152,21 @@ def test_findings_valid_full():
 
 
 def test_findings_summary_max_length_exceeded():
-    """summary has max_length=16000; Pydantic v2 enforces with ValidationError."""
+    """summary has max_length=FINDINGS_SUMMARY_MAX_LEN (32000); Pydantic v2
+    enforces with ValidationError when exceeded."""
+    from app.agents.builtin.general.nodes.researcher import (
+        FINDINGS_SUMMARY_MAX_LEN,
+    )
+
     with pytest.raises(ValidationError):
-        Findings(summary="x" * 16001)
+        Findings(summary="x" * (FINDINGS_SUMMARY_MAX_LEN + 1))
 
 
 def test_findings_summary_accepts_long_markdown_under_cap():
     """A 12k-char Findings body must validate — it routinely happens for
     diagrams with many objects (multi-component architecture answers)."""
     body = "## Section\n" + ("- item line\n" * 600)  # ~12k chars
-    assert 4000 < len(body) < 16000
+    assert 4000 < len(body) < 32000
     f = Findings(summary=body)
     assert len(f.summary) == len(body)
 
@@ -434,3 +439,85 @@ def test_load_researcher_prompt_contains_role():
     prompt = load_researcher_prompt()
     # The prompt must describe the researcher role.
     assert "Researcher" in prompt or "researcher" in prompt
+
+
+# ---------------------------------------------------------------------------
+# 8. Fallback path: markdown wrapper + oversize summary must NOT crash
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_markdown_wrapped_oversize_summary_does_not_crash_run():
+    """Regression: LLM returns ```json {"summary": <huge>, ...} ``` AND the
+    JSON validates as a dict but ``summary`` exceeds the cap. Earlier the
+    fallback path tried ``Findings(summary=output.text.strip())`` which
+    re-raised ValidationError and killed the whole agent turn (INTERNAL_ERROR).
+    The fixed fallback strips the fence and truncates so the run survives."""
+    from app.agents.builtin.general.nodes.researcher import (
+        FINDINGS_SUMMARY_MAX_LEN,
+    )
+
+    huge_body = "x" * (FINDINGS_SUMMARY_MAX_LEN + 5000)
+    # Wrap the (invalid-because-too-long) JSON in a markdown fence — same
+    # shape we saw in the production crash.
+    wrapped = f'```json\n{{"summary": "{huge_body}", "confidence": "high"}}\n```'
+
+    enforcer = _make_enforcer(
+        completion_results=[_make_llm_result(text=wrapped)]
+    )
+    cm = _make_context_manager()
+    state = _make_state(messages=[{"role": "user", "content": "describe repo"}])
+
+    events = await _collect(
+        run(
+            state,
+            enforcer=enforcer,
+            context_manager=cm,
+            tool_executor=_noop_tool_executor,
+            call_metadata_base=_make_call_meta(),
+        )
+    )
+
+    finished = [ev for ev in events if ev.kind == "finished"]
+    assert len(finished) == 1
+    output = finished[0].payload["output"]
+
+    # Findings must be present, not crash, and not contain the markdown fence.
+    findings = output.state_patch.get("findings")
+    assert isinstance(findings, Findings)
+    assert findings.confidence == "low"
+    assert "```" not in findings.summary
+    assert len(findings.summary) <= FINDINGS_SUMMARY_MAX_LEN
+
+
+@pytest.mark.asyncio
+async def test_markdown_fence_stripped_when_summary_under_cap():
+    """When the LLM wraps a perfectly fine JSON answer in ```json fences but
+    the structured output parser still couldn't recognise it (e.g. trailing
+    prose), the fallback should at least strip the fence so the surfaced
+    summary doesn't show backticks to the user."""
+    # Wrap NON-JSON markdown so _parse_structured_output fails and we fall
+    # through to the fallback path.
+    wrapped = "```markdown\n## Auth\nSingle node, no replicas.\n```"
+
+    enforcer = _make_enforcer(
+        completion_results=[_make_llm_result(text=wrapped)]
+    )
+    cm = _make_context_manager()
+    state = _make_state(messages=[{"role": "user", "content": "describe auth"}])
+
+    events = await _collect(
+        run(
+            state,
+            enforcer=enforcer,
+            context_manager=cm,
+            tool_executor=_noop_tool_executor,
+            call_metadata_base=_make_call_meta(),
+        )
+    )
+
+    finished = [ev for ev in events if ev.kind == "finished"]
+    findings = finished[0].payload["output"].state_patch["findings"]
+    assert isinstance(findings, Findings)
+    assert "```" not in findings.summary
+    assert "Auth" in findings.summary
