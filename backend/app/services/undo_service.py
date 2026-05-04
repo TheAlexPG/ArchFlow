@@ -440,6 +440,56 @@ async def _stack_summary(
     )
 
 
+@dataclass
+class UndoHistory:
+    entries: list[UndoEntry]
+    cursor_seq: int | None
+
+
+async def history(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    diagram_id: uuid.UUID,
+    draft_id: uuid.UUID | None,
+    limit: int = 50,
+) -> UndoHistory:
+    q = (
+        select(UndoEntry)
+        .where(
+            UndoEntry.user_id == user_id,
+            UndoEntry.diagram_id == diagram_id,
+            _draft_eq(draft_id),
+            UndoEntry.created_at > _retention_cutoff(),
+        )
+        .order_by(UndoEntry.seq.desc())
+        .limit(limit)
+    )
+    entries = list((await db.execute(q)).scalars().all())
+
+    cursor_q = select(func.max(UndoEntry.seq)).where(
+        UndoEntry.user_id == user_id,
+        UndoEntry.diagram_id == diagram_id,
+        _draft_eq(draft_id),
+        UndoEntry.state == UndoState.ACTIVE,
+        UndoEntry.created_at > _retention_cutoff(),
+    )
+    cursor_seq = (await db.execute(cursor_q)).scalar()
+
+    return UndoHistory(entries=entries, cursor_seq=cursor_seq)
+
+
+async def sweep_old_entries(db: AsyncSession) -> int:
+    """Hard-delete rows older than RETENTION_DAYS. Intended for a daily job.
+    Returns rows deleted."""
+    cutoff = _retention_cutoff()
+    result = await db.execute(
+        delete(UndoEntry).where(UndoEntry.created_at < cutoff)
+    )
+    await db.commit()
+    return result.rowcount or 0
+
+
 __all__ = [
     "COALESCE_WINDOW_SECONDS",
     "MAX_SKIP_HOPS",
@@ -447,12 +497,15 @@ __all__ = [
     "RETENTION_DAYS",
     "UndoAction",
     "UndoConcurrencyError",
+    "UndoHistory",
     "UndoResult",
     "UndoStackEmpty",
     "UndoState",
     "UndoTargetMissing",
     "UndoTargetType",
+    "history",
     "record",
     "redo",
+    "sweep_old_entries",
     "undo",
 ]
