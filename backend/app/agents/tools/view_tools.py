@@ -88,6 +88,7 @@ class UnplaceFromDiagramInput(BaseModel):
     diagram_id: UUID
     object_id: UUID
     confirmed: bool = False
+    reason: str = Field(..., min_length=10, max_length=1000)
 
 
 class CreateDiagramInput(BaseModel):
@@ -111,6 +112,7 @@ class DeleteDiagramInput(BaseModel):
 
     diagram_id: UUID
     confirmed: bool = False
+    reason: str = Field(..., min_length=10, max_length=1000)
 
 
 class LinkObjectToChildDiagramInput(BaseModel):
@@ -528,6 +530,35 @@ async def unplace_from_diagram(args: UnplaceFromDiagramInput, ctx: ToolContext) 
             "diagram_id": args.diagram_id,
         }
 
+    # ── LLM destructive-op reviewer ────────────────────────────────────
+    from app.agents.tools._destructive_review import review_destructive_op
+
+    deps = await object_service.get_dependencies(ctx.db, args.object_id)
+    placements = await diagram_service.get_diagram_objects(ctx.db, args.diagram_id)
+    placed_ids = {p.object_id for p in placements}
+    affected = sum(
+        1 for c in deps.get("upstream", []) + deps.get("downstream", [])
+        if c.source_id in placed_ids and c.target_id in placed_ids
+    )
+    impact = {
+        "will_unplace": 1,
+        "will_orphan_connections_on_diagram": affected,
+    }
+    verdict = await review_destructive_op(
+        ctx=ctx,
+        tool_name="unplace_from_diagram",
+        args=args,
+        impact=impact,
+        reason=args.reason,
+        target_summary=(
+            f"placement of object {args.object_id} on diagram {args.diagram_id}"
+        ),
+    )
+    if verdict.verdict == "REJECT":
+        raise ToolDenied(
+            f"destructive-op reviewer rejected: {verdict.rationale}"
+        )
+
     removed = await diagram_service.remove_object_from_diagram(
         ctx.db, args.diagram_id, args.object_id
     )
@@ -697,6 +728,30 @@ async def delete_diagram(args: DeleteDiagramInput, ctx: ToolContext) -> dict:
             "name": diagram.name,
         }
 
+    # ── LLM destructive-op reviewer ────────────────────────────────────
+    from app.agents.tools._destructive_review import review_destructive_op
+
+    placements = await diagram_service.get_diagram_objects(ctx.db, args.diagram_id)
+    impact = {
+        "will_delete_diagram": 1,
+        "will_drop_placements": len(placements),
+        "is_child_of_object": (
+            str(diagram.scope_object_id) if diagram.scope_object_id else None
+        ),
+    }
+    verdict = await review_destructive_op(
+        ctx=ctx,
+        tool_name="delete_diagram",
+        args=args,
+        impact=impact,
+        reason=args.reason,
+        target_summary=f"diagram {diagram.name!r} (id={diagram.id})",
+    )
+    if verdict.verdict == "REJECT":
+        raise ToolDenied(
+            f"destructive-op reviewer rejected: {verdict.rationale}"
+        )
+
     name = diagram.name
     target_id = diagram.id
     snapshot_workspace = getattr(diagram, "workspace_id", None)
@@ -842,6 +897,37 @@ async def create_child_diagram_for_object(
     if obj is None:
         raise ToolDenied(f"object {args.object_id} not found")
 
+    # ── Dedup guard: an object can have at most one canonical drill-in diagram.
+    # If a diagram with ``scope_object_id == object_id`` already exists in this
+    # workspace (live, non-draft), reuse it instead of creating a second one.
+    # Without this guard, a re-run of the same plan after a session restart
+    # silently creates "Facade Internal" alongside "Facade Internal Components"
+    # and the new components land on the wrong canvas (see trace 355785c7).
+    existing_children = await diagram_service.get_diagrams(
+        ctx.db,
+        scope_object_id=args.object_id,
+        workspace_id=ctx.workspace_id,
+    )
+    existing_live = next(
+        (d for d in existing_children if getattr(d, "draft_id", None) is None),
+        None,
+    )
+    if existing_live is not None:
+        record: dict[str, Any] = {
+            "action": "diagram.reused",
+            "status": "reused",
+            "target_type": "diagram",
+            "target_id": existing_live.id,
+            "name": existing_live.name,
+            "linked_to_object_id": args.object_id,
+            "preview": (
+                f"Object {obj.name} already has child diagram "
+                f"{existing_live.name!r} — reusing it"
+            ),
+        }
+        record.update(_diagram_meta(existing_live))
+        return record
+
     parent_level = obj.c4_level if hasattr(obj, "c4_level") else "L1"
     level = args.level or _next_level(parent_level)
     diagram_type = _coerce_diagram_type_from_level(level)
@@ -864,7 +950,7 @@ async def create_child_diagram_for_object(
         draft_id=ctx.active_draft_id,
     )
 
-    record: dict[str, Any] = {
+    record = {
         "action": "diagram.created",
         "target_type": "diagram",
         "target_id": diagram.id,

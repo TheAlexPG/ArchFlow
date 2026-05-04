@@ -79,6 +79,10 @@ class DeleteObjectInput(BaseModel):
 
     object_id: UUID
     confirmed: bool = False
+    # Required justification — surfaced to the user and to the destructive-op
+    # reviewer LLM. Plain "cleanup" / "duplicate" / "no longer needed" are
+    # acceptable; longer is better.
+    reason: str = Field(..., min_length=10, max_length=1000)
 
 
 class CreateConnectionInput(BaseModel):
@@ -110,6 +114,7 @@ class DeleteConnectionInput(BaseModel):
 
     connection_id: UUID
     confirmed: bool = False
+    reason: str = Field(..., min_length=10, max_length=1000)
 
 
 class ReadDiagramInput(BaseModel):
@@ -900,6 +905,35 @@ async def delete_object(args: DeleteObjectInput, ctx: ToolContext) -> dict:
             "name": obj.name,
         }
 
+    # ── LLM destructive-op reviewer ────────────────────────────────────
+    # confirmed=True means the planner / agent decided to proceed; we still
+    # ask a reviewer LLM (with the agent's recent history) to second-guess
+    # destructive ops to catch creation-then-deletion churn.
+    from app.agents.tools._destructive_review import review_destructive_op
+
+    deps = await object_service.get_dependencies(ctx.db, args.object_id)
+    placement_diagrams = await diagram_service.get_diagrams_containing_object(
+        ctx.db, args.object_id
+    )
+    impact = {
+        "will_delete": 1,
+        "will_orphan_connections": len(deps.get("upstream", []))
+        + len(deps.get("downstream", [])),
+        "will_orphan_placements": len(placement_diagrams),
+    }
+    verdict = await review_destructive_op(
+        ctx=ctx,
+        tool_name="delete_object",
+        args=args,
+        impact=impact,
+        reason=args.reason,
+        target_summary=f"object {obj.name!r} (id={obj.id}, type={getattr(obj.type, 'value', obj.type)})",
+    )
+    if verdict.verdict == "REJECT":
+        raise ToolDenied(
+            f"destructive-op reviewer rejected: {verdict.rationale}"
+        )
+
     name = obj.name
     target_id = obj.id
     was_draft = getattr(obj, "draft_id", None)
@@ -1138,6 +1172,28 @@ async def delete_connection(args: DeleteConnectionInput, ctx: ToolContext) -> di
             "target_id": conn.id,
             "name": conn.label or "",
         }
+
+    # ── LLM destructive-op reviewer ────────────────────────────────────
+    from app.agents.tools._destructive_review import review_destructive_op
+
+    impact = {
+        "will_delete": 1,
+        "source_id": str(conn.source_id),
+        "target_id": str(conn.target_id),
+        "label": conn.label or "",
+    }
+    verdict = await review_destructive_op(
+        ctx=ctx,
+        tool_name="delete_connection",
+        args=args,
+        impact=impact,
+        reason=args.reason,
+        target_summary=f"connection {conn.label or '(unlabelled)'} ({conn.source_id} → {conn.target_id})",
+    )
+    if verdict.verdict == "REJECT":
+        raise ToolDenied(
+            f"destructive-op reviewer rejected: {verdict.rationale}"
+        )
 
     label = conn.label or ""
     target_id = conn.id

@@ -52,6 +52,17 @@ class ToolContext:
     agent_runtime_mode: Literal["full", "read_only"]
     active_draft_id: UUID | None = None
     draft_target_diagram_id: UUID | None = None
+    # Destructive-op reviewer needs the calling agent's recent messages
+    # (so it can judge whether the delete fits the agent's stated goal).
+    # Populated by the runtime's tool executor wrapper. Optional so direct
+    # service callers / tests don't have to fill it in.
+    agent_messages: list[dict] | None = None
+    # LLM client used by the destructive-op reviewer to call out for an
+    # APPROVE / REJECT verdict. ``None`` disables review (defaults to
+    # silent approve — what tests / scripts get).
+    llm_client: Any | None = None
+    # Pre-resolved call metadata for the reviewer's LLM call. Optional.
+    call_metadata: Any | None = None
 
 
 @dataclass

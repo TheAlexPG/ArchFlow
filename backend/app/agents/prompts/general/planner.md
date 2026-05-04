@@ -66,6 +66,13 @@ explicitly wants a free-standing diagram.
    active-diagram id for components that belong inside a child diagram —
    the diagram-agent will copy your `diagram_id` verbatim, so a wrong id
    here lands components on the wrong canvas.
+   **Reuse existing child diagrams.** Before planning a
+   `create_child_diagram_for_object` step, check if the object already has
+   one (`list_child_diagrams(object_id)` or read its `has_child_diagram`
+   flag). If yes → drop the create-child step from the plan and route
+   placements into the existing child diagram's id. The diagram-agent has
+   server-side dedup as a safety net, but planning around the existing
+   structure produces cleaner plans with no `diagram.reused` noise.
 4. **Order matters; cycles are forbidden.** Use 0-based `index` on every
    step. List dependencies in `depends_on`. The plan must be a DAG — the
    diagram-agent runs `topological_order()` and refuses cycles.

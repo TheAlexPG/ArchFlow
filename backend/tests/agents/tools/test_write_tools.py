@@ -385,7 +385,11 @@ async def test_delete_object_preview_when_not_confirmed(monkeypatch):
         {
             "id": "c4",
             "name": "delete_object",
-            "arguments": {"object_id": str(obj.id), "confirmed": False},
+            "arguments": {
+                "object_id": str(obj.id),
+                "confirmed": False,
+                "reason": "duplicate object cleanup",
+            },
         },
         ctx,
     )
@@ -414,11 +418,18 @@ async def test_delete_object_confirmed_executes(monkeypatch):
     )
 
     ctx = _ctx()
+    # Without an LLM client wired into ToolContext the destructive-op
+    # reviewer auto-approves with a marker rationale (it's a safety net,
+    # not a hard gate). Tests rely on that fallback.
     out = await execute_tool(
         {
             "id": "c5",
             "name": "delete_object",
-            "arguments": {"object_id": str(obj.id), "confirmed": True},
+            "arguments": {
+                "object_id": str(obj.id),
+                "confirmed": True,
+                "reason": "duplicate object cleanup",
+            },
         },
         ctx,
     )
@@ -589,7 +600,11 @@ async def test_delete_connection_preview_then_confirmed(monkeypatch):
         {
             "id": "c7",
             "name": "delete_connection",
-            "arguments": {"connection_id": str(conn.id), "confirmed": False},
+            "arguments": {
+                "connection_id": str(conn.id),
+                "confirmed": False,
+                "reason": "removing stale link as part of cleanup",
+            },
         },
         ctx,
     )
@@ -602,7 +617,11 @@ async def test_delete_connection_preview_then_confirmed(monkeypatch):
         {
             "id": "c8",
             "name": "delete_connection",
-            "arguments": {"connection_id": str(conn.id), "confirmed": True},
+            "arguments": {
+                "connection_id": str(conn.id),
+                "confirmed": True,
+                "reason": "removing stale link as part of cleanup",
+            },
         },
         ctx,
     )
@@ -789,6 +808,7 @@ async def test_unplace_from_diagram_preview_with_affected_connections(monkeypatc
                 "diagram_id": str(diagram_id),
                 "object_id": str(object_id),
                 "confirmed": False,
+                "reason": "moving placement to a different diagram",
             },
         },
         ctx,
@@ -827,6 +847,125 @@ async def test_create_diagram_happy(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_create_child_diagram_for_object_reuses_existing(monkeypatch):
+    """Server-side dedup: a second `create_child_diagram_for_object` call on
+    the same object reuses the existing live child diagram instead of
+    creating a duplicate (see trace 355785c7 for why)."""
+    _patch_acl_pass(monkeypatch)
+
+    obj_id = uuid4()
+    parent_obj = _make_object_row(id=obj_id, name="Facade", c4_level="L2")
+    parent_obj.type = MagicMock(value="app")
+    existing_child = _make_diagram_row(name="Facade Internal")
+    existing_child.draft_id = None
+    existing_child.scope_object_id = obj_id
+
+    monkeypatch.setattr(
+        "app.services.object_service.get_object",
+        AsyncMock(return_value=parent_obj),
+    )
+    monkeypatch.setattr(
+        "app.services.diagram_service.get_diagrams",
+        AsyncMock(return_value=[existing_child]),
+    )
+    create_mock = AsyncMock()
+    monkeypatch.setattr(
+        "app.services.diagram_service.create_diagram", create_mock
+    )
+
+    ctx = _ctx()
+    out = await execute_tool(
+        {
+            "id": "ccd1",
+            "name": "create_child_diagram_for_object",
+            "arguments": {"object_id": str(obj_id)},
+        },
+        ctx,
+    )
+    assert out.status == "ok", out.content
+    assert out.structured.get("action") == "diagram.reused"
+    assert out.structured.get("target_id") == existing_child.id
+    create_mock.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_delete_object_rejected_by_destructive_reviewer(monkeypatch):
+    """When ``ctx.llm_client`` is wired and the reviewer returns REJECT,
+    the delete tool raises ToolDenied → ToolExecutionResult.status='denied'.
+    Service-level delete must never be called."""
+    _patch_acl_pass(monkeypatch)
+
+    obj = _make_object_row(name="Important")
+    monkeypatch.setattr(
+        "app.services.object_service.get_object",
+        AsyncMock(return_value=obj),
+    )
+    monkeypatch.setattr(
+        "app.services.object_service.get_dependencies",
+        AsyncMock(return_value={"upstream": [], "downstream": []}),
+    )
+    monkeypatch.setattr(
+        "app.services.diagram_service.get_diagrams_containing_object",
+        AsyncMock(return_value=[]),
+    )
+    monkeypatch.setattr(
+        "app.services.diagram_service.get_diagrams",
+        AsyncMock(return_value=[]),
+    )
+    delete_mock = AsyncMock()
+    monkeypatch.setattr(
+        "app.services.object_service.delete_object", delete_mock
+    )
+
+    # Stub the reviewer to return REJECT.
+    from app.agents.tools import _destructive_review
+
+    monkeypatch.setattr(
+        _destructive_review,
+        "review_destructive_op",
+        AsyncMock(
+            return_value=_destructive_review.DeleteVerdict(
+                verdict="REJECT",
+                rationale="agent created this object 2 steps ago — looks like churn",
+            )
+        ),
+    )
+
+    ctx = _ctx()
+    out = await execute_tool(
+        {
+            "id": "creject",
+            "name": "delete_object",
+            "arguments": {
+                "object_id": str(obj.id),
+                "confirmed": True,
+                "reason": "no longer needed",
+            },
+        },
+        ctx,
+    )
+    assert out.status == "denied"
+    assert "reviewer rejected" in out.content
+    delete_mock.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_delete_object_missing_reason_validation_error(monkeypatch):
+    _patch_acl_pass(monkeypatch)
+    ctx = _ctx()
+    out = await execute_tool(
+        {
+            "id": "cmissreason",
+            "name": "delete_object",
+            "arguments": {"object_id": str(uuid4()), "confirmed": True},
+        },
+        ctx,
+    )
+    assert out.status == "error"
+    assert "reason" in out.content.lower()
+
+
+@pytest.mark.asyncio
 async def test_delete_diagram_preview_then_confirmed(monkeypatch):
     _patch_acl_pass(monkeypatch)
 
@@ -849,7 +988,11 @@ async def test_delete_diagram_preview_then_confirmed(monkeypatch):
         {
             "id": "c14",
             "name": "delete_diagram",
-            "arguments": {"diagram_id": str(diagram.id), "confirmed": False},
+            "arguments": {
+                "diagram_id": str(diagram.id),
+                "confirmed": False,
+                "reason": "removing obsolete L3 child diagram",
+            },
         },
         ctx,
     )
@@ -861,7 +1004,11 @@ async def test_delete_diagram_preview_then_confirmed(monkeypatch):
         {
             "id": "c15",
             "name": "delete_diagram",
-            "arguments": {"diagram_id": str(diagram.id), "confirmed": True},
+            "arguments": {
+                "diagram_id": str(diagram.id),
+                "confirmed": True,
+                "reason": "removing obsolete L3 child diagram",
+            },
         },
         ctx,
     )

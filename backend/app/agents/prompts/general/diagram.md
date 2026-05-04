@@ -114,6 +114,24 @@ Execute as follows:
     arrows, no top-side anchors when right-side is the obvious route).
     When you don't have geometric certainty, omit them and let the
     backend decide.
+11. **Before `create_child_diagram_for_object`, check for an existing
+    drill-in diagram.** Call `list_child_diagrams(object_id)` (or
+    `read_object_full` and inspect `has_child_diagram`) first; if the
+    object already has a live child diagram, **reuse it** by referencing
+    its id in subsequent placements — do NOT create a second one.
+    Server-side dedup will refuse to create a duplicate anyway and
+    return the existing diagram with `action="diagram.reused"`, but
+    making the explicit check keeps your tool call count low and avoids
+    confusing yourself with `reused` results mid-batch.
+12. **Destructive ops (`delete_object` / `delete_connection` /
+    `delete_diagram` / `unplace_from_diagram`) require a `reason: str`
+    (≥10 chars).** State plainly why the deletion is the right action:
+    *"duplicate of canonical id=…"*, *"orphan placement, replaced by new
+    canvas layout"*, *"user explicitly requested removal of … in their
+    last message"*. Vague reasons ("cleanup", "no longer needed") get
+    rejected by the destructive-op reviewer LLM. **Never** delete
+    something you just created in the same turn — that's the
+    creation-deletion churn the reviewer is wired specifically to catch.
 
 ---
 

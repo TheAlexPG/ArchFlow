@@ -428,6 +428,10 @@ async def stream(
         active_draft_id=active_draft_id,
         agent_id=req.agent_id,
         mode=clamped_mode,
+        # Destructive-op reviewer needs the LLM client + base call metadata
+        # so it can emit its APPROVE/REJECT verdict on the same Langfuse trace.
+        llm_client=llm,
+        call_metadata_base=call_metadata_base,
     )
 
     # ── 8. Load existing chat history + persist user message ──
@@ -1280,6 +1284,8 @@ def _make_tool_executor(
     active_draft_id: UUID | None,
     agent_id: str,
     mode: Literal["full", "read_only"],
+    llm_client: Any | None = None,
+    call_metadata_base: Any | None = None,
 ):
     """Build the tool executor coroutine for this invocation.
 
@@ -1294,7 +1300,7 @@ def _make_tool_executor(
     """
     from app.agents.tools.base import ToolContext, execute_tool, get_tool
 
-    async def _executor(tool_call: dict, state: dict) -> dict:  # noqa: ARG001
+    async def _executor(tool_call: dict, state: dict) -> dict:
         # --- Scope pre-check (api_key actors only) ---
         if actor.kind == "api_key":
             name = tool_call.get("name") or ""
@@ -1339,6 +1345,11 @@ def _make_tool_executor(
             agent_id=agent_id,
             agent_runtime_mode=mode,  # type: ignore[arg-type]
             active_draft_id=active_draft_id,
+            # Destructive-op reviewer reads ctx.agent_messages to judge whether
+            # the calling agent's recent activity matches the delete reason.
+            agent_messages=list(state.get("messages") or []),
+            llm_client=llm_client,
+            call_metadata=call_metadata_base,
         )
         result = await execute_tool(tool_call, ctx)
         return {
