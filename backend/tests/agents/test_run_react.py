@@ -811,6 +811,211 @@ async def test_tool_executor_error_continues_loop():
 
 
 # ---------------------------------------------------------------------------
+# Per-tool commit + asyncio.Lock serialisation
+# ---------------------------------------------------------------------------
+
+
+class _RecordingSession:
+    """Stand-in for AsyncSession that records commit ordering & lock state."""
+
+    def __init__(self, lock) -> None:
+        self.lock = lock
+        self.commit_count = 0
+        # Whether the lock was held by SOMEONE while each commit ran.  We
+        # check ``lock.locked()``: holding the lock from inside the same
+        # coroutine still counts as "held" so this proves the per-tool
+        # commit acquired the lock for its critical section.
+        self.lock_held_during_commit: list[bool] = []
+
+    async def commit(self) -> None:
+        self.commit_count += 1
+        self.lock_held_during_commit.append(self.lock.locked())
+
+
+@pytest.mark.asyncio
+async def test_per_tool_commit_runs_under_db_lock():
+    """When ``enforcer.db_lock`` is set, the per-tool commit at base.py:1175
+    must hold the lock across ``await db.commit()``. Without this, a
+    concurrent path that briefly touches the same session can trip
+    asyncpg's "concurrent operations are not permitted" error and leave
+    the session in an aborted state — manifesting downstream as a spurious
+    FK violation on the next mutating tool call."""
+    import asyncio
+
+    lock = asyncio.Lock()
+    db = _RecordingSession(lock)
+
+    tool_call = {"id": "call_1", "name": "create_object", "arguments": "{}"}
+    enforcer = _make_enforcer(
+        completion_results=[
+            _make_llm_result(text=None, tool_calls=[tool_call]),
+            _make_llm_result(text="done", tool_calls=None),
+        ]
+    )
+    enforcer.db = db
+    enforcer.db_lock = lock
+    cm = _make_context_manager()
+    executor = _make_tool_executor(
+        results=[
+            {
+                "tool_call_id": "call_1",
+                "status": "ok",
+                "content": "ok",
+                "preview": "ok",
+            }
+        ]
+    )
+    cfg = _make_cfg(tool_executor=executor, tools=[{"name": "create_object"}])
+    state = _make_state(messages=[{"role": "user", "content": "create one"}])
+
+    await _collect(
+        run_react(
+            state,
+            cfg,
+            enforcer=enforcer,
+            context_manager=cm,
+            call_metadata_base=_make_call_meta(),
+        )
+    )
+
+    # One commit happened (one ok tool call) and the lock was held during
+    # that commit — i.e. the new code path is engaged, not the unlocked
+    # legacy fallback.
+    assert db.commit_count == 1
+    assert db.lock_held_during_commit == [True]
+    # Lock released back after the commit completes.
+    assert not lock.locked()
+
+
+@pytest.mark.asyncio
+async def test_per_tool_commit_skipped_when_no_lock_attribute():
+    """Defensive: when ``enforcer`` has no ``db_lock`` (older callers /
+    test stubs), the commit still runs unguarded — no AttributeError."""
+    import asyncio  # noqa: F401 — used by the recording session
+
+    class _BareSession:
+        def __init__(self) -> None:
+            self.commit_count = 0
+
+        async def commit(self) -> None:
+            self.commit_count += 1
+
+    db = _BareSession()
+
+    tool_call = {"id": "call_x", "name": "create_object", "arguments": "{}"}
+    enforcer = _make_enforcer(
+        completion_results=[
+            _make_llm_result(text=None, tool_calls=[tool_call]),
+            _make_llm_result(text="done", tool_calls=None),
+        ]
+    )
+    enforcer.db = db
+    # Explicitly DELETE db_lock so getattr returns None — proves the legacy
+    # path still works.
+    if hasattr(enforcer, "db_lock"):
+        del enforcer.db_lock
+    cm = _make_context_manager()
+    executor = _make_tool_executor(
+        results=[
+            {
+                "tool_call_id": "call_x",
+                "status": "ok",
+                "content": "ok",
+                "preview": "ok",
+            }
+        ]
+    )
+    cfg = _make_cfg(tool_executor=executor, tools=[{"name": "create_object"}])
+    state = _make_state(messages=[{"role": "user", "content": "create one"}])
+
+    await _collect(
+        run_react(
+            state,
+            cfg,
+            enforcer=enforcer,
+            context_manager=cm,
+            call_metadata_base=_make_call_meta(),
+        )
+    )
+    assert db.commit_count == 1
+
+
+@pytest.mark.asyncio
+async def test_per_tool_commit_lock_serialises_concurrent_db_user():
+    """End-to-end repro: while the per-tool commit is mid-await, a parallel
+    coroutine that needs ``db`` must wait until the commit releases the
+    lock. Without the lock, a real asyncpg session would raise "concurrent
+    operations are not permitted" and corrupt the session state."""
+    import asyncio
+
+    lock = asyncio.Lock()
+    sequence: list[str] = []
+
+    class _SequencingSession:
+        async def commit(self) -> None:
+            sequence.append("commit-enter")
+            # Simulate the asyncpg ``await self.connection.execute("COMMIT")``
+            # round-trip — yields control to the loop.
+            await asyncio.sleep(0)
+            sequence.append("commit-exit")
+
+        async def execute(self, *_a, **_kw):
+            sequence.append("execute")
+
+    db = _SequencingSession()
+
+    async def _competitor():
+        # Wait until the commit is in-flight, then attempt to use the
+        # session. The lock must force this to queue up after the commit.
+        while "commit-enter" not in sequence:
+            await asyncio.sleep(0)
+        async with lock:
+            await db.execute("SELECT 1")
+
+    tool_call = {"id": "call_z", "name": "create_object", "arguments": "{}"}
+    enforcer = _make_enforcer(
+        completion_results=[
+            _make_llm_result(text=None, tool_calls=[tool_call]),
+            _make_llm_result(text="done", tool_calls=None),
+        ]
+    )
+    enforcer.db = db
+    enforcer.db_lock = lock
+    cm = _make_context_manager()
+    executor = _make_tool_executor(
+        results=[
+            {
+                "tool_call_id": "call_z",
+                "status": "ok",
+                "content": "ok",
+                "preview": "ok",
+            }
+        ]
+    )
+    cfg = _make_cfg(tool_executor=executor, tools=[{"name": "create_object"}])
+    state = _make_state(messages=[{"role": "user", "content": "x"}])
+
+    competitor_task = asyncio.create_task(_competitor())
+    try:
+        await _collect(
+            run_react(
+                state,
+                cfg,
+                enforcer=enforcer,
+                context_manager=cm,
+                call_metadata_base=_make_call_meta(),
+            )
+        )
+    finally:
+        await asyncio.wait_for(competitor_task, timeout=1.0)
+
+    # The competitor's execute() must come AFTER commit-exit — proves the
+    # lock serialised them. Without the lock you'd see ``execute`` appear
+    # between commit-enter and commit-exit.
+    assert sequence.index("commit-exit") < sequence.index("execute")
+
+
+# ---------------------------------------------------------------------------
 # Budget warning latch
 # ---------------------------------------------------------------------------
 

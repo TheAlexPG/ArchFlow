@@ -374,6 +374,15 @@ async def stream(
         on_budget_exhausted=settings.on_budget_exhausted,  # type: ignore[arg-type]
         health_check_model=settings.health_check_model,
     )
+    # One asyncio.Lock for the whole invocation. Both the per-tool commit in
+    # nodes/base.py and the rollback in tools/base.py acquire it briefly so
+    # cleanup-critical DB ops never collide with another coroutine that
+    # happens to touch the same session at the wrong instant (publish helpers
+    # awaiting fanout queries, Langfuse callbacks, cancel-cleanup paths). The
+    # sequencer fix prevents asyncpg's "concurrent operations are not
+    # permitted" error which leaves the session in an aborted state and
+    # cascades into spurious FK violations on the next mutating tool call.
+    db_lock = asyncio.Lock()
     enforcer = LimitsEnforcer(
         limits=limits,
         counters=counters,
@@ -381,6 +390,7 @@ async def stream(
         db=db,
         workspace_id=req.workspace_id,
         agent_id=req.agent_id,
+        db_lock=db_lock,
     )
     context_manager = ContextManager(
         threshold=settings.context_threshold,
@@ -432,6 +442,7 @@ async def stream(
         # so it can emit its APPROVE/REJECT verdict on the same Langfuse trace.
         llm_client=llm,
         call_metadata_base=call_metadata_base,
+        db_lock=db_lock,
     )
 
     # ── 8. Load existing chat history + persist user message ──
@@ -1348,6 +1359,7 @@ def _make_tool_executor(
     mode: Literal["full", "read_only"],
     llm_client: Any | None = None,
     call_metadata_base: Any | None = None,
+    db_lock: asyncio.Lock | None = None,
 ):
     """Build the tool executor coroutine for this invocation.
 
@@ -1429,6 +1441,7 @@ def _make_tool_executor(
             agent_messages=list(state.get("messages") or []),
             llm_client=llm_client,
             call_metadata=call_metadata_base,
+            db_lock=db_lock,
         )
         result = await execute_tool(tool_call, ctx)
         return {

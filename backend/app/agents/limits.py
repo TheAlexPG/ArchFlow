@@ -30,6 +30,7 @@ them across requests is not in scope (AgentRuntime rebuilds them each turn).
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
@@ -188,6 +189,7 @@ class LimitsEnforcer:
         workspace_id: UUID,
         agent_id: str,
         warn_at_fraction: float = 0.85,
+        db_lock: "asyncio.Lock | None" = None,
     ) -> None:
         self.limits = limits
         self.counters = counters
@@ -196,6 +198,15 @@ class LimitsEnforcer:
         self.workspace_id = workspace_id
         self.agent_id = agent_id
         self.warn_at_fraction = warn_at_fraction
+        # Per-session asyncio.Lock — wraps cleanup-critical DB ops (per-tool
+        # commit, _safe_rollback) so that even if some other coroutine in the
+        # graph (Langfuse callback, LangGraph event pump, cancel-cleanup
+        # handler) tries to touch ``db`` at the same instant we don't trip
+        # asyncpg's "concurrent operations are not permitted" error and leave
+        # the session in a half-aborted state. The runtime layer creates the
+        # Lock once per invocation; tools/base.py and nodes/base.py acquire
+        # it briefly via :func:`acquire_db_lock` below.
+        self.db_lock = db_lock or asyncio.Lock()
 
         # Prime the dynamic turn limit on first construction (or rehydration).
         if self.counters.active_turn_limit <= 0:
