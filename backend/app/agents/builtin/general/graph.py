@@ -313,6 +313,27 @@ def _subagent_span_input(state: AgentState) -> dict | None:
     return payload or None
 
 
+_SUBAGENT_ARTEFACT_KEY: dict[str, str] = {
+    "researcher": "findings",
+    "planner": "plan",
+    "critic": "critique",
+}
+
+
+def _dump_artefact(value: Any) -> Any:
+    """Coerce a Pydantic model / dataclass / dict into a JSON-friendly dump."""
+    if value is None:
+        return None
+    if hasattr(value, "model_dump"):
+        try:
+            return value.model_dump(mode="json")
+        except Exception:  # pragma: no cover — defensive
+            return str(value)
+    if isinstance(value, dict):
+        return value
+    return str(value)
+
+
 def _subagent_span_output(
     output: Any | None,
     forced: str | None,
@@ -321,27 +342,60 @@ def _subagent_span_output(
     state_patch: dict | None = None,
 ) -> dict:
     """Distil the sub-agent's output — the structured artefact it produced
-    (Findings / Plan / Critique / applied_changes summary)."""
+    (Findings / Plan / Critique / applied_changes summary).
+
+    The researcher / critic guarantee their artefact lands in
+    ``output.state_patch[<key>]`` (with fallbacks for empty / malformed
+    LLM outputs). The planner's ``Plan`` lives on ``output.structured``
+    until the graph wrapper lifts it. This helper tries both so the span
+    output always carries the agent's actual report — not just a count
+    of tool calls (which was the trace 5e4f3ed9 complaint).
+    """
     summary: dict = {"forced_finalize": forced, "kind": kind}
     if output is None:
         return summary
-    structured = getattr(output, "structured", None)
-    if structured is not None and hasattr(structured, "model_dump"):
-        try:
-            summary["structured"] = structured.model_dump(mode="json")
-        except Exception:  # pragma: no cover — defensive
-            summary["structured"] = str(structured)
     summary["tool_calls_made"] = getattr(output, "tool_calls_made", 0)
+
+    sp = getattr(output, "state_patch", None) or {}
+    artefact_key = _SUBAGENT_ARTEFACT_KEY.get(kind)
+    artefact: Any | None = None
+    if artefact_key:
+        artefact = sp.get(artefact_key)
+    if artefact is None:
+        # Planner exits via output.structured; researcher/critic keep their
+        # artefact on state_patch but fall back to output.structured if the
+        # graph wrapper hasn't run the post-processing yet.
+        artefact = getattr(output, "structured", None)
+    dumped = _dump_artefact(artefact)
+    if dumped is not None:
+        summary["report"] = dumped
+
+    # Surface the assistant prose too — useful when the structured parse
+    # failed and the agent's recap text is the only signal we have.
+    text = getattr(output, "text", None)
+    if isinstance(text, str) and text.strip():
+        summary["text"] = text if len(text) <= 4000 else text[:4000] + "…"
+
     if kind == "diagram":
-        applied = (state_patch or {}).get("applied_changes") or []
+        applied = (state_patch or {}).get("applied_changes") or sp.get(
+            "applied_changes"
+        ) or []
         summary["applied_changes_count"] = len(applied)
-        # Surface a short preview of actions so the span is glanceable.
-        summary["applied_changes_preview"] = [
+        summary["applied_changes"] = [
             {
                 "action": (c.get("action") if isinstance(c, dict) else getattr(c, "action", None)),
                 "name": (c.get("name") if isinstance(c, dict) else getattr(c, "name", None)),
+                "target_id": (
+                    str(c.get("target_id"))
+                    if isinstance(c, dict) and c.get("target_id") is not None
+                    else (
+                        str(getattr(c, "target_id"))
+                        if getattr(c, "target_id", None) is not None
+                        else None
+                    )
+                ),
             }
-            for c in applied[:10]
+            for c in applied[:50]
         ]
     return summary
 
