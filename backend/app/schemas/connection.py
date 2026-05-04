@@ -18,6 +18,8 @@ class ConnectionCreate(BaseModel):
     shape: EdgeShape = EdgeShape.SMOOTHSTEP
     label_size: float = 11.0
     via_object_ids: list[str] | None = None
+    from_diagram_id: uuid.UUID | None = None  # source diagram for per-user undo
+    from_draft_id: uuid.UUID | None = None
 
 
 class ConnectionUpdate(BaseModel):
@@ -30,6 +32,8 @@ class ConnectionUpdate(BaseModel):
     shape: EdgeShape | None = None
     label_size: float | None = None
     via_object_ids: list[str] | None = None
+    from_diagram_id: uuid.UUID | None = None  # source diagram for per-user undo
+    from_draft_id: uuid.UUID | None = None
 
 
 class ConnectionResponse(BaseModel):
