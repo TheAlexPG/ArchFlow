@@ -111,6 +111,12 @@ class RuntimeCounters:
     # Mutated by health-check escalation. 0 means "not yet primed";
     # LimitsEnforcer initialises it from limits.turn_limit on construction.
     active_turn_limit: int = 0
+    # Aggregated token usage across every LLM call routed through the enforcer
+    # in this invocation (supervisor + researcher + planner + diagram + critic
+    # + finalize + health-checks). Reported on the terminal ``usage`` SSE event
+    # so the chat footer reflects the whole turn, not just the last call.
+    tokens_in: int = 0
+    tokens_out: int = 0
 
 
 @dataclass
@@ -273,6 +279,13 @@ class LimitsEnforcer:
         )
 
         self.counters.turns_used += 1
+
+        # Aggregate tokens regardless of whether pricing is resolvable —
+        # OpenRouter/free-tier models often skip the price catalog yet still
+        # report ``usage.prompt_tokens/completion_tokens``. The chat footer
+        # needs these even when ``cost_usd`` is None.
+        self.counters.tokens_in += int(result.tokens_in or 0)
+        self.counters.tokens_out += int(result.tokens_out or 0)
 
         if result.cost_usd is not None:
             self.counters.cost_usd += result.cost_usd
@@ -451,7 +464,9 @@ class LimitsEnforcer:
                     should_extend=False,
                 )
 
-        # Account for the health-check's cost in the same budget.
+        # Account for the health-check's cost + tokens in the same budget.
+        self.counters.tokens_in += int(result.tokens_in or 0)
+        self.counters.tokens_out += int(result.tokens_out or 0)
         if result.cost_usd is not None:
             self.counters.cost_usd += result.cost_usd
 

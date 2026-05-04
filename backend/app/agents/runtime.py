@@ -530,6 +530,19 @@ async def stream(
                 # registered in the graph.
                 if not node_name.startswith("__") and node_name in _real_node_names(graph):
                     yield SSEEvent("node", {"name": node_name})
+            elif ev_type == "on_custom_event":
+                # ``adispatch_custom_event`` calls inside the graph node wrappers
+                # surface here. We mirror them onto the SSE wire so the frontend's
+                # ToolCallCard / NodeIndicator icon-row receive ``tool_call`` and
+                # ``tool_result`` frames in the same arrival order as the LLM
+                # produced them. Source: ``builtin/general/graph._drain_with_tracing``.
+                custom_name = event.get("name") or ""
+                if custom_name == "agent_tool_call":
+                    payload = data if isinstance(data, dict) else {}
+                    yield SSEEvent("tool_call", dict(payload))
+                elif custom_name == "agent_tool_result":
+                    payload = data if isinstance(data, dict) else {}
+                    yield SSEEvent("tool_result", dict(payload))
             elif ev_type == "on_chain_end":
                 # Capture the latest state seen on a chain end — for graph end
                 # this is the final state. We MERGE rather than replace so a
@@ -720,13 +733,20 @@ async def stream(
         duration_ms = int(
             (datetime.now(UTC) - started_at).total_seconds() * 1000
         )
+        # Aggregate tokens come from RuntimeCounters — the enforcer folds
+        # ``LLMResult.tokens_in/tokens_out`` from every LLM call (supervisor +
+        # sub-agents + health-checks) into the same counter instance. Stub
+        # graphs in tests pre-populate ``final_state['tokens_in/out']`` directly
+        # so we honour those when the live counters never moved.
+        state_tokens_in = int((final_state or {}).get("tokens_in") or 0)
+        state_tokens_out = int((final_state or {}).get("tokens_out") or 0)
+        tokens_in = counters.tokens_in or state_tokens_in
+        tokens_out = counters.tokens_out or state_tokens_out
         yield SSEEvent(
             "usage",
             {
-                "tokens_in": int(counters.cost_usd != Decimal("0"))
-                * 0  # placeholder; tokens come from final state
-                + int((final_state or {}).get("tokens_in") or 0),
-                "tokens_out": int((final_state or {}).get("tokens_out") or 0),
+                "tokens_in": tokens_in,
+                "tokens_out": tokens_out,
                 "cost_usd": counters.cost_usd if counters.cost_usd > 0 else None,
                 "duration_ms": duration_ms,
                 "forced_finalize": forced_finalize,

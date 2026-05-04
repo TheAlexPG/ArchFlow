@@ -1158,6 +1158,33 @@ async def run_react(
                     "preview": "tool execution raised an exception",
                 }
 
+            # Per-tool commit: each successful tool call is conceptually an
+            # atomic intentional change. Tool implementations only ``flush()``;
+            # without commit, their writes remain invisible to other DB
+            # sessions until ``get_db`` closes at SSE-stream end. That makes
+            # user-initiated mutations during a stream (e.g. dragging an
+            # object the agent just created) race with the agent: the user's
+            # PATCH opens a fresh session, can't see the agent's flushed-but-
+            # uncommitted row, then its onSuccess invalidate-refetch wipes it
+            # from the React Flow cache.  Committing here makes the agent's
+            # writes visible immediately. SQLAlchemy AsyncSession auto-starts
+            # a new transaction on the next operation. We skip on error/denied
+            # because no DB writes are expected to have happened — and we
+            # never want to commit half-baked partial state.
+            tool_status = tool_result.get("status", "ok") if isinstance(tool_result, dict) else "ok"
+            if tool_status == "ok":
+                db = getattr(enforcer, "db", None)
+                if db is not None:
+                    try:
+                        await db.commit()
+                    except Exception:  # noqa: BLE001 — commit failure must not kill the run
+                        logger.warning(
+                            "node %r: per-tool commit failed for tool %r",
+                            cfg.name,
+                            tool_call_evt.get("name"),
+                            exc_info=True,
+                        )
+
             tool_calls_made += 1
             yield NodeStreamEvent(
                 kind="tool_result",

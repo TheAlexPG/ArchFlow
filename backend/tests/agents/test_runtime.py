@@ -484,6 +484,153 @@ async def test_stream_yields_session_first_and_done_last():
     assert "usage" in kinds
 
 
+async def test_stream_usage_event_carries_state_token_totals():
+    """Stub graphs that pre-populate ``state['tokens_in/out']`` (the historic
+    contract for unit tests) must still surface non-zero totals on the wire.
+    Real runs source totals from ``RuntimeCounters`` — see test_limits.py
+    ``test_acompletion_aggregates_tokens_across_calls`` for the live path."""
+    db = FakeSession()
+    actor = ActorRef(kind="user", id=uuid4(), workspace_id=uuid4(), agent_access="full")
+    graph = _StubGraph(
+        returned_state={
+            "final_message": "done",
+            "applied_changes": [],
+            "tokens_in": 312,
+            "tokens_out": 87,
+        }
+    )
+    registry.register(_stub_descriptor(graph))
+
+    req = InvokeRequest(
+        agent_id="stub-agent",
+        actor=actor,
+        workspace_id=actor.workspace_id,
+        chat_context=ChatContext(kind="workspace", id=actor.workspace_id),
+        message="hi",
+    )
+
+    usage_events = [ev async for ev in stream(req, db=db) if ev.kind == "usage"]
+    assert len(usage_events) == 1
+    payload = usage_events[0].payload
+    assert payload["tokens_in"] == 312
+    assert payload["tokens_out"] == 87
+    # Field names the frontend reads: tokens_in / tokens_out (not
+    # prompt_tokens / completion_tokens).
+    assert "prompt_tokens" not in payload
+    assert "completion_tokens" not in payload
+
+
+class _StubGraphWithCustomEvents:
+    """Compiled-graph stub that exposes ``astream_events`` and yields a few
+    pre-canned events — including the ``on_custom_event`` frames our
+    ``_drain_with_tracing`` helper dispatches when a node calls
+    ``adispatch_custom_event``. Lets us pin the runtime's mapping from
+    ``agent_tool_call`` / ``agent_tool_result`` custom events onto the SSE
+    wire without spinning up the real LangGraph + LLM stack.
+    """
+
+    def __init__(self, returned_state: dict[str, Any], events: list[dict]) -> None:
+        self._returned_state = returned_state
+        self._events = events
+
+    def get_graph(self):
+        graph_obj = MagicMock()
+        graph_obj.nodes = {"__start__": None, "__end__": None, "supervisor": None}
+        return graph_obj
+
+    async def astream_events(self, state: dict, version: str = "v2", config=None):  # noqa: ARG002
+        for ev in self._events:
+            yield ev
+
+
+async def test_stream_maps_custom_events_to_tool_call_and_tool_result():
+    """A node that dispatches ``agent_tool_call`` / ``agent_tool_result``
+    custom events should surface them to the SSE consumer as ``tool_call``
+    and ``tool_result`` frames with the exact field names the frontend
+    expects (id / name / args  -+-  id / status / preview / content)."""
+    db = FakeSession()
+    actor = ActorRef(kind="user", id=uuid4(), workspace_id=uuid4(), agent_access="full")
+
+    # Pre-canned event tape mirroring what _drain_with_tracing emits inside a
+    # real run: chain_start (supervisor) → custom tool_call → custom tool_result
+    # → chain_end with the final state.
+    canned_events: list[dict] = [
+        {
+            "event": "on_chain_start",
+            "name": "supervisor",
+            "data": {},
+        },
+        {
+            "event": "on_custom_event",
+            "name": "agent_tool_call",
+            "data": {
+                "id": "call_42",
+                "name": "read_diagram",
+                "args": {"diagram_id": "abc"},
+                "agent": "supervisor",
+            },
+        },
+        {
+            "event": "on_custom_event",
+            "name": "agent_tool_result",
+            "data": {
+                "id": "call_42",
+                "status": "ok",
+                "preview": "1 placement",
+                "content": '{"placements": []}',
+                "agent": "supervisor",
+            },
+        },
+        {
+            "event": "on_chain_end",
+            "name": "__graph__",
+            "data": {"output": {"final_message": "done", "applied_changes": []}},
+        },
+    ]
+
+    graph = _StubGraphWithCustomEvents(
+        returned_state={"final_message": "done", "applied_changes": []},
+        events=canned_events,
+    )
+    registry.register(_stub_descriptor(graph))
+
+    req = InvokeRequest(
+        agent_id="stub-agent",
+        actor=actor,
+        workspace_id=actor.workspace_id,
+        chat_context=ChatContext(kind="workspace", id=actor.workspace_id),
+        message="check the diagram",
+    )
+
+    events: list[SSEEvent] = []
+    async for ev in stream(req, db=db):
+        events.append(ev)
+
+    kinds = [e.kind for e in events]
+    assert "tool_call" in kinds, f"expected tool_call SSE event, got {kinds}"
+    assert "tool_result" in kinds, f"expected tool_result SSE event, got {kinds}"
+
+    tc = next(e for e in events if e.kind == "tool_call")
+    assert tc.payload["id"] == "call_42"
+    assert tc.payload["name"] == "read_diagram"
+    # Frontend's build-render-items.ts reads payload.args (not payload.arguments).
+    assert tc.payload["args"] == {"diagram_id": "abc"}
+    assert tc.payload["agent"] == "supervisor"
+
+    tr = next(e for e in events if e.kind == "tool_result")
+    assert tr.payload["id"] == "call_42"
+    assert tr.payload["status"] == "ok"
+    assert tr.payload["preview"] == "1 placement"
+    # ChatHistory.tsx reads result?.result ?? result?.content.
+    assert tr.payload["content"] == '{"placements": []}'
+
+    # Order: tool_call must precede its matching tool_result so the frontend
+    # pairs them correctly.
+    tc_idx = kinds.index("tool_call")
+    tr_idx = kinds.index("tool_result")
+    assert tc_idx < tr_idx
+
+
 async def test_stream_emits_error_event_for_unknown_agent():
     db = FakeSession()
     actor = ActorRef(kind="user", id=uuid4(), workspace_id=uuid4(), agent_access="full")

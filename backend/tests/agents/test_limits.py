@@ -272,6 +272,53 @@ async def test_cost_not_resolvable_does_not_increment_budget(
 
 
 # ---------------------------------------------------------------------------
+# Token aggregation across multiple LLM calls (chat usage footer)
+# ---------------------------------------------------------------------------
+
+
+async def test_acompletion_aggregates_tokens_across_calls(patch_pricing):
+    """``RuntimeCounters.tokens_in/tokens_out`` must sum every call's usage.
+
+    Pins the chat-footer fix: even when ``cost_usd`` is unresolvable for the
+    provider (e.g. z-ai/glm-5v-turbo via openrouter), token counts must still
+    accumulate so the frontend's ``UsageFootnote`` shows non-zero totals.
+    """
+    patch_pricing(_make_pricing())
+    counters = RuntimeCounters()
+    llm = _make_mock_llm(
+        completion_results=[
+            LLMResult(
+                text="step1",
+                tool_calls=None,
+                finish_reason="stop",
+                tokens_in=120,
+                tokens_out=42,
+                cost_usd=None,  # provider pricing missing → still count tokens
+                raw=MagicMock(),
+            ),
+            LLMResult(
+                text="step2",
+                tool_calls=None,
+                finish_reason="stop",
+                tokens_in=80,
+                tokens_out=18,
+                cost_usd=Decimal("0.002"),
+                raw=MagicMock(),
+            ),
+        ]
+    )
+    enf = _make_enforcer(counters=counters, llm=llm)
+
+    await enf.acompletion([{"role": "user", "content": "a"}], metadata=_make_call_meta())
+    await enf.acompletion([{"role": "user", "content": "b"}], metadata=_make_call_meta())
+
+    assert counters.tokens_in == 200
+    assert counters.tokens_out == 60
+    # Cost still folds when the provider DOES resolve pricing.
+    assert counters.cost_usd == Decimal("0.002")
+
+
+# ---------------------------------------------------------------------------
 # Health-check escalation: progressing → extend
 # ---------------------------------------------------------------------------
 

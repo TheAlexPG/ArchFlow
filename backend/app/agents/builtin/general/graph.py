@@ -519,6 +519,16 @@ async def _drain_with_tracing(
         else base_call_meta
     )
 
+    # Lazy import — avoids paying the langchain_core import cost in test
+    # paths that stub the graph entirely. ``adispatch_custom_event`` is the
+    # documented LangGraph hook for surfacing in-node events out through
+    # ``astream_events`` (where the runtime picks them up as ``on_custom_event``
+    # frames and maps them to SSE).
+    try:
+        from langchain_core.callbacks import adispatch_custom_event
+    except Exception:  # pragma: no cover — defensive (very old langchain_core)
+        adispatch_custom_event = None  # type: ignore[assignment]
+
     output = None
     forced: str | None = None
     pending: dict[str, dict] = {}
@@ -530,19 +540,56 @@ async def _drain_with_tracing(
                     "name": ev.payload.get("name"),
                     "arguments": ev.payload.get("arguments"),
                 }
-            elif kind == "tool_result" and tracer is not None and span_id is not None:
+                # Surface to SSE via LangGraph's custom-event hook.
+                # Frontend contract (``build-render-items.ts``):
+                #   payload: { id, name, args, agent }
+                # ``args`` (not ``arguments``) is what the projected RenderItem
+                # reads — the icon-row popover and ToolCallCard both rely on it.
+                if adispatch_custom_event is not None:
+                    try:
+                        await adispatch_custom_event(
+                            "agent_tool_call",
+                            {
+                                "id": ev.payload.get("id"),
+                                "name": ev.payload.get("name"),
+                                "args": ev.payload.get("arguments"),
+                                "agent": ev.payload.get("node"),
+                            },
+                        )
+                    except Exception:  # noqa: BLE001 — defensive; never block the run
+                        logger.debug("adispatch_custom_event(tool_call) failed", exc_info=True)
+            elif kind == "tool_result":
                 meta = pending.pop(ev.payload.get("id") or "", {})
                 # Prefer the full content (serialised tool result) over the
                 # short preview so Langfuse shows the actual data the LLM
                 # received, not just an "<tool> ok" status string.
                 output_payload = ev.payload.get("content") or ev.payload.get("preview")
-                tracer.log_tool_event(
-                    parent_id=span_id,
-                    name=meta.get("name") or "tool",
-                    input_payload=meta.get("arguments"),
-                    output_payload=output_payload,
-                    status=ev.payload.get("status"),
-                )
+                if tracer is not None and span_id is not None:
+                    tracer.log_tool_event(
+                        parent_id=span_id,
+                        name=meta.get("name") or "tool",
+                        input_payload=meta.get("arguments"),
+                        output_payload=output_payload,
+                        status=ev.payload.get("status"),
+                    )
+                # Surface to SSE. Frontend reads ``status`` to drive the icon
+                # tint and ``result`` / ``content`` for the expanded card body
+                # (``ChatHistory.tsx`` falls back to either). ``preview`` shows
+                # in the collapsed-card subtitle.
+                if adispatch_custom_event is not None:
+                    try:
+                        await adispatch_custom_event(
+                            "agent_tool_result",
+                            {
+                                "id": ev.payload.get("id"),
+                                "status": ev.payload.get("status", "ok"),
+                                "preview": ev.payload.get("preview", ""),
+                                "content": ev.payload.get("content", ""),
+                                "agent": ev.payload.get("node"),
+                            },
+                        )
+                    except Exception:  # noqa: BLE001 — defensive
+                        logger.debug("adispatch_custom_event(tool_result) failed", exc_info=True)
             elif kind == "forced_finalize":
                 forced = ev.payload.get("reason")
             elif kind == "finished":
