@@ -78,20 +78,6 @@ class DeleteObjectInput(BaseModel):
     """Input for delete_object tool."""
 
     object_id: UUID
-    confirmed: bool = False
-    reason: str = Field(
-        ...,
-        min_length=10,
-        max_length=1000,
-        description=(
-            "REQUIRED. ≥10 chars. Justify why this delete is correct — the "
-            "destructive-op reviewer LLM reads this verbatim and rejects "
-            "vague reasons like 'cleanup' or 'no longer needed'. Good "
-            "examples: 'duplicate of canonical id=abc123', 'user "
-            "explicitly asked to remove X in their last message', 'orphan "
-            "placement after layout refactor'."
-        ),
-    )
 
 
 class CreateConnectionInput(BaseModel):
@@ -122,20 +108,6 @@ class DeleteConnectionInput(BaseModel):
     """Input for delete_connection tool."""
 
     connection_id: UUID
-    confirmed: bool = False
-    reason: str = Field(
-        ...,
-        min_length=10,
-        max_length=1000,
-        description=(
-            "REQUIRED. ≥10 chars. Justify why this delete is correct — "
-            "the destructive-op reviewer LLM reads this verbatim and "
-            "rejects vague reasons. Good examples: 'duplicate edge — "
-            "same source/target as connection abc123', 'user removed "
-            "link in their last message', 'wrong direction, replaced by "
-            "new connection Y'."
-        ),
-    )
 
 
 class ReadDiagramInput(BaseModel):
@@ -877,15 +849,7 @@ async def update_object(args: UpdateObjectInput, ctx: ToolContext) -> dict:
 @tool(
     name="delete_object",
     description=(
-        "Delete a model object (cascades to its connections + placements). "
-        "REQUIRED arguments: object_id, confirmed=True, reason (≥10 chars). "
-        "Two-step protocol: first call WITHOUT confirmed returns a preview "
-        "with impact; second call with confirmed=True AND a specific reason "
-        "executes. Example: "
-        "delete_object(object_id='…', confirmed=True, reason='duplicate of "
-        "canonical Auth Service id=abc123 — user asked to consolidate'). "
-        "The reason is reviewed by an LLM safety net; vague reasons "
-        "('cleanup', 'no longer needed') get rejected."
+        "Delete a model object by id (cascades to its connections + placements)."
     ),
     input_schema=DeleteObjectInput,
     permission="diagram:manage",
@@ -893,73 +857,14 @@ async def update_object(args: UpdateObjectInput, ctx: ToolContext) -> dict:
     required_scope="agents:admin",
     mutating=True,
     deprecates_model=True,
-    needs_confirmed_gate=True,
 )
 async def delete_object(args: DeleteObjectInput, ctx: ToolContext) -> dict:
-    """Two-step delete: preview without confirmed=True, then execute."""
+    """Delete a model object by id."""
     from app.services import diagram_service, object_service
 
     obj = await object_service.get_object(ctx.db, args.object_id)
     if obj is None:
         raise ToolDenied(f"object {args.object_id} not found")
-
-    if not args.confirmed:
-        deps = await object_service.get_dependencies(ctx.db, args.object_id)
-        connections_count = len(deps.get("upstream", [])) + len(deps.get("downstream", []))
-        placement_diagrams = await diagram_service.get_diagrams_containing_object(
-            ctx.db, args.object_id
-        )
-        placement_count = len(placement_diagrams)
-        child_diagrams = await diagram_service.get_diagrams(
-            ctx.db,
-            scope_object_id=args.object_id,
-            workspace_id=ctx.workspace_id,
-        )
-        impact = {
-            "will_delete": 1,
-            "will_orphan_connections": connections_count,
-            "will_orphan_placements": placement_count,
-            "child_diagrams": [str(d.id) for d in child_diagrams],
-        }
-        return {
-            "status": "awaiting_confirmation",
-            "preview": (
-                f"Will delete object {obj.name} "
-                f"({connections_count} connections, {placement_count} placements)"
-            ),
-            "impact": impact,
-            "target_id": obj.id,
-            "name": obj.name,
-        }
-
-    # ── LLM destructive-op reviewer ────────────────────────────────────
-    # confirmed=True means the planner / agent decided to proceed; we still
-    # ask a reviewer LLM (with the agent's recent history) to second-guess
-    # destructive ops to catch creation-then-deletion churn.
-    from app.agents.tools._destructive_review import review_destructive_op
-
-    deps = await object_service.get_dependencies(ctx.db, args.object_id)
-    placement_diagrams = await diagram_service.get_diagrams_containing_object(
-        ctx.db, args.object_id
-    )
-    impact = {
-        "will_delete": 1,
-        "will_orphan_connections": len(deps.get("upstream", []))
-        + len(deps.get("downstream", [])),
-        "will_orphan_placements": len(placement_diagrams),
-    }
-    verdict = await review_destructive_op(
-        ctx=ctx,
-        tool_name="delete_object",
-        args=args,
-        impact=impact,
-        reason=args.reason,
-        target_summary=f"object {obj.name!r} (id={obj.id}, type={getattr(obj.type, 'value', obj.type)})",
-    )
-    if verdict.verdict == "REJECT":
-        raise ToolDenied(
-            f"destructive-op reviewer rejected: {verdict.rationale}"
-        )
 
     name = obj.name
     target_id = obj.id
@@ -1164,68 +1069,21 @@ async def update_connection(args: UpdateConnectionInput, ctx: ToolContext) -> di
 
 @tool(
     name="delete_connection",
-    description=(
-        "Delete a connection. "
-        "REQUIRED arguments: connection_id, confirmed=True, reason (≥10 chars). "
-        "Two-step protocol: first call WITHOUT confirmed returns preview; "
-        "second call with confirmed=True AND a specific reason executes. "
-        "Example: delete_connection(connection_id='…', confirmed=True, "
-        "reason='duplicate edge — same User→AuthService as connection xyz789'). "
-        "The reason is reviewed by an LLM safety net; vague reasons get rejected."
-    ),
+    description="Delete a connection by id.",
     input_schema=DeleteConnectionInput,
     permission="diagram:manage",
     permission_target="connection",
     required_scope="agents:admin",
     mutating=True,
     deprecates_model=True,
-    needs_confirmed_gate=True,
 )
 async def delete_connection(args: DeleteConnectionInput, ctx: ToolContext) -> dict:
-    """Two-step delete with preview gate."""
+    """Delete a connection by id."""
     from app.services import connection_service
 
     conn = await connection_service.get_connection(ctx.db, args.connection_id)
     if conn is None:
         raise ToolDenied(f"connection {args.connection_id} not found")
-
-    if not args.confirmed:
-        return {
-            "status": "awaiting_confirmation",
-            "preview": (
-                f"Will delete connection {conn.label or conn.id} "
-                f"(source={conn.source_id} -> target={conn.target_id})"
-            ),
-            "impact": {
-                "will_delete": 1,
-                "source_id": str(conn.source_id),
-                "target_id": str(conn.target_id),
-            },
-            "target_id": conn.id,
-            "name": conn.label or "",
-        }
-
-    # ── LLM destructive-op reviewer ────────────────────────────────────
-    from app.agents.tools._destructive_review import review_destructive_op
-
-    impact = {
-        "will_delete": 1,
-        "source_id": str(conn.source_id),
-        "target_id": str(conn.target_id),
-        "label": conn.label or "",
-    }
-    verdict = await review_destructive_op(
-        ctx=ctx,
-        tool_name="delete_connection",
-        args=args,
-        impact=impact,
-        reason=args.reason,
-        target_summary=f"connection {conn.label or '(unlabelled)'} ({conn.source_id} → {conn.target_id})",
-    )
-    if verdict.verdict == "REJECT":
-        raise ToolDenied(
-            f"destructive-op reviewer rejected: {verdict.rationale}"
-        )
 
     label = conn.label or ""
     target_id = conn.id

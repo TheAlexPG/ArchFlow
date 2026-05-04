@@ -354,57 +354,8 @@ async def test_update_object_happy(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_delete_object_preview_when_not_confirmed(monkeypatch):
-    _patch_acl_pass(monkeypatch)
-
-    obj = _make_object_row(name="Doomed")
-    monkeypatch.setattr(
-        "app.services.object_service.get_object",
-        AsyncMock(return_value=obj),
-    )
-    monkeypatch.setattr(
-        "app.services.object_service.get_dependencies",
-        AsyncMock(return_value={
-            "upstream": [_make_connection_row(), _make_connection_row()],
-            "downstream": [_make_connection_row()],
-        }),
-    )
-    monkeypatch.setattr(
-        "app.services.diagram_service.get_diagrams_containing_object",
-        AsyncMock(return_value=[_make_diagram_row(), _make_diagram_row()]),
-    )
-    monkeypatch.setattr(
-        "app.services.diagram_service.get_diagrams",
-        AsyncMock(return_value=[_make_diagram_row()]),
-    )
-    delete_mock = AsyncMock()
-    monkeypatch.setattr("app.services.object_service.delete_object", delete_mock)
-
-    ctx = _ctx()
-    out = await execute_tool(
-        {
-            "id": "c4",
-            "name": "delete_object",
-            "arguments": {
-                "object_id": str(obj.id),
-                "confirmed": False,
-                "reason": "duplicate object cleanup",
-            },
-        },
-        ctx,
-    )
-    assert out.status == "awaiting_confirmation"
-    assert "Will delete" in out.preview
-    impact = out.raw["impact"]
-    assert impact["will_delete"] == 1
-    assert impact["will_orphan_connections"] == 3
-    assert impact["will_orphan_placements"] == 2
-    assert len(impact["child_diagrams"]) == 1
-    delete_mock.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_delete_object_confirmed_executes(monkeypatch):
+async def test_delete_object_executes(monkeypatch):
+    """Single-shot delete by object_id — no preview, no confirmed, no reason."""
     _patch_acl_pass(monkeypatch)
 
     obj = _make_object_row(name="Doomed")
@@ -418,18 +369,11 @@ async def test_delete_object_confirmed_executes(monkeypatch):
     )
 
     ctx = _ctx()
-    # Without an LLM client wired into ToolContext the destructive-op
-    # reviewer auto-approves with a marker rationale (it's a safety net,
-    # not a hard gate). Tests rely on that fallback.
     out = await execute_tool(
         {
             "id": "c5",
             "name": "delete_object",
-            "arguments": {
-                "object_id": str(obj.id),
-                "confirmed": True,
-                "reason": "duplicate object cleanup",
-            },
+            "arguments": {"object_id": str(obj.id)},
         },
         ctx,
     )
@@ -581,52 +525,31 @@ async def test_create_connection_drops_invalid_handle_value(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_delete_connection_preview_then_confirmed(monkeypatch):
+async def test_delete_connection_executes(monkeypatch):
+    """Single-shot connection delete by id."""
     _patch_acl_pass(monkeypatch)
 
     conn = _make_connection_row(label="some call")
-    get_conn = AsyncMock(return_value=conn)
-    delete_mock = AsyncMock()
     monkeypatch.setattr(
-        "app.services.connection_service.get_connection", get_conn
+        "app.services.connection_service.get_connection",
+        AsyncMock(return_value=conn),
     )
+    delete_mock = AsyncMock()
     monkeypatch.setattr(
         "app.services.connection_service.delete_connection", delete_mock
     )
 
     ctx = _ctx()
-    # Step 1: preview.
-    out1 = await execute_tool(
-        {
-            "id": "c7",
-            "name": "delete_connection",
-            "arguments": {
-                "connection_id": str(conn.id),
-                "confirmed": False,
-                "reason": "removing stale link as part of cleanup",
-            },
-        },
-        ctx,
-    )
-    assert out1.status == "awaiting_confirmation"
-    assert out1.raw["impact"]["will_delete"] == 1
-    delete_mock.assert_not_called()
-
-    # Step 2: confirmed.
-    out2 = await execute_tool(
+    out = await execute_tool(
         {
             "id": "c8",
             "name": "delete_connection",
-            "arguments": {
-                "connection_id": str(conn.id),
-                "confirmed": True,
-                "reason": "removing stale link as part of cleanup",
-            },
+            "arguments": {"connection_id": str(conn.id)},
         },
         ctx,
     )
-    assert out2.status == "ok", out2.content
-    assert out2.structured.get("action") == "connection.deleted"
+    assert out.status == "ok", out.content
+    assert out.structured.get("action") == "connection.deleted"
     delete_mock.assert_awaited_once()
 
 
@@ -768,35 +691,15 @@ async def test_move_on_diagram_happy(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_unplace_from_diagram_preview_with_affected_connections(monkeypatch):
+async def test_unplace_from_diagram_executes(monkeypatch):
+    """Single-shot unplace by (diagram_id, object_id)."""
     _patch_acl_pass(monkeypatch)
 
     object_id = uuid4()
-    other_id = uuid4()
     diagram_id = uuid4()
-
-    # Two upstream connections, one with both endpoints placed (counts), one with only one.
-    upstream_visible = _make_connection_row(source_id=other_id, target_id=object_id)
-    upstream_invisible = _make_connection_row(source_id=uuid4(), target_id=object_id)
-
-    monkeypatch.setattr(
-        "app.services.object_service.get_dependencies",
-        AsyncMock(return_value={
-            "upstream": [upstream_visible, upstream_invisible],
-            "downstream": [],
-        }),
-    )
-    monkeypatch.setattr(
-        "app.services.diagram_service.get_diagram_objects",
-        AsyncMock(return_value=[
-            _make_placement(object_id=object_id),
-            _make_placement(object_id=other_id),
-        ]),
-    )
     remove_mock = AsyncMock(return_value=True)
     monkeypatch.setattr(
-        "app.services.diagram_service.remove_object_from_diagram",
-        remove_mock,
+        "app.services.diagram_service.remove_object_from_diagram", remove_mock
     )
 
     ctx = _ctx()
@@ -807,15 +710,13 @@ async def test_unplace_from_diagram_preview_with_affected_connections(monkeypatc
             "arguments": {
                 "diagram_id": str(diagram_id),
                 "object_id": str(object_id),
-                "confirmed": False,
-                "reason": "moving placement to a different diagram",
             },
         },
         ctx,
     )
-    assert out.status == "awaiting_confirmation"
-    assert out.raw["impact"]["will_orphan_connections_on_diagram"] == 1
-    remove_mock.assert_not_called()
+    assert out.status == "ok", out.content
+    assert out.structured.get("action") == "object.unplaced"
+    remove_mock.assert_awaited_once()
 
 
 # ---------------------------------------------------------------------------
@@ -889,87 +790,8 @@ async def test_create_child_diagram_for_object_reuses_existing(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_delete_object_rejected_by_destructive_reviewer(monkeypatch):
-    """When ``ctx.llm_client`` is wired and the reviewer returns REJECT,
-    the delete tool raises ToolDenied → ToolExecutionResult.status='denied'.
-    Service-level delete must never be called."""
-    _patch_acl_pass(monkeypatch)
-
-    obj = _make_object_row(name="Important")
-    monkeypatch.setattr(
-        "app.services.object_service.get_object",
-        AsyncMock(return_value=obj),
-    )
-    monkeypatch.setattr(
-        "app.services.object_service.get_dependencies",
-        AsyncMock(return_value={"upstream": [], "downstream": []}),
-    )
-    monkeypatch.setattr(
-        "app.services.diagram_service.get_diagrams_containing_object",
-        AsyncMock(return_value=[]),
-    )
-    monkeypatch.setattr(
-        "app.services.diagram_service.get_diagrams",
-        AsyncMock(return_value=[]),
-    )
-    delete_mock = AsyncMock()
-    monkeypatch.setattr(
-        "app.services.object_service.delete_object", delete_mock
-    )
-
-    # Stub the reviewer to return REJECT.
-    from app.agents.tools import _destructive_review
-
-    monkeypatch.setattr(
-        _destructive_review,
-        "review_destructive_op",
-        AsyncMock(
-            return_value=_destructive_review.DeleteVerdict(
-                verdict="REJECT",
-                rationale="agent created this object 2 steps ago — looks like churn",
-            )
-        ),
-    )
-
-    ctx = _ctx()
-    out = await execute_tool(
-        {
-            "id": "creject",
-            "name": "delete_object",
-            "arguments": {
-                "object_id": str(obj.id),
-                "confirmed": True,
-                "reason": "no longer needed",
-            },
-        },
-        ctx,
-    )
-    assert out.status == "denied"
-    assert "reviewer rejected" in out.content
-    delete_mock.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_delete_object_missing_reason_validation_error(monkeypatch):
-    """`reason` is required by the Pydantic schema — calls without it must
-    fail validation, not silently auto-approve. The destructive-op safety
-    hook depends on the model writing a reason."""
-    _patch_acl_pass(monkeypatch)
-    ctx = _ctx()
-    out = await execute_tool(
-        {
-            "id": "cmissreason",
-            "name": "delete_object",
-            "arguments": {"object_id": str(uuid4()), "confirmed": True},
-        },
-        ctx,
-    )
-    assert out.status == "error"
-    assert "reason" in out.content.lower()
-
-
-@pytest.mark.asyncio
-async def test_delete_diagram_preview_then_confirmed(monkeypatch):
+async def test_delete_diagram_executes(monkeypatch):
+    """Single-shot diagram delete by id."""
     _patch_acl_pass(monkeypatch)
 
     diagram = _make_diagram_row(name="Old")
@@ -977,46 +799,22 @@ async def test_delete_diagram_preview_then_confirmed(monkeypatch):
         "app.services.diagram_service.get_diagram",
         AsyncMock(return_value=diagram),
     )
-    monkeypatch.setattr(
-        "app.services.diagram_service.get_diagram_objects",
-        AsyncMock(return_value=[_make_placement(), _make_placement()]),
-    )
     delete_mock = AsyncMock()
     monkeypatch.setattr(
         "app.services.diagram_service.delete_diagram", delete_mock
     )
 
     ctx = _ctx()
-    out1 = await execute_tool(
-        {
-            "id": "c14",
-            "name": "delete_diagram",
-            "arguments": {
-                "diagram_id": str(diagram.id),
-                "confirmed": False,
-                "reason": "removing obsolete L3 child diagram",
-            },
-        },
-        ctx,
-    )
-    assert out1.status == "awaiting_confirmation"
-    assert out1.raw["impact"]["will_drop_placements"] == 2
-    delete_mock.assert_not_called()
-
-    out2 = await execute_tool(
+    out = await execute_tool(
         {
             "id": "c15",
             "name": "delete_diagram",
-            "arguments": {
-                "diagram_id": str(diagram.id),
-                "confirmed": True,
-                "reason": "removing obsolete L3 child diagram",
-            },
+            "arguments": {"diagram_id": str(diagram.id)},
         },
         ctx,
     )
-    assert out2.status == "ok", out2.content
-    assert out2.structured.get("action") == "diagram.deleted"
+    assert out.status == "ok", out.content
+    assert out.structured.get("action") == "diagram.deleted"
     delete_mock.assert_awaited_once()
 
 

@@ -123,19 +123,12 @@ Execute as follows:
     return the existing diagram with `action="diagram.reused"`, but
     making the explicit check keeps your tool call count low and avoids
     confusing yourself with `reused` results mid-batch.
-12. **Destructive ops MUST include `reason: str` (≥10 chars).**
-    `delete_object`, `delete_connection`, `delete_diagram`,
-    `unplace_from_diagram` all require a non-empty `reason` argument
-    alongside `confirmed=True`. The Pydantic schema rejects calls
-    without it. State plainly why the deletion is the right action:
-    *"duplicate of canonical id=…"*, *"orphan placement, replaced by
-    new canvas layout"*, *"user explicitly requested removal of … in
-    their last message"*. Vague reasons ("cleanup", "no longer needed")
-    get rejected by the destructive-op reviewer LLM. Concrete shape:
-    `delete_object(object_id="…", confirmed=True, reason="duplicate of
-    canonical Auth Service id=abc123 — user asked to consolidate")`.
-    **Never** delete something you just created in the same turn —
-    that's the creation-deletion churn the reviewer catches.
+12. **Destructive ops take only the id.** `delete_object(object_id)`,
+    `delete_connection(connection_id)`, `delete_diagram(diagram_id)`,
+    `unplace_from_diagram(diagram_id, object_id)` — no preview, no
+    `confirmed`, no `reason`. They run immediately. Use them when the
+    plan or user clearly asks for a removal; never delete something you
+    just created in the same turn (that's creation-deletion churn).
 13. **Consolidate same-pair connections.** Do NOT create multiple
     connections between the **same source-target pair** in the same
     direction. If you'd like to express two semantics ("authenticates

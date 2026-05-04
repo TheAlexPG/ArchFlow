@@ -87,20 +87,6 @@ class UnplaceFromDiagramInput(BaseModel):
 
     diagram_id: UUID
     object_id: UUID
-    confirmed: bool = False
-    reason: str = Field(
-        ...,
-        min_length=10,
-        max_length=1000,
-        description=(
-            "REQUIRED. ≥10 chars. Justify why removing this placement is "
-            "correct — the destructive-op reviewer LLM reads this "
-            "verbatim and rejects vague reasons. Good examples: "
-            "'duplicate placement on same diagram', 'user asked to "
-            "remove X from this view', 'placement belongs on child "
-            "diagram, not here'."
-        ),
-    )
 
 
 class CreateDiagramInput(BaseModel):
@@ -123,19 +109,6 @@ class DeleteDiagramInput(BaseModel):
     """Input for delete_diagram tool."""
 
     diagram_id: UUID
-    confirmed: bool = False
-    reason: str = Field(
-        ...,
-        min_length=10,
-        max_length=1000,
-        description=(
-            "REQUIRED. ≥10 chars. Justify why deleting this diagram is "
-            "correct — the destructive-op reviewer LLM reads this "
-            "verbatim and rejects vague reasons. Good examples: "
-            "'duplicate of diagram X for the same scope object', 'user "
-            "asked to drop empty draft', 'replaced by new layout in Y'."
-        ),
-    )
 
 
 class LinkObjectToChildDiagramInput(BaseModel):
@@ -510,15 +483,8 @@ async def move_on_diagram(args: MoveOnDiagramInput, ctx: ToolContext) -> dict:
 @tool(
     name="unplace_from_diagram",
     description=(
-        "Remove an object's visual placement from a diagram (does NOT delete "
-        "the object itself). "
-        "REQUIRED arguments: diagram_id, object_id, confirmed=True, reason "
-        "(≥10 chars). Two-step protocol: first call WITHOUT confirmed "
-        "returns a preview of orphaned connections; second call with "
-        "confirmed=True AND a specific reason executes. Example: "
-        "unplace_from_diagram(diagram_id='…', object_id='…', confirmed=True, "
-        "reason='user asked to remove from this view, keeping in model'). "
-        "The reason is reviewed by an LLM safety net; vague reasons get rejected."
+        "Remove an object's visual placement from a diagram by id (does NOT "
+        "delete the object itself)."
     ),
     input_schema=UnplaceFromDiagramInput,
     permission="diagram:manage",
@@ -526,67 +492,10 @@ async def move_on_diagram(args: MoveOnDiagramInput, ctx: ToolContext) -> dict:
     required_scope="agents:admin",
     mutating=True,
     deprecates_model=True,
-    needs_confirmed_gate=True,
 )
 async def unplace_from_diagram(args: UnplaceFromDiagramInput, ctx: ToolContext) -> dict:
-    """Two-step unplace with preview of impact on diagram-local connections."""
-    from app.services import diagram_service, object_service
-
-    if not args.confirmed:
-        # Compute impact: connections from/to this object that are visible on
-        # this diagram (i.e. both endpoints placed). Removing the placement
-        # makes those connections invisible on the diagram.
-        deps = await object_service.get_dependencies(ctx.db, args.object_id)
-        placements = await diagram_service.get_diagram_objects(ctx.db, args.diagram_id)
-        placed_ids = {p.object_id for p in placements}
-        affected = 0
-        for c in deps.get("upstream", []):
-            if c.source_id in placed_ids and c.target_id in placed_ids:
-                affected += 1
-        for c in deps.get("downstream", []):
-            if c.source_id in placed_ids and c.target_id in placed_ids:
-                affected += 1
-
-        return {
-            "status": "awaiting_confirmation",
-            "preview": (
-                f"Will remove placement (orphans {affected} connections on this diagram)"
-            ),
-            "impact": {
-                "will_orphan_connections_on_diagram": affected,
-            },
-            "target_id": args.object_id,
-            "diagram_id": args.diagram_id,
-        }
-
-    # ── LLM destructive-op reviewer ────────────────────────────────────
-    from app.agents.tools._destructive_review import review_destructive_op
-
-    deps = await object_service.get_dependencies(ctx.db, args.object_id)
-    placements = await diagram_service.get_diagram_objects(ctx.db, args.diagram_id)
-    placed_ids = {p.object_id for p in placements}
-    affected = sum(
-        1 for c in deps.get("upstream", []) + deps.get("downstream", [])
-        if c.source_id in placed_ids and c.target_id in placed_ids
-    )
-    impact = {
-        "will_unplace": 1,
-        "will_orphan_connections_on_diagram": affected,
-    }
-    verdict = await review_destructive_op(
-        ctx=ctx,
-        tool_name="unplace_from_diagram",
-        args=args,
-        impact=impact,
-        reason=args.reason,
-        target_summary=(
-            f"placement of object {args.object_id} on diagram {args.diagram_id}"
-        ),
-    )
-    if verdict.verdict == "REJECT":
-        raise ToolDenied(
-            f"destructive-op reviewer rejected: {verdict.rationale}"
-        )
+    """Remove an object's placement from a diagram by id."""
+    from app.services import diagram_service
 
     removed = await diagram_service.remove_object_from_diagram(
         ctx.db, args.diagram_id, args.object_id
@@ -716,14 +625,8 @@ async def update_diagram(args: UpdateDiagramInput, ctx: ToolContext) -> dict:
 @tool(
     name="delete_diagram",
     description=(
-        "Delete a diagram (NOT the model objects — only the diagram and its "
-        "placements). "
-        "REQUIRED arguments: diagram_id, confirmed=True, reason (≥10 chars). "
-        "Two-step protocol: first call WITHOUT confirmed returns impact "
-        "preview; second call with confirmed=True AND a specific reason "
-        "executes. Example: delete_diagram(diagram_id='…', confirmed=True, "
-        "reason='duplicate of diagram X for the same scope object'). "
-        "The reason is reviewed by an LLM safety net; vague reasons get rejected."
+        "Delete a diagram by id (model objects are NOT deleted, only the "
+        "diagram and its placements)."
     ),
     input_schema=DeleteDiagramInput,
     permission="diagram:manage",
@@ -731,59 +634,14 @@ async def update_diagram(args: UpdateDiagramInput, ctx: ToolContext) -> dict:
     required_scope="agents:admin",
     mutating=True,
     deprecates_model=True,
-    needs_confirmed_gate=True,
 )
 async def delete_diagram(args: DeleteDiagramInput, ctx: ToolContext) -> dict:
-    """Two-step diagram delete."""
+    """Delete a diagram by id."""
     from app.services import diagram_service
 
     diagram = await diagram_service.get_diagram(ctx.db, args.diagram_id)
     if diagram is None:
         raise ToolDenied(f"diagram {args.diagram_id} not found")
-
-    if not args.confirmed:
-        placements = await diagram_service.get_diagram_objects(ctx.db, args.diagram_id)
-        placement_count = len(placements)
-        impact = {
-            "will_delete_diagram": 1,
-            "will_drop_placements": placement_count,
-            "is_child_of_object": (
-                str(diagram.scope_object_id) if diagram.scope_object_id else None
-            ),
-        }
-        return {
-            "status": "awaiting_confirmation",
-            "preview": (
-                f"Will delete diagram {diagram.name} ({placement_count} placements)"
-            ),
-            "impact": impact,
-            "target_id": diagram.id,
-            "name": diagram.name,
-        }
-
-    # ── LLM destructive-op reviewer ────────────────────────────────────
-    from app.agents.tools._destructive_review import review_destructive_op
-
-    placements = await diagram_service.get_diagram_objects(ctx.db, args.diagram_id)
-    impact = {
-        "will_delete_diagram": 1,
-        "will_drop_placements": len(placements),
-        "is_child_of_object": (
-            str(diagram.scope_object_id) if diagram.scope_object_id else None
-        ),
-    }
-    verdict = await review_destructive_op(
-        ctx=ctx,
-        tool_name="delete_diagram",
-        args=args,
-        impact=impact,
-        reason=args.reason,
-        target_summary=f"diagram {diagram.name!r} (id={diagram.id})",
-    )
-    if verdict.verdict == "REJECT":
-        raise ToolDenied(
-            f"destructive-op reviewer rejected: {verdict.rationale}"
-        )
 
     name = diagram.name
     target_id = diagram.id

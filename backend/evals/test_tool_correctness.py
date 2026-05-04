@@ -32,14 +32,11 @@ EXPECTED_TOOL_COUNT = 41
 
 VALID_SCOPES = {"agents:read", "agents:invoke", "agents:write", "agents:admin"}
 
-# Tools known to require the confirmed gate (delete_* and destructive ops).
-# Keeping this explicit makes regressions obvious.
+# Tools known to require the confirmed gate.
+# delete_* tools were deliberately stripped of the gate (just id is enough);
+# discard_draft keeps it because dropping a draft is a session-level action.
 EXPECTED_CONFIRMED_GATE_TOOLS = {
-    "delete_object",
-    "delete_connection",
-    "delete_diagram",
     "discard_draft",
-    "unplace_from_diagram",
 }
 
 
