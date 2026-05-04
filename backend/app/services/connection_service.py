@@ -137,7 +137,7 @@ async def create_connection(
             action=UndoAction.CREATE,
             forward_summary=f"Created connection {str(conn.id)[:8]}"[:80],
             inverse_payload={"target_id": str(conn.id)},
-            after_state=activity_service.snapshot(conn),
+            after_state=activity_service.snapshot(conn, include_metadata=True),
             coalesce_key=f"connection:{conn.id}:create",
         )
 
@@ -153,11 +153,13 @@ async def update_connection(
     from_diagram_id: uuid.UUID | None = None,
     from_draft_id: uuid.UUID | None = None,
 ) -> Connection:
+    # Resolve once — used for both protocol validation and undo recording.
+    ws_id = await _source_workspace_id(db, conn.source_id)
+
     if "protocol_ids" in data.model_fields_set:
-        ws_id = await _source_workspace_id(db, conn.source_id)
         await _validate_protocol_ids(db, ws_id, data.protocol_ids)
 
-    before = activity_service.snapshot(conn)
+    before = activity_service.snapshot(conn, include_metadata=True)
     update_data = data.model_dump(exclude_unset=True)
     # Strip undo-context fields that are not connection attributes
     update_data.pop("from_diagram_id", None)
@@ -166,34 +168,33 @@ async def update_connection(
         setattr(conn, field, value)
     await db.flush()
     await db.refresh(conn)
-    after = activity_service.snapshot(conn)
+    after = activity_service.snapshot(conn, include_metadata=True)
 
     # Undo recording
     if (
         actor_user is not None
         and from_diagram_id is not None
+        and ws_id is not None
     ):
         diff = activity_service.diff_snapshots(before, after)
         if diff:
-            ws_id = await _source_workspace_id(db, conn.source_id)
-            if ws_id is not None:
-                from app.models.undo_entry import UndoAction, UndoTargetType
-                from app.services import undo_service
+            from app.models.undo_entry import UndoAction, UndoTargetType
+            from app.services import undo_service
 
-                await undo_service.record(
-                    db,
-                    user_id=actor_user.id,
-                    workspace_id=ws_id,
-                    diagram_id=from_diagram_id,
-                    draft_id=from_draft_id,
-                    target_type=UndoTargetType.CONNECTION,
-                    target_id=conn.id,
-                    action=UndoAction.UPDATE,
-                    forward_summary=_summarise_connection_diff(conn, diff),
-                    inverse_payload={"before": {k: v["before"] for k, v in diff.items()}},
-                    after_state={k: v["after"] for k, v in diff.items()},
-                    coalesce_key=f"connection:{conn.id}:{','.join(sorted(diff.keys()))}",
-                )
+            await undo_service.record(
+                db,
+                user_id=actor_user.id,
+                workspace_id=ws_id,
+                diagram_id=from_diagram_id,
+                draft_id=from_draft_id,
+                target_type=UndoTargetType.CONNECTION,
+                target_id=conn.id,
+                action=UndoAction.UPDATE,
+                forward_summary=_summarise_connection_diff(conn, diff),
+                inverse_payload={"before": {k: v["before"] for k, v in diff.items()}},
+                after_state={k: v["after"] for k, v in diff.items()},
+                coalesce_key=f"connection:{conn.id}:{','.join(sorted(diff.keys()))}",
+            )
 
     return conn
 
@@ -232,7 +233,7 @@ async def flip_connection(
                 action=UndoAction.UPDATE,
                 forward_summary=f"Flipped connection {str(conn.id)[:8]}"[:80],
                 inverse_payload={},
-                after_state=activity_service.snapshot(conn),
+                after_state=activity_service.snapshot(conn, include_metadata=True),
                 coalesce_key=f"connection:{conn.id}:flip",
             )
 
@@ -247,8 +248,9 @@ async def delete_connection(
     from_diagram_id: uuid.UUID | None = None,
     from_draft_id: uuid.UUID | None = None,
 ) -> None:
-    # Capture snapshot BEFORE delete
-    snapshot = activity_service.snapshot(conn)
+    # Capture snapshot BEFORE delete — include metadata so restore_service
+    # can rebuild the connection on undo.
+    snapshot = activity_service.snapshot(conn, include_metadata=True)
     conn_id = conn.id
 
     # Undo recording — need workspace before deleting (derive from source)

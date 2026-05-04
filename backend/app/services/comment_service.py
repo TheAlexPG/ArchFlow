@@ -79,7 +79,7 @@ async def create_comment(
             action=UndoAction.CREATE,
             forward_summary=f"Added comment"[:80],
             inverse_payload={"target_id": str(comment.id)},
-            after_state=activity_service.snapshot(comment),
+            after_state=activity_service.snapshot(comment, include_metadata=True),
             coalesce_key=f"comment:{comment.id}:create",
         )
 
@@ -96,7 +96,7 @@ async def update_comment(
     from_draft_id: uuid.UUID | None = None,
     workspace_id: uuid.UUID | None = None,
 ) -> Comment:
-    before = activity_service.snapshot(comment)
+    before = activity_service.snapshot(comment, include_metadata=True)
     update_data = data.model_dump(exclude_unset=True)
     # Strip undo-context fields
     update_data.pop("from_diagram_id", None)
@@ -105,7 +105,7 @@ async def update_comment(
         setattr(comment, field, value)
     await db.flush()
     await db.refresh(comment, attribute_names=["author"])
-    after = activity_service.snapshot(comment)
+    after = activity_service.snapshot(comment, include_metadata=True)
 
     # Undo recording — gated on user's include_comments_in_undo toggle
     if (
@@ -146,8 +146,9 @@ async def delete_comment(
     from_draft_id: uuid.UUID | None = None,
     workspace_id: uuid.UUID | None = None,
 ) -> None:
-    # Capture snapshot BEFORE delete
-    snapshot = activity_service.snapshot(comment)
+    # Capture snapshot BEFORE delete — include metadata so restore_service
+    # can rebuild the comment on undo.
+    snapshot = activity_service.snapshot(comment, include_metadata=True)
     comment_id = comment.id
 
     await db.delete(comment)
