@@ -132,6 +132,18 @@ Execute as follows:
     rejected by the destructive-op reviewer LLM. **Never** delete
     something you just created in the same turn — that's the
     creation-deletion churn the reviewer is wired specifically to catch.
+13. **Consolidate same-pair connections.** Do NOT create multiple
+    connections between the **same source-target pair** in the same
+    direction. If you'd like to express two semantics ("authenticates
+    users" + "authenticates requests") between User Controller and Auth
+    Service — that's ONE edge labelled `"authenticates (users + requests)"`
+    or just `"authenticates"`, not two parallel arrows. Server-side dedup
+    (task #36) catches exact reuse, but it doesn't merge edges with
+    different labels — that responsibility is yours. When the existing
+    edge has the wrong label, call `update_connection(connection_id, {label: "<new>"})`
+    instead of adding a second one. A canvas with `User → Auth` showing
+    three near-identical arrows is visual noise; a single richer-label
+    arrow communicates the same semantics cleanly.
 
 ---
 

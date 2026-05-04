@@ -377,15 +377,16 @@ class LimitsEnforcer:
             checks.
           * Account for the cost in :attr:`counters.cost_usd` so the health-
             check eats the same budget as the agent it is policing.
-          * Use ``response_format={"type": "json_object"}`` and parse a
-            best-effort verdict out of the response text.
+          * Use ``response_format={"type": "text"}`` and parse a best-effort
+            verdict out of the response text. (``json_object`` is not
+            universally supported — LM Studio's qwen rejects it with HTTP 400.)
         """
         compact_prompt = self._build_health_check_prompt(messages)
 
         try:
             result = await self.llm.acompletion(
                 compact_prompt,
-                response_format={"type": "json_object"},
+                response_format={"type": "text"},
                 metadata=call_metadata,
                 model_override=self.limits.health_check_model,
             )

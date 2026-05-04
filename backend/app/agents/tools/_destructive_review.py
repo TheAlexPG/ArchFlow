@@ -170,7 +170,12 @@ async def review_destructive_op(
         result = await llm.acompletion(
             messages,
             metadata=reviewer_meta,
-            response_format={"type": "json_object"},
+            # ``json_object`` is not universally supported on OpenAI-compatible
+            # servers (LM Studio's qwen rejects with HTTP 400 — only ``text``
+            # and ``json_schema`` are accepted there). Use ``text`` and rely on
+            # the prompt + a manual JSON parse below; the reviewer system
+            # prompt already pins the output to a single JSON object.
+            response_format={"type": "text"},
             temperature=0.0,
             max_tokens=400,
         )
@@ -188,13 +193,36 @@ async def review_destructive_op(
             verdict="APPROVE", rationale="reviewer returned empty response"
         )
 
+    # Strip a markdown JSON fence if the model wrapped its answer
+    # (Qwen / DeepSeek occasionally emit ```json ... ``` despite "no fences"
+    # in the prompt — be lenient).
+    if text.startswith("```"):
+        first_nl = text.find("\n")
+        if first_nl != -1:
+            text = text[first_nl + 1 :]
+        if text.endswith("```"):
+            text = text[: -3]
+        text = text.strip()
+
     try:
         payload = json.loads(text)
     except json.JSONDecodeError:
-        logger.warning("destructive-op reviewer non-json: %s", text[:200])
-        return DeleteVerdict(
-            verdict="APPROVE", rationale="reviewer non-json response"
-        )
+        # Last-resort: scan for the outermost {...} substring.
+        first_brace = text.find("{")
+        last_brace = text.rfind("}")
+        if first_brace != -1 and last_brace > first_brace:
+            try:
+                payload = json.loads(text[first_brace : last_brace + 1])
+            except json.JSONDecodeError:
+                logger.warning("destructive-op reviewer non-json: %s", text[:200])
+                return DeleteVerdict(
+                    verdict="APPROVE", rationale="reviewer non-json response"
+                )
+        else:
+            logger.warning("destructive-op reviewer non-json: %s", text[:200])
+            return DeleteVerdict(
+                verdict="APPROVE", rationale="reviewer non-json response"
+            )
 
     try:
         return DeleteVerdict.model_validate(payload)
