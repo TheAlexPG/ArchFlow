@@ -109,6 +109,16 @@ async def create_object(
                 "type": getattr(existing.type, "value", existing.type),
             },
         ) from exc
+    except object_service.RepoLinkNotAllowedError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "repo_link_not_allowed", "message": str(exc)},
+        ) from exc
+    except object_service.InvalidRepoUrlError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "invalid_repo_url", "message": str(exc)},
+        ) from exc
     response = ObjectResponse.from_model(obj)
     if draft_id is None:
         body = response.model_dump(mode="json")
@@ -136,7 +146,18 @@ async def update_object(
     obj = await object_service.get_object(db, object_id)
     if not obj:
         raise HTTPException(status_code=404, detail="Object not found")
-    obj = await object_service.update_object(db, obj, data)
+    try:
+        obj = await object_service.update_object(db, obj, data)
+    except object_service.RepoLinkNotAllowedError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "repo_link_not_allowed", "message": str(exc)},
+        ) from exc
+    except object_service.InvalidRepoUrlError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "invalid_repo_url", "message": str(exc)},
+        ) from exc
     response = ObjectResponse.from_model(obj)
     if obj.draft_id is None:
         body = response.model_dump(mode="json")
