@@ -1,4 +1,4 @@
-from sqlalchemy import String
+from sqlalchemy import String, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -16,5 +16,5 @@ class User(Base, UUIDMixin, TimestampMixin):
     # password, and vice versa.
     auth_provider: Mapped[str] = mapped_column(String(32), default="local")
     undo_settings: Mapped[dict] = mapped_column(
-        JSONB, nullable=False, server_default="{}"
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
