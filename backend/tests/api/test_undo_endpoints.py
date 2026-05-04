@@ -201,3 +201,71 @@ async def test_undo_seq_mismatch_returns_409(client):
     detail = res.json()["detail"]
     assert detail["code"] == "undo_seq_mismatch"
     assert detail["actual_seq"] == 1
+
+
+async def test_undo_emits_user_undo_event(client, monkeypatch):
+    """The /undo route fires a `user.undo` WS publish on success."""
+    from app.api.v1 import undo as undo_module
+    from app.models.diagram import Diagram
+    from app.models.undo_entry import UndoAction, UndoEntry, UndoState, UndoTargetType
+    from sqlalchemy import select
+
+    calls = []
+
+    def fake_publish(user_id, event_type, payload):
+        calls.append((str(user_id), event_type, payload))
+
+    monkeypatch.setattr(undo_module, "fire_and_forget_publish_user", fake_publish)
+
+    token, _, ws_id = await _register(client, "wsundo")
+    diagram_id = await _create_diagram(client, token, ws_id)
+
+    # Get the user_id from workspace members
+    members_r = await client.get(
+        f"/api/v1/workspaces/{ws_id}/members",
+        headers=_auth(token),
+    )
+    assert members_r.status_code == 200, members_r.text
+    user_id = uuid.UUID(members_r.json()[0]["user_id"])
+
+    # Seed one undo entry so the stack is non-empty
+    async with async_session() as s:
+        diag = (
+            await s.execute(
+                select(Diagram).where(Diagram.id == uuid.UUID(diagram_id))
+            )
+        ).scalar_one()
+        entry = UndoEntry(
+            workspace_id=diag.workspace_id,
+            user_id=user_id,
+            diagram_id=uuid.UUID(diagram_id),
+            draft_id=None,
+            seq=1,
+            target_type=UndoTargetType.OBJECT,
+            target_id=uuid.uuid4(),
+            action=UndoAction.UPDATE,
+            forward_summary="test edit for ws event",
+            inverse_payload={"before": {"name": "old"}},
+            after_state={"name": "new"},
+            coalesce_key="obj:ws-event-test",
+            state=UndoState.ACTIVE,
+        )
+        s.add(entry)
+        await s.commit()
+
+    # POST /undo — stack is non-empty so this returns 200 and emits the event
+    res = await client.post(
+        f"/api/v1/diagrams/{diagram_id}/undo",
+        headers=_auth(token),
+        json={},
+    )
+    assert res.status_code == 200, res.text
+    assert any(event_type == "user.undo" for _, event_type, _ in calls), (
+        f"Expected user.undo event to be published, got: {calls}"
+    )
+    # Verify payload shape
+    _, _, payload = next(
+        (c for c in calls if c[1] == "user.undo"), (None, None, None)
+    )
+    assert payload["diagram_id"] == diagram_id
+    assert "cursor_seq" in payload
