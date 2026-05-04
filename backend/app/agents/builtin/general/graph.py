@@ -313,6 +313,29 @@ def _subagent_span_input(state: AgentState) -> dict | None:
     return payload or None
 
 
+def _history_metadata(output: Any | None) -> dict | None:
+    """Return ``{"messages": [...]}`` for the agent's verbatim message
+    history, suitable for stamping onto a Langfuse span's metadata field.
+
+    Source: ``output.state_patch["messages"]``. For supervisor this is
+    the full conversation across visits. For sub-agents this is the
+    isolated-state history (one user message with the supervisor's
+    brief, plus the sub-agent's own ReAct turns and tool results) —
+    exactly what an eval suite needs to replay or grade the agent's
+    behaviour without re-running the whole graph.
+
+    Returns ``None`` when there's nothing to stamp so we don't spend a
+    Langfuse update call on an empty payload.
+    """
+    if output is None:
+        return None
+    state_patch = getattr(output, "state_patch", None) or {}
+    messages = state_patch.get("messages")
+    if not messages:
+        return None
+    return {"messages": messages}
+
+
 _SUBAGENT_ARTEFACT_KEY: dict[str, str] = {
     "researcher": "findings",
     "planner": "plan",
@@ -543,6 +566,7 @@ async def _drain_with_tracing(
                 span_id=span_id,
                 output=span_output,
                 level="ERROR" if forced else None,
+                metadata=_history_metadata(output),
             )
 
     return output, forced

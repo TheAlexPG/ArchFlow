@@ -295,6 +295,10 @@ class AgentTracer:
         # so the supervisor row in Langfuse shows the final assistant
         # message / delegate target / forced-finalize reason.
         self._supervisor_output: Any | None = None
+        # Latest supervisor metadata (the full message history etc.) —
+        # buffered the same way and applied at finish(). Lets eval suites
+        # pull the verbatim conversation from a Langfuse trace.
+        self._supervisor_metadata: dict | None = None
         # Cache of the verbatim user message so we can re-assert it on the
         # trace root at finish() — LiteLLM's langfuse callback otherwise
         # overwrites trace.input with the first generation's messages payload.
@@ -396,19 +400,26 @@ class AgentTracer:
         span_id: str | None,
         output: Any | None = None,
         level: str | None = None,
+        metadata: dict | None = None,
     ) -> None:
         """Close a span opened by :meth:`start_node_span`. Idempotent on
         ``span_id is None`` and on already-ended spans.
 
+        ``metadata`` lands on the Langfuse observation's metadata field —
+        used here to ship the full agent message history so eval suites
+        can pull the verbatim conversation off any trace.
+
         Special-cased for the supervisor span: each visit's "end" doesn't
         actually close the span (so subsequent visits keep nesting their
-        generations inside it). Instead the latest output is buffered and
-        applied at :meth:`finish`.
+        generations inside it). Instead the latest output / metadata are
+        buffered and applied at :meth:`finish`.
         """
         if span_id is None:
             return
         if span_id == self._supervisor_span_id:
             self._supervisor_output = output
+            if metadata is not None:
+                self._supervisor_metadata = metadata
             return
         handle = self._spans.pop(span_id, None)
         if handle is None:
@@ -416,6 +427,8 @@ class AgentTracer:
         kwargs: dict[str, Any] = {"output": _coerce_jsonable(output)}
         if level:
             kwargs["level"] = level
+        if metadata is not None:
+            kwargs["metadata"] = _coerce_jsonable(metadata)
         try:
             handle.end(**kwargs)
         except Exception as exc:  # pragma: no cover — defensive
@@ -469,8 +482,15 @@ class AgentTracer:
         if sup_id is not None:
             handle = self._spans.pop(sup_id, None)
             if handle is not None:
+                end_kwargs: dict[str, Any] = {
+                    "output": _coerce_jsonable(self._supervisor_output)
+                }
+                if self._supervisor_metadata is not None:
+                    end_kwargs["metadata"] = _coerce_jsonable(
+                        self._supervisor_metadata
+                    )
                 try:
-                    handle.end(output=_coerce_jsonable(self._supervisor_output))
+                    handle.end(**end_kwargs)
                 except Exception as exc:  # pragma: no cover — defensive
                     logger.debug("AgentTracer: supervisor span end failed: %s", exc)
             self._supervisor_span_id = None
