@@ -163,12 +163,7 @@ async def test_undo_seq_mismatch_returns_409(client):
                 select(Diagram).where(Diagram.id == uuid.UUID(diagram_id))
             )
         ).scalar_one()
-        # Fetch user_id for the token-holder
-        # We can look up by email — but easier: just call the service directly
-        # with a fabricated user-id-shaped lookup via the register endpoint's
-        # /me endpoint.
-        me_r = await client.get("/api/v1/me", headers=_auth(token))
-        # /me may not exist — use workspace members instead
+        # Fetch user_id for the token-holder via workspace members.
         members_r = await client.get(
             f"/api/v1/workspaces/{ws_id}/members",
             headers=_auth(token),

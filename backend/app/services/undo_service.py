@@ -535,11 +535,15 @@ async def undo_to(
         applied = await _redo_until(db, user_id, diagram_id, draft_id,
                                      target.seq, actor_user)
 
-    if expected_path_length is not None and len(applied) != expected_path_length:
-        raise UndoConcurrencyError(actual_seq=target.seq)
-
     summary = await _stack_summary(db, user_id, diagram_id, draft_id,
                                    undone=None, redone=None)
+
+    if expected_path_length is not None and len(applied) != expected_path_length:
+        # actual_seq returns the current cursor (top of active stack) so the
+        # client can sync its state — same contract as /undo and /redo 409s.
+        # Falls back to target.seq if the stack is empty post-walk.
+        raise UndoConcurrencyError(actual_seq=summary.cursor_seq or target.seq)
+
     return UndoToResult(applied=applied, cursor_seq=summary.cursor_seq)
 
 
