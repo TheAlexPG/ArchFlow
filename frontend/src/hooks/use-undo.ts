@@ -184,7 +184,6 @@ export function useDiagramHistory(
   draftId?: string | null,
   enabled = false,
 ) {
-  const setRecentEntries = useUndoStore((s) => s.setRecentEntries)
   const ctx = ctxKey(diagramId, draftId)
 
   const query = useQuery({
@@ -201,12 +200,28 @@ export function useDiagramHistory(
     enabled: !!diagramId && enabled,
   })
 
-  // Sync entries into the Zustand store whenever the query data changes.
+  // Sync entries AND derived counts into the Zustand store whenever the
+  // query data changes. Without populating undoCount/redoCount the toolbar
+  // buttons stay disabled even when the fetched history has active or
+  // undone entries — normal mutation routes never call setStackInfo
+  // themselves, so this is the only path that initialises those numbers.
   useEffect(() => {
     if (query.data) {
-      setRecentEntries(ctx, query.data.entries as unknown as HistoryEntry[])
+      const entries = query.data.entries as unknown as HistoryEntry[]
+      let undoCount = 0
+      let redoCount = 0
+      for (const e of entries) {
+        if (e.state === 'active') undoCount += 1
+        else if (e.state === 'undone') redoCount += 1
+      }
+      useUndoStore.getState().setStackInfo(ctx, {
+        cursorSeq: query.data.cursor_seq,
+        undoCount,
+        redoCount,
+        recentEntries: entries,
+      })
     }
-  }, [query.data, ctx, setRecentEntries])
+  }, [query.data, ctx])
 
   return query
 }
