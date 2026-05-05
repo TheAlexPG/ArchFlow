@@ -303,6 +303,15 @@ class AgentTracer:
         # trace root at finish() — LiteLLM's langfuse callback otherwise
         # overwrites trace.input with the first generation's messages payload.
         self._chat_input: str | None = chat_input
+        # Cache of the chat session id so we can re-assert it on every
+        # ``finish()`` update — LiteLLM's langfuse callback also calls
+        # ``client.trace(id=trace_id, ...)`` for each generation; if that
+        # path ever races with our finish() update or skips ``session_id``
+        # for any reason, the late update without ``session_id`` would
+        # otherwise leave the upserted trace ungrouped in the Langfuse UI.
+        # Re-asserting on finish keeps every chat invocation pinned to the
+        # same Langfuse session even under those edge cases.
+        self._session_id: str = session_id
         if self._client is None:
             return
         suffix = trace_name_suffix()
@@ -497,6 +506,14 @@ class AgentTracer:
         update_kwargs: dict[str, Any] = {"output": output}
         if self._chat_input:
             update_kwargs["input"] = self._chat_input
+        if self._session_id:
+            # Re-assert the chat session id on the trace root so every
+            # invocation in a chat session lands under the same Langfuse
+            # ``session_id`` — the field is otherwise only set on initial
+            # ``client.trace()`` and any later upsert without it (e.g. from
+            # a stray late callback) could leave the trace ungrouped in the
+            # Langfuse UI. Mirrors the ``input`` re-assertion above.
+            update_kwargs["session_id"] = self._session_id
         try:
             self._trace.update(**update_kwargs)
         except Exception as exc:  # pragma: no cover — defensive

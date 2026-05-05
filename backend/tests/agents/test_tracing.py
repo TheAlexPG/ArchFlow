@@ -343,3 +343,111 @@ def test_setup_teardown_setup_round_trip(monkeypatch: pytest.MonkeyPatch):
     assert "langfuse" not in litellm.success_callback
     tracing.setup_litellm_callbacks()
     assert "langfuse" in litellm.success_callback
+
+
+# ---------------------------------------------------------------------------
+# AgentTracer — chat-session-id grouping (Langfuse session_id)
+# ---------------------------------------------------------------------------
+
+
+class _FakeTraceHandle:
+    """Records every kwarg passed to ``client.trace`` and ``trace.update``.
+
+    Used to assert that consecutive AgentTracer instantiations for the same
+    chat session both pin the trace to the SAME Langfuse ``session_id``
+    (the bug this regression test guards against: follow-up messages
+    showing up under a different ``session_id`` in the Langfuse UI).
+    """
+
+    def __init__(self) -> None:
+        self.update_calls: list[dict] = []
+
+    def update(self, **kwargs):  # noqa: ANN003 — match SDK signature
+        self.update_calls.append(kwargs)
+        return self
+
+
+class _FakeLangfuseClient:
+    def __init__(self) -> None:
+        self.trace_calls: list[dict] = []
+        self.handles: list[_FakeTraceHandle] = []
+
+    def trace(self, **kwargs):  # noqa: ANN003
+        self.trace_calls.append(kwargs)
+        handle = _FakeTraceHandle()
+        self.handles.append(handle)
+        return handle
+
+    def flush(self) -> None:
+        return None
+
+
+def test_agent_tracer_passes_chat_session_id_to_langfuse(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """AgentTracer must propagate the chat-session-id verbatim into the
+    Langfuse trace's ``session_id`` field.
+
+    Two consecutive constructions with the same ``session_id`` (simulating
+    a follow-up message in the same chat session) MUST produce traces that
+    share that exact ``session_id`` so the Langfuse UI groups them.
+    """
+    fake = _FakeLangfuseClient()
+    monkeypatch.setattr(tracing, "_get_client", lambda: fake)
+
+    chat_session_id = "11111111-2222-3333-4444-555555555555"
+
+    # First chat invocation.
+    tracer_a = tracing.AgentTracer(
+        trace_id="trace-a",
+        agent_id="general",
+        session_id=chat_session_id,
+        user_id="user-1",
+        chat_input="hello",
+    )
+    assert tracer_a.enabled
+    tracer_a.finish(output="ok")
+
+    # Follow-up chat invocation in the same chat session.
+    tracer_b = tracing.AgentTracer(
+        trace_id="trace-b",
+        agent_id="general",
+        session_id=chat_session_id,
+        user_id="user-1",
+        chat_input="follow-up",
+    )
+    assert tracer_b.enabled
+    tracer_b.finish(output="ok")
+
+    # Both opening calls landed the same session_id on the Langfuse trace.
+    assert len(fake.trace_calls) == 2
+    assert fake.trace_calls[0]["session_id"] == chat_session_id
+    assert fake.trace_calls[1]["session_id"] == chat_session_id
+    # Trace ids differ across invocations (one trace per round) but the
+    # Langfuse session_id is shared so the UI groups them.
+    assert fake.trace_calls[0]["id"] != fake.trace_calls[1]["id"]
+
+    # finish() re-asserts session_id on the trace update so a stray late
+    # upsert (e.g. from LiteLLM's langfuse callback) cannot leave the
+    # trace ungrouped.
+    assert fake.handles[0].update_calls
+    assert fake.handles[0].update_calls[-1]["session_id"] == chat_session_id
+    assert fake.handles[1].update_calls
+    assert fake.handles[1].update_calls[-1]["session_id"] == chat_session_id
+
+
+def test_agent_tracer_disabled_when_client_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """When Langfuse is not configured ``_get_client()`` returns None and the
+    tracer must no-op gracefully — finish() should not raise."""
+    monkeypatch.setattr(tracing, "_get_client", lambda: None)
+
+    tracer = tracing.AgentTracer(
+        trace_id="trace-x",
+        agent_id="general",
+        session_id="abc",
+        user_id="user-1",
+    )
+    assert tracer.enabled is False
+    tracer.finish(output="ok")  # Must not raise.
