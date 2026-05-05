@@ -73,5 +73,11 @@ jobs:
       - name: Unit tests
         run: uv run pytest tests/ -v
 
+      # uv treats this project as a virtual workspace ("source = virtual"),
+      # which means `evals` isn't materialised in site-packages even though
+      # setuptools packages.find lists it. Put backend/ on PYTHONPATH so
+      # the eval conftest's `from evals.lib.judge import ...` resolves.
       - name: Fast eval suite (deterministic, no LLM cost)
+        env:
+          PYTHONPATH: ${{ github.workspace }}/backend
         run: make -C evals fast
