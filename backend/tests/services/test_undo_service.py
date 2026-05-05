@@ -320,7 +320,11 @@ async def test_undo_to_walks_back_three_steps(db, user, workspace, diagram):
         db, user_id=user.id, diagram_id=diagram.id, draft_id=None,
         actor_user=user, entry_id=target_entry.id,
     )
-    assert len(res.applied) == 3
+    # All three objects must be reverted. The exact `len(res.applied)` is
+    # an implementation detail — it counts outer undo() calls, not entries
+    # touched: burst-undo can collapse multiple temporally-tight entries
+    # into a single outer call. End state is the contract here.
+    assert len(res.applied) >= 1
     for o in objs:
         await db.refresh(o)
         assert o.name == "old"
@@ -421,6 +425,177 @@ async def test_discarding_draft_drops_its_undo_entries(db, user, workspace, diag
     )).scalars().all()
     assert len(rows) == 1
     assert rows[0].draft_id is None
+
+
+@pytest.mark.asyncio
+async def test_undo_burst_reverts_multi_object_drag_in_one_press(
+    db, user, workspace, diagram,
+):
+    """Multi-object drags fire per-object position mutations near-simultaneously.
+    A single Cmd+Z must revert the whole burst, not just the last entry."""
+    from app.models.diagram import DiagramObject
+
+    # Three placements of three objects on the diagram.
+    objs = [
+        ModelObject(name=n, type="system", workspace_id=workspace.id)
+        for n in ("A", "B", "C")
+    ]
+    db.add_all(objs)
+    await db.flush()
+    placements = [
+        DiagramObject(
+            diagram_id=diagram.id, object_id=o.id,
+            position_x=10.0, position_y=20.0,
+        )
+        for o in objs
+    ]
+    db.add_all(placements)
+    await db.flush()
+
+    # Simulate the drag: 3 record() calls in tight succession, each
+    # restoring its placement's pre-drag position.
+    for p in placements:
+        await undo_service.record(
+            db, user_id=user.id, workspace_id=workspace.id,
+            diagram_id=diagram.id, draft_id=None,
+            target_type=UndoTargetType.DIAGRAM_OBJECT, target_id=p.id,
+            action=UndoAction.UPDATE,
+            forward_summary="Moved object in diagram",
+            inverse_payload={"before": {"position_x": 10.0, "position_y": 20.0}},
+            after_state={"position_x": 100.0, "position_y": 200.0},
+            coalesce_key=f"diagram_object:{p.id}:position",
+        )
+        # Flush the simulated mutation to mirror the live drag flow.
+        p.position_x = 100.0
+        p.position_y = 200.0
+    await db.flush()
+
+    # Single undo call should revert all three placements via the burst loop.
+    res = await undo_service.undo(
+        db, user_id=user.id, diagram_id=diagram.id, draft_id=None,
+        actor_user=user,
+    )
+    for p in placements:
+        await db.refresh(p)
+        assert p.position_x == 10.0
+        assert p.position_y == 20.0
+    # All three entries are now in UNDONE state.
+    rows = (await db.execute(
+        select(UndoEntry).where(UndoEntry.diagram_id == diagram.id)
+    )).scalars().all()
+    assert len(rows) == 3
+    assert all(r.state == UndoState.UNDONE for r in rows)
+    assert res.remaining_undo_count == 0
+    assert res.redo_count == 3
+
+
+@pytest.mark.asyncio
+async def test_redo_burst_reapplies_multi_object_drag_in_one_press(
+    db, user, workspace, diagram,
+):
+    """After a burst-undone multi-object drag, a single redo must re-apply
+    all three position changes."""
+    from app.models.diagram import DiagramObject
+
+    objs = [
+        ModelObject(name=n, type="system", workspace_id=workspace.id)
+        for n in ("A", "B", "C")
+    ]
+    db.add_all(objs)
+    await db.flush()
+    placements = [
+        DiagramObject(
+            diagram_id=diagram.id, object_id=o.id,
+            position_x=10.0, position_y=20.0,
+        )
+        for o in objs
+    ]
+    db.add_all(placements)
+    await db.flush()
+
+    for p in placements:
+        await undo_service.record(
+            db, user_id=user.id, workspace_id=workspace.id,
+            diagram_id=diagram.id, draft_id=None,
+            target_type=UndoTargetType.DIAGRAM_OBJECT, target_id=p.id,
+            action=UndoAction.UPDATE,
+            forward_summary="Moved object in diagram",
+            inverse_payload={"before": {"position_x": 10.0, "position_y": 20.0}},
+            after_state={"position_x": 100.0, "position_y": 200.0},
+            coalesce_key=f"diagram_object:{p.id}:position",
+        )
+        p.position_x = 100.0
+        p.position_y = 200.0
+    await db.flush()
+
+    await undo_service.undo(
+        db, user_id=user.id, diagram_id=diagram.id, draft_id=None,
+        actor_user=user,
+    )
+    res = await undo_service.redo(
+        db, user_id=user.id, diagram_id=diagram.id, draft_id=None,
+        actor_user=user,
+    )
+    for p in placements:
+        await db.refresh(p)
+        assert p.position_x == 100.0
+        assert p.position_y == 200.0
+    assert res.remaining_undo_count == 3
+    assert res.redo_count == 0
+
+
+@pytest.mark.asyncio
+async def test_undo_burst_does_not_cross_kinds(db, user, workspace, diagram):
+    """Position drag followed by a separate name edit must NOT burst together.
+    Different coalesce-key kinds (`position` vs `name`) act as a boundary."""
+    from app.models.diagram import DiagramObject
+
+    obj_a = ModelObject(name="A", type="system", workspace_id=workspace.id)
+    db.add(obj_a)
+    await db.flush()
+    placement = DiagramObject(
+        diagram_id=diagram.id, object_id=obj_a.id,
+        position_x=10.0, position_y=20.0,
+    )
+    db.add(placement)
+    await db.flush()
+
+    # Position move first.
+    await undo_service.record(
+        db, user_id=user.id, workspace_id=workspace.id,
+        diagram_id=diagram.id, draft_id=None,
+        target_type=UndoTargetType.DIAGRAM_OBJECT, target_id=placement.id,
+        action=UndoAction.UPDATE,
+        forward_summary="Moved object in diagram",
+        inverse_payload={"before": {"position_x": 10.0}},
+        after_state={"position_x": 100.0},
+        coalesce_key=f"diagram_object:{placement.id}:position",
+    )
+    placement.position_x = 100.0
+    await db.flush()
+    # Name edit on a different target right after.
+    await undo_service.record(
+        db, user_id=user.id, workspace_id=workspace.id,
+        diagram_id=diagram.id, draft_id=None,
+        target_type=UndoTargetType.OBJECT, target_id=obj_a.id,
+        action=UndoAction.UPDATE,
+        forward_summary="Edited A — name",
+        inverse_payload={"before": {"name": "A"}},
+        after_state={"name": "A2"},
+        coalesce_key=f"object:{obj_a.id}:name",
+    )
+    obj_a.name = "A2"
+    await db.flush()
+
+    # First undo reverts only the name edit (top entry, different kind).
+    await undo_service.undo(
+        db, user_id=user.id, diagram_id=diagram.id, draft_id=None,
+        actor_user=user,
+    )
+    await db.refresh(obj_a)
+    await db.refresh(placement)
+    assert obj_a.name == "A"
+    assert placement.position_x == 100.0  # position drag NOT bursted-undone
 
 
 @pytest.mark.asyncio

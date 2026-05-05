@@ -111,12 +111,12 @@ async def create_object(
             db, ActivityTargetType.OBJECT, obj, workspace_id=workspace_id
         )
 
-    # Undo recording — only for live objects with full context
+    # Undo recording — both live and draft creates record. Draft entries
+    # land on the draft-scoped stack (cleaned up on draft discard/apply).
     if (
         actor_user is not None
         and from_diagram_id is not None
         and obj.workspace_id is not None
-        and draft_id is None
     ):
         from app.models.undo_entry import UndoAction, UndoTargetType
         from app.services import undo_service
