@@ -61,11 +61,18 @@ class FakeSession:
     async def execute(self, stmt):
         # Inspect the statement to figure out which entity is being queried.
         # The runtime uses simple ``select(Model).where(Model.col == val)`` so
-        # we look at the first FROM table.
+        # we look at the first FROM table. SQLAlchemy 2.x ``select(Model)``
+        # surfaces the entity class via ``column_descriptions``; older
+        # ``entity_zero`` access path is tried first for safety.
         try:
             entity = list(stmt.columns_clause_froms)[0].entity_zero.mapper.class_
         except Exception:
             entity = None
+        if entity is None:
+            try:
+                entity = stmt.column_descriptions[0]["entity"]
+            except Exception:
+                entity = None
 
         rows: list[Any]
         if entity is AgentChatSession:
@@ -652,3 +659,96 @@ async def test_stream_emits_error_event_for_unknown_agent():
     assert err.payload["code"] == "agent_not_found"
     assert kinds[0] == "session"
     assert kinds[-1] == "done"
+
+
+# ---------------------------------------------------------------------------
+# Session-id stability across consecutive turns (Langfuse grouping bug)
+# ---------------------------------------------------------------------------
+
+
+async def test_stream_reuses_session_id_across_consecutive_turns_for_langfuse_grouping():
+    """Two consecutive ``stream()`` calls with the SAME ``req.session_id``
+    must:
+      1. Resolve the SAME ``agent_chat_sessions`` row (no new row created).
+      2. Construct an ``AgentTracer`` with the SAME ``session_id`` so
+         Langfuse groups both invocations under one session.
+
+    Regression for the bug where a follow-up message in the same chat
+    showed up under a different ``session_id`` in the Langfuse UI.
+    """
+    db = FakeSession()
+    actor = ActorRef(
+        kind="user", id=uuid4(), workspace_id=uuid4(), agent_access="full"
+    )
+    graph = _StubGraph(
+        returned_state={"final_message": "ok", "applied_changes": []}
+    )
+    registry.register(_stub_descriptor(graph))
+
+    # ── Turn 1: no session_id supplied — backend creates one. ────────────────
+    req1 = InvokeRequest(
+        agent_id="stub-agent",
+        actor=actor,
+        workspace_id=actor.workspace_id,
+        chat_context=ChatContext(kind="workspace", id=actor.workspace_id),
+        message="hello",
+        session_id=None,
+    )
+
+    captured_tracer_session_ids: list[str] = []
+
+    def _capture_tracer(*args, **kwargs):  # noqa: ANN002, ANN003
+        captured_tracer_session_ids.append(kwargs.get("session_id"))
+        # Return a no-op tracer so the runtime keeps working.
+        tracer = MagicMock()
+        tracer.enabled = False
+        tracer.start_node_span.return_value = None
+        return tracer
+
+    with patch("app.agents.tracing.AgentTracer", side_effect=_capture_tracer):
+        events1: list[SSEEvent] = []
+        async for ev in stream(req1, db=db):
+            events1.append(ev)
+
+    # Backend created exactly one chat session row and emitted its id.
+    assert len(db.sessions) == 1
+    new_session_id = db.sessions[0].id
+    session_frame_1 = next(e for e in events1 if e.kind == "session")
+    assert session_frame_1.payload["session_id"] == str(new_session_id)
+
+    # ── Turn 2: follow-up — caller passes the issued session_id back. ────────
+    req2 = InvokeRequest(
+        agent_id="stub-agent",
+        actor=actor,
+        workspace_id=actor.workspace_id,
+        chat_context=ChatContext(kind="workspace", id=actor.workspace_id),
+        message="follow-up",
+        session_id=new_session_id,
+    )
+
+    with patch("app.agents.tracing.AgentTracer", side_effect=_capture_tracer):
+        events2: list[SSEEvent] = []
+        async for ev in stream(req2, db=db):
+            events2.append(ev)
+
+    # No new session row was created — backend reused the existing one.
+    assert len(db.sessions) == 1
+    session_frame_2 = next(e for e in events2 if e.kind == "session")
+    assert session_frame_2.payload["session_id"] == str(new_session_id)
+    # Sanity: the second turn must not have ended in an error frame —
+    # otherwise the AgentTracer assertion below would mask a deeper bug.
+    assert "error" not in [e.kind for e in events2], (
+        f"turn 2 unexpectedly errored: "
+        f"{[(e.kind, e.payload) for e in events2 if e.kind == 'error']}"
+    )
+
+    # AgentTracer received the SAME session_id on both turns. This is what
+    # gets passed to ``client.trace(session_id=...)`` in tracing.py — the
+    # field Langfuse groups by in its UI.
+    assert len(captured_tracer_session_ids) == 2, (
+        f"expected 2 AgentTracer constructions (one per turn), "
+        f"got {captured_tracer_session_ids!r}"
+    )
+    assert captured_tracer_session_ids[0] == str(new_session_id)
+    assert captured_tracer_session_ids[1] == str(new_session_id)
+    assert captured_tracer_session_ids[0] == captured_tracer_session_ids[1]

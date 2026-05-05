@@ -446,7 +446,20 @@ function useAgentStreamInstance(): UseAgentStreamResult {
         setEvents((prev) => [...prev, userEvt])
       }
 
-      dispatchStreamRequest(agentId, body)
+      // Propagate the previously-issued session_id on follow-up turns so the
+      // backend reuses the same agent_chat_sessions row (and therefore the
+      // same Langfuse session_id) instead of creating a fresh one for every
+      // message. Callers (ChatComposer, MagicPromptButtons, slash commands)
+      // construct the body without session_id; the hook is the only place
+      // that knows the active session id, so we inject it here. Explicit
+      // session_id in the caller's body still wins (e.g. for resumed
+      // conversations / future history-replay flows).
+      const effectiveBody: AgentInvokeBody =
+        body.session_id || !bag.sessionId
+          ? body
+          : { ...body, session_id: bag.sessionId }
+
+      dispatchStreamRequest(agentId, effectiveBody)
     },
     [bag, dispatchStreamRequest],
   )
