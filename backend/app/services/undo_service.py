@@ -22,6 +22,28 @@ RETENTION_DAYS = 3
 PER_CONTEXT_CAP = 100
 MAX_SKIP_HOPS = 5  # for missing-target / Phase-2 stale cases
 
+# Multi-target operations (a multi-object drag, drop, or delete) fire many
+# per-target mutations within milliseconds of each other. They produce
+# distinct undo entries (one per target_id), but the user thinks of them
+# as one logical action — pressing Cmd+Z should revert the whole burst.
+# We detect these at undo/redo time by created_at proximity + same
+# target_type + same coalesce-key kind (the trailing segment, e.g.
+# 'position', 'size', 'create'). Window is tight to avoid sweeping in
+# unrelated edits; intentional sequential edits are >150ms apart.
+BURST_WINDOW_SECONDS = 0.15
+
+
+def _coalesce_kind(key: str) -> str:
+    """Last colon-separated segment of a coalesce_key.
+
+    `'diagram_object:abc:position'` → `'position'`
+    `'object:abc:create'` → `'create'`
+    Used to group burst peers by operation kind without grouping a
+    position drag with a size resize that happened to land in the same
+    millisecond window.
+    """
+    return key.rsplit(":", 1)[-1]
+
 
 async def record(
     db: AsyncSession,
@@ -198,29 +220,14 @@ class UndoResult:
     redo_count: int
 
 
-async def undo(
-    db: AsyncSession,
-    *,
-    user_id: uuid.UUID,
-    diagram_id: uuid.UUID,
-    draft_id: uuid.UUID | None,
-    actor_user,
-    expected_seq: int | None = None,
-    hops_remaining: int = MAX_SKIP_HOPS,
-) -> UndoResult:
-    entry = await _top_active(db, user_id, diagram_id, draft_id)
-    if entry is None:
-        raise UndoStackEmpty()
-    if expected_seq is not None and entry.seq != expected_seq:
-        raise UndoConcurrencyError(actual_seq=entry.seq)
+async def _undo_single(db, entry: UndoEntry, actor_user) -> bool:
+    """Apply the inverse of one entry and update its state.
 
+    Returns True on success (entry → UNDONE), False if the target row was
+    missing (entry → SKIPPED). Captures redo_payload using the Figma
+    snapshot trick. Caller handles transactional commit.
+    """
     current = await _snapshot_target(db, entry.target_type, entry.target_id)
-    # Scope redo_payload to the keys we'll restore on redo. For UPDATEs,
-    # those are the keys touched by the inverse `before` payload; for
-    # CREATE/DELETE we keep the full snapshot since restore needs all
-    # columns. This both keeps the JSON small and lets redo target only
-    # the fields the original action actually changed (Figma's trick:
-    # land at *current* values for those fields, not Alice's original).
     if entry.action == UndoAction.UPDATE:
         before = entry.inverse_payload.get("before") or {}
         entry.redo_payload = {k: current.get(k) for k in before}
@@ -236,6 +243,42 @@ async def undo(
         entry.state = UndoState.SKIPPED
         entry.undone_at = datetime.now(UTC)
         await db.flush()
+        return False
+
+    entry.state = UndoState.UNDONE
+    entry.undone_at = datetime.now(UTC)
+    await db.flush()
+    return True
+
+
+async def undo(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    diagram_id: uuid.UUID,
+    draft_id: uuid.UUID | None,
+    actor_user,
+    expected_seq: int | None = None,
+    hops_remaining: int = MAX_SKIP_HOPS,
+    burst_floor_seq: int | None = None,
+) -> UndoResult:
+    """Undo the top active entry. Bursts peer entries from the same logical
+    multi-target operation (see BURST_WINDOW_SECONDS).
+
+    `burst_floor_seq` caps how far the burst loop will walk down the stack;
+    used by `undo_to` to prevent bursting past the user's chosen target.
+    """
+    entry = await _top_active(db, user_id, diagram_id, draft_id)
+    if entry is None:
+        raise UndoStackEmpty()
+    if expected_seq is not None and entry.seq != expected_seq:
+        raise UndoConcurrencyError(actual_seq=entry.seq)
+
+    success = await _undo_single(db, entry, actor_user)
+    if not success:
+        # Skip-on-missing recursion: try the next entry down. Bound by
+        # MAX_SKIP_HOPS so we don't unwind the entire stack on a corrupted
+        # entry chain.
         if hops_remaining <= 0:
             return await _stack_summary(
                 db, user_id, diagram_id, draft_id,
@@ -248,15 +291,36 @@ async def undo(
                 hops_remaining=hops_remaining - 1,
             )
         except UndoStackEmpty:
-            # Nothing left to try — surface the skipped entry as the result.
             return await _stack_summary(
                 db, user_id, diagram_id, draft_id,
                 undone=entry, redone=None,
             )
 
-    entry.state = UndoState.UNDONE
-    entry.undone_at = datetime.now(UTC)
-    await db.flush()
+    # Burst-undo: a multi-target operation (e.g. dragging 3 selected
+    # objects) fires per-target mutations in tight succession, each
+    # producing a separate undo entry. Pulling back peer entries that
+    # share the operation kind and were created within BURST_WINDOW_SECONDS
+    # makes a single Cmd+Z revert the whole logical action.
+    anchor_kind = _coalesce_kind(entry.coalesce_key)
+    anchor_target_type = entry.target_type
+    anchor_time = entry.created_at
+    while True:
+        peer = await _top_active(db, user_id, diagram_id, draft_id)
+        if peer is None:
+            break
+        if (
+            peer.target_type != anchor_target_type
+            or _coalesce_kind(peer.coalesce_key) != anchor_kind
+        ):
+            break
+        if burst_floor_seq is not None and peer.seq < burst_floor_seq:
+            break
+        gap = (anchor_time - peer.created_at).total_seconds()
+        if gap < 0 or gap > BURST_WINDOW_SECONDS:
+            break
+        await _undo_single(db, peer, actor_user)
+        anchor_time = peer.created_at  # extend window from each peer
+
     return await _stack_summary(
         db, user_id, diagram_id, draft_id,
         undone=entry, redone=None,
@@ -271,15 +335,55 @@ async def redo(
     draft_id: uuid.UUID | None,
     actor_user,
     expected_seq: int | None = None,
+    burst_ceiling_seq: int | None = None,
 ) -> UndoResult:
+    """Redo the next undone entry (smallest undone seq). Bursts peer entries
+    when they look like a multi-target operation.
+
+    `burst_ceiling_seq` caps how far up the burst will walk; used by
+    `undo_to` so the user's chosen target seq remains the new top.
+    """
     entry = await _top_undone(db, user_id, diagram_id, draft_id)
     if entry is None:
         raise UndoStackEmpty()
     if expected_seq is not None and entry.seq != expected_seq:
         raise UndoConcurrencyError(actual_seq=entry.seq)
+
+    await _redo_single(db, entry, actor_user)
+
+    # Burst-redo: mirror burst-undo so a multi-target operation that was
+    # bursted on undo also bursts on redo. Walk peers (next undone entries)
+    # within the burst window that share the same operation kind.
+    anchor_kind = _coalesce_kind(entry.coalesce_key)
+    anchor_target_type = entry.target_type
+    anchor_time = entry.created_at
+    while True:
+        peer = await _top_undone(db, user_id, diagram_id, draft_id)
+        if peer is None:
+            break
+        if (
+            peer.target_type != anchor_target_type
+            or _coalesce_kind(peer.coalesce_key) != anchor_kind
+        ):
+            break
+        if burst_ceiling_seq is not None and peer.seq > burst_ceiling_seq:
+            break
+        gap = abs((peer.created_at - anchor_time).total_seconds())
+        if gap > BURST_WINDOW_SECONDS:
+            break
+        await _redo_single(db, peer, actor_user)
+        anchor_time = peer.created_at
+
+    return await _stack_summary(
+        db, user_id, diagram_id, draft_id,
+        undone=None, redone=entry,
+    )
+
+
+async def _redo_single(db, entry: UndoEntry, actor_user) -> None:
+    """Re-apply one entry's after-state and flip it back to ACTIVE."""
     if entry.redo_payload is None:
         raise RuntimeError(f"Undone entry {entry.id} has no redo_payload")
-
     await _apply(
         db, entry, payload={"after": entry.redo_payload},
         actor_user=actor_user, direction="redo",
@@ -287,10 +391,6 @@ async def redo(
     entry.state = UndoState.ACTIVE
     entry.undone_at = None
     await db.flush()
-    return await _stack_summary(
-        db, user_id, diagram_id, draft_id,
-        undone=None, redone=entry,
-    )
 
 
 async def _top_active(db, user_id, diagram_id, draft_id):
@@ -561,6 +661,11 @@ async def _undo_until(db, user_id, diagram_id, draft_id, target_seq, actor_user)
         await undo(
             db, user_id=user_id, diagram_id=diagram_id, draft_id=draft_id,
             actor_user=actor_user,
+            # Cap the burst loop so it doesn't undo past the user's chosen
+            # target. Without this, a temporally-tight sequence of edits
+            # straddling target_seq could be wholly bursted in one undo()
+            # call.
+            burst_floor_seq=target_seq,
         )
         applied.append({"entry_id": str(top.id), "direction": "undo"})
 
@@ -579,6 +684,9 @@ async def _redo_until(db, user_id, diagram_id, draft_id, target_seq, actor_user)
         await redo(
             db, user_id=user_id, diagram_id=diagram_id, draft_id=draft_id,
             actor_user=actor_user,
+            # Cap burst to target_seq so a fast-fired redo burst can't
+            # leapfrog past the user's chosen point.
+            burst_ceiling_seq=target_seq,
         )
         applied.append({"entry_id": str(top.id), "direction": "redo"})
 
