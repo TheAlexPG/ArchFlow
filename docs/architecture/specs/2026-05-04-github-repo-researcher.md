@@ -37,7 +37,12 @@ def collect_repo_manifest(active_diagram_id: UUID, db: AsyncSession) -> list[Rep
     ...
 ```
 
-Walks the active diagram's objects with non-null `repo_url`. For each scope-object, walks child diagrams recursively (cycle-guarded with the same 3-level cap as `useDiagramBreadcrumbs`). Returns ordered list of:
+Walks the diagram tree in BOTH directions from the active diagram, cycle-guarded, with the same 3-level cap (`MAX_DEPTH`) as `useDiagramBreadcrumbs` applied PER direction:
+
+- **Up (ancestors)**: follows `Diagram.scope_object_id` → that object → the `DiagramObject` placement that contains it → its parent `Diagram.scope_object_id` → ... up to 3 hops. Surfaces the repo on the active diagram's parent scope_object (the canonical "user drilled INTO a Container with a linked repo" case).
+- **Down (descendants)**: BFS over child diagrams via `Diagram.scope_object_id == ModelObject.id`, unchanged from D3 v1.
+
+Returned ordering: ancestors closest-first, then active level, then descendants BFS. Total entries capped at `MAX_MANIFEST_ENTRIES=50` across both directions (after dedup-by-URL). Same repo URL appearing on both an ancestor and a descendant is aggregated to ONE delegation tool whose description lists both linked components.
 
 ```python
 class RepoLink:
@@ -46,6 +51,8 @@ class RepoLink:
     node_type: Literal["Container", "System"]
     repo_url: str
     repo_branch: str | None
+    depth: int               # ancestors: upward distance (1=parent, 2=grandparent, ...); descendants: BFS depth (0=active, 1=child, ...)
+    is_ancestor: bool        # True when collected by the upward walk
 ```
 
 ## 3. Tool surface (MVP — 9 tools)
