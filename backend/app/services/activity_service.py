@@ -37,14 +37,19 @@ def _snapshot(obj: Any, *, include_metadata: bool = False) -> dict:
         if include_metadata
         else _IGNORED_DIFF_FIELDS
     )
+    from sqlalchemy import inspect as sa_inspect
+
     result = {}
-    for col in obj.__table__.columns:
-        # Read via the Python attribute name (`col.key`), not the SQL
-        # column name — otherwise columns renamed at mapping time (e.g.
-        # `metadata_` → SQL `metadata`) would shadow `Base.metadata`
-        # and we'd try to JSON-serialize a SQLAlchemy MetaData instance.
-        attr_name = col.key
-        sql_name = col.name
+    mapper = sa_inspect(type(obj))
+    for col_attr in mapper.column_attrs:
+        # col_attr.key is the *Python* attribute name (e.g. `metadata_`), which
+        # may differ from the SQL column name (e.g. `metadata`).  Always use
+        # the Python name so that `getattr(obj, attr_name)` returns the actual
+        # column value, not a shadowing class attribute (e.g. Base.metadata).
+        attr_name = col_attr.key
+        # For filtering purposes also check the SQL column name so that callers
+        # can pass either spelling in _IGNORED_DIFF_FIELDS.
+        sql_name = col_attr.columns[0].name
         if attr_name in ignored or sql_name in ignored:
             continue
         value = getattr(obj, attr_name, None)
