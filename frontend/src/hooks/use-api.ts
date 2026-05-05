@@ -511,10 +511,17 @@ export function useFlipConnection() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async ({ id, from_diagram_id, from_draft_id }: { id: string; from_diagram_id?: string | null; from_draft_id?: string | null }) => {
-      const body: Record<string, string> = {}
-      if (from_diagram_id) body.from_diagram_id = from_diagram_id
-      if (from_draft_id) body.from_draft_id = from_draft_id
-      const { data: result } = await api.post<Connection>(`/connections/${id}/flip`, Object.keys(body).length ? body : undefined)
+      // Backend reads these as query params (POST /connections/{id}/flip
+      // has no request body schema), so do NOT send them in the body —
+      // they'd be silently dropped and undo recording would skip.
+      const params: Record<string, string> = {}
+      if (from_diagram_id) params.from_diagram_id = from_diagram_id
+      if (from_draft_id) params.from_draft_id = from_draft_id
+      const { data: result } = await api.post<Connection>(
+        `/connections/${id}/flip`,
+        undefined,
+        { params: Object.keys(params).length ? params : undefined },
+      )
       return result
     },
     onSuccess: (updated) => {
