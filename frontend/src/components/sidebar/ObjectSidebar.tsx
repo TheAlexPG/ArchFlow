@@ -61,6 +61,8 @@ interface ObjectSidebarProps {
   open?: boolean
   onClose?: () => void
   context?: 'canvas' | 'standalone'
+  diagramId?: string
+  draftId?: string | null
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -70,6 +72,8 @@ export function ObjectSidebar({
   open,
   onClose,
   context = 'canvas',
+  diagramId,
+  draftId,
 }: ObjectSidebarProps = {}) {
   const { selectedNodeId, sidebarOpen, sidebarTab, setSidebarTab, toggleSidebar, selectedEdgeId } =
     useCanvasStore()
@@ -102,18 +106,20 @@ export function ObjectSidebar({
       id: obj.id,
       name: editName,
       description: editDescription || null,
+      from_diagram_id: diagramId,
+      from_draft_id: draftId,
     })
   }
 
   const handleDelete = () => {
     if (confirm(`Delete "${obj.name}"?`)) {
-      deleteObject.mutate(obj.id)
+      deleteObject.mutate({ id: obj.id, from_diagram_id: diagramId, from_draft_id: draftId })
       handleClose()
     }
   }
 
   const handleFieldChange = (field: string, value: unknown) => {
-    updateObject.mutate({ id: obj.id, [field]: value })
+    updateObject.mutate({ id: obj.id, [field]: value, from_diagram_id: diagramId, from_draft_id: draftId })
   }
 
   const typeLabel = TYPE_LABELS[obj.type] ?? obj.type
@@ -239,7 +245,7 @@ export function ObjectSidebar({
                     setEditDescription(html)
                     descTimerRef.current && clearTimeout(descTimerRef.current)
                     descTimerRef.current = setTimeout(() => {
-                      updateObject.mutate({ id: obj.id, description: html || null })
+                      updateObject.mutate({ id: obj.id, description: html || null, from_diagram_id: diagramId, from_draft_id: draftId })
                     }, 500)
                   }}
                   placeholder="Add description..."

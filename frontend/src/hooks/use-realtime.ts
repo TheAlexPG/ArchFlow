@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '../stores/auth-store'
 import { useWorkspaceStore } from '../stores/workspace-store'
+import { ctxKey, useUndoStore } from '../stores/undo-store'
 
 // ── Inline types ──────────────────────────────────────────────────────────────
 
@@ -331,6 +332,25 @@ export function useDiagramSocket(diagramId: string | null): DiagramSocketResult 
             },
           }))
           scheduleEvict(userId)
+        } else if (type === 'user.undo' || type === 'user.redo') {
+          const evt = msg as {
+            diagram_id: string
+            draft_id: string | null
+            cursor_seq: number | null
+            redo_count: number
+          }
+          useUndoStore.getState().applyUserUndoEvent(
+            ctxKey(evt.diagram_id, evt.draft_id),
+            { cursor_seq: evt.cursor_seq, redo_count: evt.redo_count },
+          )
+          // The actual canvas mutation is delivered via the inverse mutation's
+          // own `object.updated` / `connection.created` events — handled below.
+        } else if (type === 'user.undo_to') {
+          const evt = msg as { diagram_id: string; draft_id: string | null; cursor_seq: number | null }
+          useUndoStore.getState().setStackInfo(
+            ctxKey(evt.diagram_id, evt.draft_id),
+            { cursorSeq: evt.cursor_seq },
+          )
         }
         // selection frames and pong are accepted but not stored in state
       }

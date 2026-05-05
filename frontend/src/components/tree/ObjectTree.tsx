@@ -6,6 +6,7 @@ import {
   useObjects,
   useTechnologies,
 } from '../../hooks/use-api'
+import { useDiagram } from '../../hooks/use-diagrams'
 import { useCanvasStore } from '../../stores/canvas-store'
 import { useWorkspaceStore } from '../../stores/workspace-store'
 import type { ModelObject, ObjectType } from '../../types/model'
@@ -57,12 +58,14 @@ interface ObjectTreeProps {
 export function ObjectTree({ diagramId }: ObjectTreeProps) {
   const { data: objects = [] } = useObjects()
   const { data: diagramObjects = [] } = useDiagramObjects(diagramId)
+  const { data: diagram } = useDiagram(diagramId)
+  const draftId = diagram?.draft_id ?? null
   const workspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
   const { data: catalog = [] } = useTechnologies(workspaceId)
   const [search, setSearch] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const { selectNode } = useCanvasStore()
-  const createObject = useCreateObject()
+  const createObject = useCreateObject(draftId)
   const addToDiagram = useAddObjectToDiagram()
 
   const inDiagramIds = useMemo(
@@ -119,7 +122,7 @@ export function ObjectTree({ diagramId }: ObjectTreeProps) {
     const name = prompt(`New ${TYPE_LABELS[type]} name:`)
     if (!name?.trim()) return
     createObject.mutate(
-      { name: name.trim(), type },
+      { name: name.trim(), type, from_diagram_id: diagramId, from_draft_id: draftId },
       {
         onSuccess: (obj) => {
           if (diagramId) {
@@ -157,6 +160,7 @@ export function ObjectTree({ diagramId }: ObjectTreeProps) {
                 onSelect={selectNode}
                 inDiagram={inDiagramIds.has(obj.id)}
                 diagramId={diagramId}
+                draftId={draftId}
                 onAdd={handleAddToDiagram}
               />
             ))
@@ -170,6 +174,7 @@ export function ObjectTree({ diagramId }: ObjectTreeProps) {
                 onSelect={selectNode}
                 inDiagramIds={inDiagramIds}
                 diagramId={diagramId}
+                draftId={draftId}
                 onAdd={handleAddToDiagram}
               />
             ))}
@@ -208,6 +213,7 @@ function TreeNodeItem({
   onSelect,
   inDiagramIds,
   diagramId,
+  draftId,
   onAdd,
 }: {
   node: TreeNode
@@ -217,6 +223,7 @@ function TreeNodeItem({
   onSelect: (id: string) => void
   inDiagramIds: Set<string>
   diagramId?: string
+  draftId?: string | null
   onAdd: (id: string) => void
 }) {
   const hasChildren = node.children.length > 0
@@ -266,7 +273,7 @@ function TreeNodeItem({
           <span className="text-[9px] text-neutral-600" title="In this diagram">●</span>
         )}
         <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-          <ObjectContextMenu object={node.object} diagramId={diagramId} />
+          <ObjectContextMenu object={node.object} diagramId={diagramId} draftId={draftId} />
         </div>
       </div>
       {isExpanded &&
@@ -280,6 +287,7 @@ function TreeNodeItem({
             onSelect={onSelect}
             inDiagramIds={inDiagramIds}
             diagramId={diagramId}
+            draftId={draftId}
             onAdd={onAdd}
           />
         ))}
@@ -293,6 +301,7 @@ function TreeItem({
   onSelect,
   inDiagram,
   diagramId,
+  draftId,
   onAdd,
 }: {
   obj: ModelObject
@@ -300,6 +309,7 @@ function TreeItem({
   onSelect: (id: string) => void
   inDiagram: boolean
   diagramId?: string
+  draftId?: string | null
   onAdd: (id: string) => void
 }) {
   return (
@@ -331,7 +341,7 @@ function TreeItem({
         <span className="text-[9px] text-neutral-600">●</span>
       )}
       <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-        <ObjectContextMenu object={obj} diagramId={diagramId} />
+        <ObjectContextMenu object={obj} diagramId={diagramId} draftId={draftId} />
       </div>
     </div>
   )

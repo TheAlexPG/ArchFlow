@@ -157,7 +157,7 @@ export function useGlobalActivity(params: {
 export function useCreateObject(draftId?: string | null) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (obj: ObjectCreate) => {
+    mutationFn: async (obj: ObjectCreate & { from_diagram_id?: string | null; from_draft_id?: string | null }) => {
       const { data } = await api.post<ModelObject>('/objects', obj, {
         params: draftId ? { draft_id: draftId } : undefined,
       })
@@ -170,8 +170,11 @@ export function useCreateObject(draftId?: string | null) {
 export function useUpdateObject() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async ({ id, ...data }: ObjectUpdate & { id: string }) => {
-      const { data: result } = await api.put<ModelObject>(`/objects/${id}`, data)
+    mutationFn: async ({ id, from_diagram_id, from_draft_id, ...data }: ObjectUpdate & { id: string; from_diagram_id?: string | null; from_draft_id?: string | null }) => {
+      const body = from_diagram_id || from_draft_id
+        ? { ...data, from_diagram_id, from_draft_id }
+        : data
+      const { data: result } = await api.put<ModelObject>(`/objects/${id}`, body)
       return result
     },
     // Optimistic update — the sidebar pickers (tech, status, tags, …) feed
@@ -181,7 +184,7 @@ export function useUpdateObject() {
     // individual-object cache and every list cache in-place so downstream
     // consumers see the change in the same tick.
     onMutate: async (vars) => {
-      const { id, ...patch } = vars
+      const { id, from_diagram_id: _fdi, from_draft_id: _fdr, ...patch } = vars
       await qc.cancelQueries({ queryKey: ['objects'] })
       const prevItem = qc.getQueryData<ModelObject>(['objects', id])
       if (prevItem) {
@@ -217,10 +220,17 @@ export function useUpdateObject() {
 export function useDeleteObject() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (id: string) => {
-      await api.delete(`/objects/${id}`)
+    mutationFn: async (vars: string | { id: string; from_diagram_id?: string | null; from_draft_id?: string | null }) => {
+      const id = typeof vars === 'string' ? vars : vars.id
+      const params: Record<string, string> = {}
+      if (typeof vars !== 'string') {
+        if (vars.from_diagram_id) params.from_diagram_id = vars.from_diagram_id
+        if (vars.from_draft_id) params.from_draft_id = vars.from_draft_id
+      }
+      await api.delete(`/objects/${id}`, { params: Object.keys(params).length ? params : undefined })
     },
-    onMutate: async (id) => {
+    onMutate: async (vars) => {
+      const id = typeof vars === 'string' ? vars : vars.id
       await qc.cancelQueries({ queryKey: ['objects'] })
       // Tombstone blocks WS `object.updated` / `diagram_object.added|updated`
       // echoes that might otherwise resurrect the object in the cache.
@@ -232,7 +242,8 @@ export function useDeleteObject() {
       )
       qc.removeQueries({ queryKey: ['objects', id] })
     },
-    onSuccess: (_, id) => {
+    onSuccess: (_, vars) => {
+      const id = typeof vars === 'string' ? vars : vars.id
       markObjectDeleted(id)
       qc.invalidateQueries({ queryKey: ['objects'] })
     },
@@ -256,7 +267,7 @@ export function useConnections(draftId?: string | null) {
 export function useCreateConnection(draftId?: string | null) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (conn: ConnectionCreate) => {
+    mutationFn: async (conn: ConnectionCreate & { from_diagram_id?: string | null; from_draft_id?: string | null }) => {
       const { data } = await api.post<Connection>('/connections', conn, {
         params: draftId ? { draft_id: draftId } : undefined,
       })
@@ -340,10 +351,11 @@ export function useSaveDiagramPosition() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async ({
-      diagramId, objectId, x, y,
-    }: { diagramId: string; objectId: string; x: number; y: number }) => {
+      diagramId, objectId, x, y, from_draft_id,
+    }: { diagramId: string; objectId: string; x: number; y: number; from_draft_id?: string | null }) => {
       await api.put(`/diagrams/${diagramId}/objects/${objectId}`, {
         position_x: x, position_y: y,
+        ...(from_draft_id ? { from_draft_id } : {}),
       })
     },
     onMutate: async ({ diagramId, objectId, x, y }) => {
@@ -361,10 +373,11 @@ export function useSaveDiagramSize() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async ({
-      diagramId, objectId, width, height,
-    }: { diagramId: string; objectId: string; width: number; height: number }) => {
+      diagramId, objectId, width, height, from_draft_id,
+    }: { diagramId: string; objectId: string; width: number; height: number; from_draft_id?: string | null }) => {
       await api.put(`/diagrams/${diagramId}/objects/${objectId}`, {
         width, height,
+        ...(from_draft_id ? { from_draft_id } : {}),
       })
     },
     onMutate: async ({ diagramId, objectId, width, height }) => {
@@ -377,8 +390,10 @@ export function useSaveDiagramSize() {
 export function useRemoveObjectFromDiagram() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async ({ diagramId, objectId }: { diagramId: string; objectId: string }) => {
-      await api.delete(`/diagrams/${diagramId}/objects/${objectId}`)
+    mutationFn: async ({ diagramId, objectId, from_draft_id }: { diagramId: string; objectId: string; from_draft_id?: string | null }) => {
+      const params: Record<string, string> = {}
+      if (from_draft_id) params.from_draft_id = from_draft_id
+      await api.delete(`/diagrams/${diagramId}/objects/${objectId}`, { params: Object.keys(params).length ? params : undefined })
     },
     onMutate: async ({ diagramId, objectId }) => {
       // Cancel in-flight refetches so their stale payload can't clobber
@@ -405,8 +420,14 @@ export function useRemoveObjectFromDiagram() {
 export function useDeleteConnection() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (id: string) => {
-      await api.delete(`/connections/${id}`)
+    mutationFn: async (vars: string | { id: string; from_diagram_id?: string | null; from_draft_id?: string | null }) => {
+      const id = typeof vars === 'string' ? vars : vars.id
+      const params: Record<string, string> = {}
+      if (typeof vars !== 'string') {
+        if (vars.from_diagram_id) params.from_diagram_id = vars.from_diagram_id
+        if (vars.from_draft_id) params.from_draft_id = vars.from_draft_id
+      }
+      await api.delete(`/connections/${id}`, { params: Object.keys(params).length ? params : undefined })
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['connections'] }),
   })
@@ -426,15 +447,18 @@ export function useConnection(id: string | null) {
 export function useUpdateConnection() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async ({ id, ...data }: ConnectionUpdate & { id: string }) => {
-      const { data: result } = await api.put<Connection>(`/connections/${id}`, data)
+    mutationFn: async ({ id, from_diagram_id, from_draft_id, ...data }: ConnectionUpdate & { id: string; from_diagram_id?: string | null; from_draft_id?: string | null }) => {
+      const body = from_diagram_id || from_draft_id
+        ? { ...data, from_diagram_id, from_draft_id }
+        : data
+      const { data: result } = await api.put<Connection>(`/connections/${id}`, body)
       return result
     },
     // Optimistic patch: mirrors the shape of useUpdateObject so adding a
     // protocol in EdgeSidebar feels instant (sidebar shows the new badge
     // the same tick). onError rolls back from the captured snapshot.
     onMutate: async (vars) => {
-      const { id, ...patch } = vars
+      const { id, from_diagram_id: _fdi, from_draft_id: _fdr, ...patch } = vars
       await qc.cancelQueries({ queryKey: ['connections'] })
       const prevItem = qc.getQueryData<Connection>(['connections', id])
       if (prevItem) {
@@ -486,8 +510,11 @@ export function useUpdateConnection() {
 export function useFlipConnection() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async ({ id }: { id: string }) => {
-      const { data: result } = await api.post<Connection>(`/connections/${id}/flip`)
+    mutationFn: async ({ id, from_diagram_id, from_draft_id }: { id: string; from_diagram_id?: string | null; from_draft_id?: string | null }) => {
+      const body: Record<string, string> = {}
+      if (from_diagram_id) body.from_diagram_id = from_diagram_id
+      if (from_draft_id) body.from_draft_id = from_draft_id
+      const { data: result } = await api.post<Connection>(`/connections/${id}/flip`, Object.keys(body).length ? body : undefined)
       return result
     },
     onSuccess: (updated) => {

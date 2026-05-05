@@ -41,6 +41,8 @@ import { extractFilterValue, overlayStyleFor, type FilterDim } from './overlay-u
 import { detectParentGroup, findSpatialGroupMembers, nodeToRect } from './group-utils'
 import { useDiagramSocket } from '../../hooks/use-realtime'
 import { CursorsOverlay, RemoteSelectionsOverlay } from './CursorsOverlay'
+import { UndoToolbarButtons } from './UndoToolbarButtons'
+import { useUndoController, useUndoMutation, useRedoMutation } from '../../hooks/use-undo'
 
 const nodeTypes: NodeTypes = {
   c4: C4Node as unknown as NodeTypes['c4'],
@@ -97,6 +99,16 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
   // every forked clone the user has on this canvas.
   const { data: diagram } = useDiagram(diagramId)
   const draftId = diagram?.draft_id ?? null
+
+  const undoMut = useUndoMutation(diagramId ?? '', draftId)
+  const redoMut = useRedoMutation(diagramId ?? '', draftId)
+  useUndoController({
+    diagramId: diagramId ?? '',
+    draftId,
+    onUndo: () => { if (diagramId) undoMut.mutate() },
+    onRedo: () => { if (diagramId) redoMut.mutate() },
+  })
+
   const { data: allObjects = [] } = useObjects(draftId)
   const { data: connections = [] } = useConnections(draftId)
   const { data: diagramObjects = [] } = useDiagramObjects(diagramId)
@@ -534,6 +546,7 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
         objectId: node.id,
         x: node.position.x,
         y: node.position.y,
+        from_draft_id: draftId,
       })
 
       if (obj && obj.type === 'group') {
@@ -557,6 +570,7 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
                   objectId: memberId,
                   x: memberStart.x + dx,
                   y: memberStart.y + dy,
+                  from_draft_id: draftId,
                 })
               }
             }
@@ -576,12 +590,12 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
           )
           const newParentId = detectParentGroup(node.id, nodeRect, diagramObjects, allObjects)
           if (newParentId !== (obj.parent_id ?? null)) {
-            updateObject.mutate({ id: node.id, parent_id: newParentId })
+            updateObject.mutate({ id: node.id, parent_id: newParentId, from_diagram_id: diagramId, from_draft_id: draftId })
           }
         }
       }
     },
-    [diagramId, saveDiagramPosition, allObjects, diagramObjects, updateObject, getGroupMemberIds, getNodes],
+    [diagramId, draftId, saveDiagramPosition, allObjects, diagramObjects, updateObject, getGroupMemberIds, getNodes],
   )
 
 
@@ -594,10 +608,12 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
           source_handle: params.sourceHandle || null,
           target_handle: params.targetHandle || null,
           shape: 'smoothstep',
+          from_diagram_id: diagramId,
+          from_draft_id: draftId,
         })
       }
     },
-    [createConnection],
+    [createConnection, diagramId, draftId],
   )
 
   const onSelectionChange = useCallback(
@@ -653,10 +669,10 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
         // Edge IDs are fingerprinted as `${connId}:${direction}` — extract
         // the raw connection UUID for the delete API call.
         const connId = ((edge.data as { connId?: string })?.connId) ?? edge.id
-        deleteConnection.mutate(connId)
+        deleteConnection.mutate({ id: connId, from_diagram_id: diagramId, from_draft_id: draftId })
       }
     },
-    [deleteConnection],
+    [deleteConnection, diagramId, draftId],
   )
 
   /**
@@ -677,14 +693,28 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     (nodes: Node[]) => {
       if (!diagramId) return
       for (const node of nodes) {
-        removeObjectFromDiagram.mutate({ diagramId, objectId: node.id })
+        removeObjectFromDiagram.mutate({ diagramId, objectId: node.id, from_draft_id: draftId })
       }
     },
-    [diagramId, removeObjectFromDiagram],
+    [diagramId, draftId, removeObjectFromDiagram],
   )
 
   return (
     <>
+      {/* Undo / Redo toolbar — floating top-left over the canvas */}
+      {diagramId && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 8,
+            left: 8,
+            zIndex: 10,
+          }}
+          className="bg-panel rounded border border-border-base shadow px-2 py-1"
+        >
+          <UndoToolbarButtons diagramId={diagramId} draftId={draftId} />
+        </div>
+      )}
       {commentComposeType && (
         <div
           style={{
