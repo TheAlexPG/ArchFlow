@@ -24,7 +24,10 @@ from app.schemas.undo import (
     UndoToRequest,
     UndoToResponse,
 )
-from app.realtime.manager import fire_and_forget_publish_user
+from app.realtime.manager import (
+    fire_and_forget_publish_diagram,
+    fire_and_forget_publish_user,
+)
 from app.services import undo_service
 from app.services.undo_service import (
     UndoConcurrencyError,
@@ -43,6 +46,28 @@ async def _get_diagram_or_404(db: AsyncSession, diagram_id: uuid.UUID):
     if not diagram:
         raise HTTPException(status_code=404, detail="Diagram not found")
     return diagram
+
+
+def _broadcast_diagram_refetch(
+    diagram_id: uuid.UUID, draft_id: uuid.UUID | None, reason: str
+) -> None:
+    """Tell every client on this diagram to invalidate entity caches.
+
+    The undo apply path mutates the DB directly via setattr/db.delete/db.add
+    and skips the per-route entity events (`object.updated`, etc.) that the
+    frontend's diagram socket uses to refresh React Query caches. Without
+    this broadcast, the actor's canvas (and every other tab on the diagram)
+    keeps showing pre-undo state until a manual refresh.
+    """
+    fire_and_forget_publish_diagram(
+        diagram_id,
+        "diagram.refetch",
+        {
+            "diagram_id": str(diagram_id),
+            "draft_id": str(draft_id) if draft_id else None,
+            "reason": reason,
+        },
+    )
 
 
 async def _require_workspace_member(db: AsyncSession, user: User, diagram) -> None:
@@ -99,6 +124,11 @@ async def undo_endpoint(
         "cursor_seq": result.cursor_seq,
         "redo_count": result.redo_count,
     })
+    # Tell every client on the diagram (including the actor's own canvas)
+    # to refresh entity caches — _apply_* mutates the DB directly and
+    # bypasses the per-route entity events that normally drive cache
+    # invalidation, so without this signal the canvas/sidebar stays stale.
+    _broadcast_diagram_refetch(diagram_id, draft_id, "undo")
     return UndoActionResponse(
         undone_entry=(
             UndoEntryRead.model_validate(result.undone_entry)
@@ -148,6 +178,7 @@ async def redo_endpoint(
         "cursor_seq": result.cursor_seq,
         "redo_count": result.redo_count,
     })
+    _broadcast_diagram_refetch(diagram_id, draft_id, "redo")
     return UndoActionResponse(
         undone_entry=None,
         redone_entry=(
@@ -224,4 +255,5 @@ async def undo_to_endpoint(
         "applied": res.applied,
         "cursor_seq": res.cursor_seq,
     })
+    _broadcast_diagram_refetch(diagram_id, draft_id, "undo_to")
     return UndoToResponse(applied=res.applied, cursor_seq=res.cursor_seq)
