@@ -421,3 +421,43 @@ async def test_discarding_draft_drops_its_undo_entries(db, user, workspace, diag
     )).scalars().all()
     assert len(rows) == 1
     assert rows[0].draft_id is None
+
+
+@pytest.mark.asyncio
+async def test_flip_connection_undo_swaps_endpoints_back(db, user, workspace, diagram):
+    """Undoing a flip must actually restore source_id/target_id/handles.
+    Pre-fix the inverse_payload was empty, making undo a no-op."""
+    from app.models.connection import Connection
+    from app.services import connection_service
+
+    a = ModelObject(name="A", type="system", workspace_id=workspace.id)
+    b = ModelObject(name="B", type="system", workspace_id=workspace.id)
+    db.add_all([a, b])
+    await db.flush()
+
+    conn = Connection(
+        source_id=a.id, target_id=b.id,
+        source_handle="right", target_handle="left",
+    )
+    db.add(conn)
+    await db.flush()
+
+    await connection_service.flip_connection(
+        db, conn,
+        actor_user=user, from_diagram_id=diagram.id,
+    )
+    await db.refresh(conn)
+    assert conn.source_id == b.id
+    assert conn.target_id == a.id
+    assert conn.source_handle == "left"
+    assert conn.target_handle == "right"
+
+    await undo_service.undo(
+        db, user_id=user.id, diagram_id=diagram.id, draft_id=None,
+        actor_user=user,
+    )
+    await db.refresh(conn)
+    assert conn.source_id == a.id
+    assert conn.target_id == b.id
+    assert conn.source_handle == "right"
+    assert conn.target_handle == "left"

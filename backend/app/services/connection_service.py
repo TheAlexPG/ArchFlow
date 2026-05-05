@@ -207,21 +207,37 @@ async def flip_connection(
     from_diagram_id: uuid.UUID | None = None,
     from_draft_id: uuid.UUID | None = None,
 ) -> Connection:
+    # Capture pre-flip endpoint fields so undo can swap them back via the
+    # generic UPDATE apply path. An empty inverse_payload would make undo a
+    # no-op since `_apply_update` only writes the keys present in `before`.
+    pre_flip = {
+        "source_id": str(conn.source_id),
+        "target_id": str(conn.target_id),
+        "source_handle": conn.source_handle,
+        "target_handle": conn.target_handle,
+    }
+    ws_id_pre_source = conn.source_id  # workspace lookup uses pre-flip source
+
     conn.source_id, conn.target_id = conn.target_id, conn.source_id
     conn.source_handle, conn.target_handle = conn.target_handle, conn.source_handle
     await db.flush()
     await db.refresh(conn)
 
-    # Undo recording — flip is its own inverse, so inverse_payload is empty
     if (
         actor_user is not None
         and from_diagram_id is not None
     ):
-        ws_id = await _source_workspace_id(db, conn.source_id)
+        ws_id = await _source_workspace_id(db, ws_id_pre_source)
         if ws_id is not None:
             from app.models.undo_entry import UndoAction, UndoTargetType
             from app.services import undo_service
 
+            after_fields = {
+                "source_id": str(conn.source_id),
+                "target_id": str(conn.target_id),
+                "source_handle": conn.source_handle,
+                "target_handle": conn.target_handle,
+            }
             await undo_service.record(
                 db,
                 user_id=actor_user.id,
@@ -232,8 +248,8 @@ async def flip_connection(
                 target_id=conn.id,
                 action=UndoAction.UPDATE,
                 forward_summary=f"Flipped connection {str(conn.id)[:8]}"[:80],
-                inverse_payload={},
-                after_state=activity_service.snapshot(conn, include_metadata=True),
+                inverse_payload={"before": pre_flip},
+                after_state=after_fields,
                 coalesce_key=f"connection:{conn.id}:flip",
             )
 
