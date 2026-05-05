@@ -72,11 +72,11 @@ const MARKDOWN_COMPONENTS: Components = {
       </a>
     )
   },
-  code({ inline, className, children, ...props }: {
-    inline?: boolean
-    className?: string
-    children?: ReactNode
-  } & Record<string, unknown>) {
+  // react-markdown's `Components` typing for `code` doesn't expose `inline`
+  // directly; cast through `any` so we can pull it off props without fighting
+  // the lib's intersected type.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  code({ inline, className, children, ...props }: any) {
     if (inline) {
       return (
         <code

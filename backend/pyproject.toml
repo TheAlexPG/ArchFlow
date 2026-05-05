@@ -45,6 +45,13 @@ evals = [
     "deepeval>=2.0",
 ]
 
+# setuptools sees `app/`, `tests/` and `evals/` as candidate top-level
+# packages (each has an __init__.py). Without an explicit include the
+# wheel build fails with "Multiple top-level packages discovered". We only
+# ship the runtime app — tests and evals are dev/CI-only.
+[tool.setuptools.packages.find]
+include = ["app*"]
+
 [tool.ruff]
 target-version = "py312"
 line-length = 100

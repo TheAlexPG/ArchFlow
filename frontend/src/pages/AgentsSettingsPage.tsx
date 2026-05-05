@@ -383,9 +383,9 @@ export function AgentsSettingsPage() {
 
   const isCustomProvider = draft.litellm.provider === 'custom'
   const modelDatalistId = 'agent-model-options'
-  const modelOptions = isCustomProvider
+  const modelOptions: string[] = isCustomProvider
     ? []
-    : MODEL_CATALOG[draft.litellm.provider]
+    : MODEL_CATALOG[draft.litellm.provider as Exclude<ProviderId, 'custom'>]
 
   // ── Render ───────────────────────────────────────────────────────────
 
