@@ -49,7 +49,7 @@ export function EdgeSidebar({ diagramId }: EdgeSidebarProps) {
 
   const [label, setLabel] = useState('')
   const debouncedLabelUpdate = useDebouncedMutation({
-    mutate: (value: string | null) => updateConn.mutateAsync({ id: conn?.id ?? '', label: value }),
+    mutate: (value: string | null) => updateConn.mutateAsync({ id: conn?.id ?? '', label: value, from_diagram_id: diagramId, from_draft_id: draftId }),
     delayMs: 400,
   })
 
@@ -65,7 +65,7 @@ export function EdgeSidebar({ diagramId }: EdgeSidebarProps) {
   const target = objects.find((o) => o.id === conn.target_id)
 
   const handleUpdate = (data: Partial<{ [k: string]: unknown }>) => {
-    updateConn.mutate({ id: conn.id, ...data })
+    updateConn.mutate({ id: conn.id, ...data, from_diagram_id: diagramId, from_draft_id: draftId })
   }
 
   const handleLabelChange = (value: string) => {
@@ -74,12 +74,12 @@ export function EdgeSidebar({ diagramId }: EdgeSidebarProps) {
   }
 
   const handleFlip = () => {
-    flipConn.mutate({ id: conn.id })
+    flipConn.mutate({ id: conn.id, from_diagram_id: diagramId, from_draft_id: draftId })
   }
 
   const handleDelete = () => {
     if (confirm('Delete this connection?')) {
-      deleteConn.mutate(conn.id)
+      deleteConn.mutate({ id: conn.id, from_diagram_id: diagramId, from_draft_id: draftId })
       selectEdge(null)
     }
   }
