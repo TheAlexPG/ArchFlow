@@ -1,16 +1,106 @@
-from fastapi import APIRouter, Body, Depends, HTTPException, UploadFile
-from fastapi.responses import JSONResponse
+import uuid
+from typing import Literal
+
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, UploadFile
+from fastapi.responses import JSONResponse, PlainTextResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_optional_user
 from app.core.database import get_db
 from app.models.connection import Connection
 from app.models.object import ModelObject
 from app.schemas.connection import ConnectionResponse
 from app.schemas.object import ObjectResponse
-from app.services import mermaid_service, structurizr_service
+from app.services import (
+    access_service,
+    diagram_service,
+    mermaid_service,
+    plantuml_service,
+    structurizr_service,
+    workspace_service,
+)
 
 router = APIRouter(tags=["import-export"])
+
+
+ExportFormat = Literal["mermaid", "plantuml", "structurizr", "json"]
+
+
+@router.get("/diagrams/{diagram_id}/export")
+async def export_diagram(
+    diagram_id: uuid.UUID,
+    fmt: ExportFormat = Query("mermaid", alias="format"),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_optional_user),
+):
+    """Render a single diagram as Mermaid / PlantUML / Structurizr DSL / JSON.
+
+    Auth: workspace-scoped diagrams require an authenticated member with
+    `can_read_diagram` access. Workspace-less diagrams stay open (legacy
+    behaviour shared with the rest of the API).
+    """
+    diagram = await diagram_service.get_diagram(db, diagram_id)
+    if diagram is None:
+        raise HTTPException(status_code=404, detail="Diagram not found")
+
+    if diagram.workspace_id is not None:
+        if current_user is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        membership = await workspace_service.get_user_membership(
+            db, current_user.id, diagram.workspace_id
+        )
+        if membership is None:
+            raise HTTPException(status_code=403, detail="No access to diagram")
+        if not await access_service.can_read_diagram(
+            db, current_user.id, diagram, membership.role
+        ):
+            raise HTTPException(status_code=403, detail="No access to diagram")
+
+    if fmt == "json":
+        return JSONResponse(await _export_diagram_json(db, diagram))
+    if fmt == "mermaid":
+        text = await mermaid_service.export_mermaid(db, diagram)
+    elif fmt == "plantuml":
+        text = await plantuml_service.export_plantuml(db, diagram)
+    elif fmt == "structurizr":
+        text = await structurizr_service.export_dsl(db, diagram)
+    else:  # pragma: no cover — Literal narrows this away
+        raise HTTPException(status_code=400, detail=f"Unknown format: {fmt}")
+    return PlainTextResponse(text)
+
+
+async def _export_diagram_json(db: AsyncSession, diagram) -> dict:
+    payload = await diagram_service.get_diagram_payload(db, diagram)
+    placements = payload["placements"]
+    connections = payload["connections"]
+
+    return {
+        "version": "1.0",
+        "diagram": {
+            "id": str(diagram.id),
+            "name": diagram.name,
+            "type": diagram.type.value,
+            "description": diagram.description,
+            "scope_object_id": (
+                str(diagram.scope_object_id) if diagram.scope_object_id else None
+            ),
+        },
+        "objects": [
+            {
+                **ObjectResponse.from_model(p.object).model_dump(mode="json"),
+                "position_x": p.position_x,
+                "position_y": p.position_y,
+                "width": p.width,
+                "height": p.height,
+            }
+            for p in placements
+        ],
+        "connections": [
+            ConnectionResponse.model_validate(c).model_dump(mode="json")
+            for c in connections
+        ],
+    }
 
 
 @router.get("/export")

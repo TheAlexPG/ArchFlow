@@ -1,6 +1,10 @@
-"""Minimal Structurizr DSL importer.
+"""Structurizr DSL bridge — importer + exporter.
 
-Supports the subset of DSL that maps cleanly onto ArchFlow's model:
+Importer: parses the subset of DSL that maps cleanly onto ArchFlow's model.
+Exporter: emits the same subset, so an exported diagram round-trips through
+`POST /import/structurizr` back into equivalent objects + connections.
+
+Importer-supported subset:
 
     workspace {
       model {
@@ -22,7 +26,8 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.connection import Connection
+from app.models.connection import Connection, ConnectionDirection
+from app.models.diagram import Diagram
 from app.models.object import ModelObject, ObjectType
 
 _KEYWORD_TO_TYPE: dict[str, ObjectType] = {
@@ -172,3 +177,150 @@ async def import_dsl(db: AsyncSession, dsl: str) -> dict:
         ),
         "alias_map": {k: str(v) for k, v in alias_to_id.items()},
     }
+
+
+# ── Exporter ────────────────────────────────────────────
+
+
+_OBJ_KEYWORD = {
+    ObjectType.ACTOR: "person",
+    ObjectType.SYSTEM: "softwareSystem",
+    ObjectType.EXTERNAL_SYSTEM: "softwareSystem",
+    ObjectType.APP: "container",
+    ObjectType.STORE: "container",
+    ObjectType.COMPONENT: "component",
+    ObjectType.GROUP: "group",
+}
+
+
+def _alias(obj_id: uuid.UUID) -> str:
+    return f"n_{obj_id.hex[:8]}"
+
+
+def _esc_dsl(s: str | None) -> str:
+    """Sanitize a DSL double-quoted string.
+
+    Structurizr DSL has no `\\"` escape, so we swap quotes for apostrophes,
+    drop newlines, and replace backslashes (which the lexer treats specially
+    in some implementations) with forward slashes.
+    """
+    if not s:
+        return ""
+    return (
+        s.replace("\\", "/")
+        .replace('"', "'")
+        .replace("\n", " ")
+        .replace("\r", " ")
+        .strip()
+    )
+
+
+def _tech_label(ids, tech_names: dict[uuid.UUID, str]) -> str | None:
+    if not ids:
+        return None
+    names = [tech_names[i] for i in ids if i in tech_names]
+    return ", ".join(names) if names else None
+
+
+def _build_dsl_args(name: str, desc: str, tech: str | None) -> str:
+    """Positional DSL string args, padding earlier slots with `""` as needed."""
+    parts = [f'"{name}"']
+    if tech:
+        parts.append(f'"{desc}"')
+        parts.append(f'"{tech}"')
+    elif desc:
+        parts.append(f'"{desc}"')
+    return " ".join(parts)
+
+
+async def export_dsl(db: AsyncSession, diagram: Diagram) -> str:
+    """Render `diagram` as Structurizr DSL.
+
+    Parents-with-children get emitted as nested brace blocks so the importer
+    in this same file rebuilds the parent_id chain on round-trip — the
+    earlier inline `# parent: ...` trick collided with the importer's
+    line-anchored declaration regex.
+
+    Note: the `alias = group "..."` form we emit for `ObjectType.GROUP` is
+    an ArchFlow extension. Vanilla Structurizr DSL uses bare
+    `group "..." { ... }` (no alias), but our importer needs the alias to
+    materialize the GROUP as a real ModelObject on round-trip.
+    """
+    from app.services import diagram_service
+
+    payload = await diagram_service.get_diagram_payload(db, diagram)
+    placements = payload["placements"]
+    connections = payload["connections"]
+    tech_names = payload["tech_names"]
+
+    placed_ids = {p.object_id for p in placements}
+    children_by_parent: dict = {}
+    top_level: list = []
+    for p in placements:
+        parent_id = p.object.parent_id
+        if parent_id and parent_id in placed_ids:
+            children_by_parent.setdefault(parent_id, []).append(p)
+        else:
+            top_level.append(p)
+
+    lines: list[str] = []
+    lines.append("# Exported from ArchFlow")
+    lines.append(f"# diagram_id: {diagram.id}")
+    lines.append(f"# diagram_type: {diagram.type.value}")
+    lines.append(
+        f"# objects: {len(placements)}; connections: {len(connections)}"
+    )
+    lines.append(f'workspace "{_esc_dsl(diagram.name)}" {{')
+    lines.append("  model {")
+
+    for p in top_level:
+        _emit_dsl_obj(p, children_by_parent, tech_names, lines, indent=4)
+
+    for c in connections:
+        src = _alias(c.source_id)
+        tgt = _alias(c.target_id)
+        label = _esc_dsl(c.label)
+        tech = _tech_label(c.protocol_ids, tech_names)
+        tech_arg = _esc_dsl(tech) if tech else None
+        if tech_arg:
+            lines.append(f'    {src} -> {tgt} "{label}" "{tech_arg}"')
+        else:
+            lines.append(f'    {src} -> {tgt} "{label}"')
+        if c.direction == ConnectionDirection.BIDIRECTIONAL:
+            # DSL has no native bi-directional arrow; emit the reverse so
+            # round-trip preserves the symmetry.
+            if tech_arg:
+                lines.append(f'    {tgt} -> {src} "{label}" "{tech_arg}"')
+            else:
+                lines.append(f'    {tgt} -> {src} "{label}"')
+
+    lines.append("  }")
+    lines.append("}")
+    return "\n".join(lines) + "\n"
+
+
+def _emit_dsl_obj(
+    placement,
+    children_by_parent: dict,
+    tech_names: dict,
+    lines: list[str],
+    indent: int,
+) -> None:
+    obj = placement.object
+    pad = " " * indent
+    a = _alias(obj.id)
+    kw = _OBJ_KEYWORD.get(obj.type, "softwareSystem")
+    name = _esc_dsl(obj.name)
+    desc = _esc_dsl(obj.description)
+    tech = _tech_label(obj.technology_ids, tech_names)
+    tech_arg = _esc_dsl(tech) if tech else None
+    args = _build_dsl_args(name, desc, tech_arg)
+
+    children = children_by_parent.get(obj.id, [])
+    if children:
+        lines.append(f"{pad}{a} = {kw} {args} {{")
+        for child in children:
+            _emit_dsl_obj(child, children_by_parent, tech_names, lines, indent + 2)
+        lines.append(f"{pad}}}")
+    else:
+        lines.append(f"{pad}{a} = {kw} {args}")

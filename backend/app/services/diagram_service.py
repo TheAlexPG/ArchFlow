@@ -4,13 +4,64 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.models.connection import Connection
 from app.models.diagram import Diagram, DiagramObject
+from app.models.technology import Technology
 from app.schemas.diagram import (
     DiagramCreate,
     DiagramObjectCreate,
     DiagramObjectUpdate,
     DiagramUpdate,
 )
+
+
+async def get_diagram_payload(
+    db: AsyncSession, diagram: Diagram
+) -> dict:
+    """Load every row needed to render or export a diagram in one place.
+
+    Returns:
+        placements: DiagramObjects on this diagram, with `.object` eager-loaded.
+        connections: Connections where both endpoints are placed on this diagram.
+        tech_names: id → display name for every technology referenced by an
+            object's technology_ids or a connection's protocol_ids.
+    """
+    placements_q = (
+        select(DiagramObject)
+        .where(DiagramObject.diagram_id == diagram.id)
+        .options(selectinload(DiagramObject.object))
+    )
+    placements = list((await db.execute(placements_q)).scalars().all())
+
+    object_ids = [p.object_id for p in placements]
+    if not object_ids:
+        return {"placements": [], "connections": [], "tech_names": {}}
+
+    conn_q = select(Connection).where(
+        Connection.source_id.in_(object_ids),
+        Connection.target_id.in_(object_ids),
+    )
+    connections = list((await db.execute(conn_q)).scalars().all())
+
+    tech_ids: set[uuid.UUID] = set()
+    for p in placements:
+        if p.object.technology_ids:
+            tech_ids.update(p.object.technology_ids)
+    for c in connections:
+        if c.protocol_ids:
+            tech_ids.update(c.protocol_ids)
+
+    tech_names: dict[uuid.UUID, str] = {}
+    if tech_ids:
+        tech_q = select(Technology).where(Technology.id.in_(tech_ids))
+        for t in (await db.execute(tech_q)).scalars().all():
+            tech_names[t.id] = t.name
+
+    return {
+        "placements": placements,
+        "connections": connections,
+        "tech_names": tech_names,
+    }
 
 
 async def get_diagrams(
