@@ -19,6 +19,11 @@ frontend/src/api/generated/
 # Keep our shared frontend lib/ despite a possible global "lib/" ignore rule
 !frontend/src/lib/
 !frontend/src/lib/**
+# Same exception for the backend eval helpers (judge, agent_helpers, etc.) —
+# the global `lib/` rule was hiding the entire `backend/evals/lib/` package
+# from git, which then broke CI's eval suite with ModuleNotFoundError.
+!backend/evals/lib/
+!backend/evals/lib/**
 
 # Environment
 .env
