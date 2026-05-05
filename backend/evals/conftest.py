@@ -17,12 +17,22 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from evals.lib.judge import DeepEvalLitellmWrapper
+# uv treats this project as a virtual workspace, so `evals/` is never copied
+# into site-packages. Pytest doesn't always materialise `pythonpath=` /
+# top-level conftest sys.path mutations before this conftest is imported
+# (observed on `uv run` under CI). Mutate sys.path inline so the absolute
+# import below resolves regardless of how pytest was invoked.
+_BACKEND_ROOT = Path(__file__).resolve().parent.parent
+if str(_BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(_BACKEND_ROOT))
+
+from evals.lib.judge import DeepEvalLitellmWrapper  # noqa: E402
 
 # Re-export agent node entry points so per-node test files can import them
 # from a single canonical location (``from evals.conftest import planner``).
