@@ -515,6 +515,114 @@ async def test_execute_tool_handler_exception(caplog):
 
 
 # ---------------------------------------------------------------------------
+# IntegrityError → fk_violation translation
+# ---------------------------------------------------------------------------
+
+
+def _raise_fk_violation_handler():
+    """Build a handler that raises an SQLAlchemy IntegrityError mimicking
+    asyncpg's ForeignKeyViolationError. We construct the exception directly
+    so the test doesn't need a real DB."""
+    from sqlalchemy.exc import IntegrityError
+
+    async def _h(args: BaseModel, ctx: ToolContext) -> dict:
+        # The string carries the asyncpg DETAIL line we expect to surface.
+        msg = (
+            'insert or update on table "connections" violates foreign key '
+            'constraint "connections_target_id_fkey"\n'
+            'DETAIL:  Key (target_id)=(b8f0a5d5-bc03-44f3-a20c-ff5e3e0e07dd) '
+            'is not present in table "model_objects".'
+        )
+        raise IntegrityError(statement="INSERT INTO connections ...", params=(), orig=Exception(msg))
+
+    return _h
+
+
+@pytest.mark.asyncio
+async def test_execute_tool_fk_violation_returns_structured_error():
+    """A tool handler that raises IntegrityError must surface as
+    ``status='error', code='fk_violation'`` with a hint, NOT crash the run."""
+    register_tool(Tool(
+        name="fk_bomb",
+        description="raise FK error",
+        input_schema=EchoInput,
+        handler=_raise_fk_violation_handler(),
+        required_permission="",
+        permission_target="none",
+        required_scope="agents:invoke",
+    ))
+    ctx = _make_ctx()
+    out = await execute_tool({"id": "fk1", "name": "fk_bomb", "arguments": {}}, ctx)
+    assert out.status == "error"
+    assert out.raw.get("code") == "fk_violation"
+    # The DETAIL line must be carried through verbatim so the LLM can read
+    # the missing key & target table.
+    assert "Key (target_id)" in out.content
+    assert "model_objects" in out.content
+    # Hint nudging the LLM to create the parent first.
+    assert "create it first" in out.content.lower() or "create the" in out.content.lower()
+
+
+@pytest.mark.asyncio
+async def test_execute_tool_fk_violation_triggers_safe_rollback():
+    """The FK-violation path must call ``_safe_rollback`` to clear the aborted
+    transaction state — otherwise the next tool call hits
+    ``InFailedSQLTransactionError``."""
+
+    class TrackingSession(FakeSession):
+        def __init__(self) -> None:
+            super().__init__()
+            self.rolled_back = 0
+
+        async def rollback(self) -> None:
+            self.rolled_back += 1
+
+    register_tool(Tool(
+        name="fk_bomb2",
+        description="fk",
+        input_schema=EchoInput,
+        handler=_raise_fk_violation_handler(),
+        required_permission="",
+        permission_target="none",
+        required_scope="agents:invoke",
+    ))
+    db = TrackingSession()
+    ctx = _make_ctx(db=db)
+    await execute_tool({"id": "fk2", "name": "fk_bomb2", "arguments": {}}, ctx)
+    assert db.rolled_back == 1
+
+
+@pytest.mark.asyncio
+async def test_safe_rollback_uses_db_lock_when_present():
+    """``_safe_rollback`` must acquire ``ctx.db_lock`` so the rollback never
+    races a concurrent commit on the same session — proving the lock plumbed
+    through the runtime is honoured by the tool layer."""
+    import asyncio
+
+    from app.agents.tools.base import _safe_rollback
+
+    class TrackingSession(FakeSession):
+        def __init__(self) -> None:
+            super().__init__()
+            self.rolled_back = 0
+            self.lock_held_during_rollback = False
+
+        async def rollback(self) -> None:
+            self.rolled_back += 1
+            self.lock_held_during_rollback = lock.locked()
+
+    lock = asyncio.Lock()
+    db = TrackingSession()
+    ctx = _make_ctx(db=db)
+    ctx.db_lock = lock
+    await _safe_rollback(ctx)
+    assert db.rolled_back == 1
+    assert db.lock_held_during_rollback is True
+    # Lock released after rollback returns.
+    assert not lock.locked()
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 

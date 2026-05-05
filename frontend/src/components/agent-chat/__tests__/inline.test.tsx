@@ -53,6 +53,8 @@ const FAKE_OBJECT: ModelObject = {
   owner_team: null,
   external_links: null,
   metadata: null,
+  repo_url: null,
+  repo_branch: null,
   created_at: '2024-01-01T00:00:00Z',
   updated_at: '2024-01-01T00:00:00Z',
 }

@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
 from app.models.workspace import Organization, Role, Workspace, WorkspaceMember
+from app.services import secret_service
 
 
 def _slugify(name: str) -> str:
@@ -172,6 +173,58 @@ async def delete_workspace(
         raise ValueError("Workspace not found")
     await db.delete(ws)
     await db.commit()
+
+
+async def get_workspace(
+    db: AsyncSession, workspace_id: uuid.UUID
+) -> Workspace | None:
+    return (
+        await db.execute(select(Workspace).where(Workspace.id == workspace_id))
+    ).scalar_one_or_none()
+
+
+async def set_github_token(
+    db: AsyncSession, workspace_id: uuid.UUID, token: str
+) -> Workspace:
+    """Encrypt and persist the workspace's GitHub PAT. Caller must validate
+    the token first (see RepoCredentialsService.validate_token). The token
+    is encrypted with the deployment-wide AGENTS_SECRET_KEY via secret_service.
+    """
+    if not secret_service.is_available():
+        raise RuntimeError(
+            "Cannot store GitHub token: AGENTS_SECRET_KEY is not configured."
+        )
+    ws = await get_workspace(db, workspace_id)
+    if ws is None:
+        raise ValueError("Workspace not found")
+    ws.github_token_encrypted = secret_service.encrypt(token)
+    await db.commit()
+    await db.refresh(ws)
+    return ws
+
+
+async def get_github_token(
+    db: AsyncSession, workspace_id: uuid.UUID
+) -> str | None:
+    """Decrypt and return the workspace's GitHub PAT, or None when unset."""
+    ws = await get_workspace(db, workspace_id)
+    if ws is None or ws.github_token_encrypted is None:
+        return None
+    return secret_service.decrypt(ws.github_token_encrypted)
+
+
+async def clear_github_token(
+    db: AsyncSession, workspace_id: uuid.UUID
+) -> Workspace | None:
+    """Remove the stored GitHub PAT for this workspace. Idempotent."""
+    ws = await get_workspace(db, workspace_id)
+    if ws is None:
+        return None
+    if ws.github_token_encrypted is not None:
+        ws.github_token_encrypted = None
+        await db.commit()
+        await db.refresh(ws)
+    return ws
 
 
 async def get_default_workspace_for_user(

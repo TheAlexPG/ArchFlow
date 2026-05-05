@@ -63,6 +63,11 @@ class ToolContext:
     llm_client: Any | None = None
     # Pre-resolved call metadata for the reviewer's LLM call. Optional.
     call_metadata: Any | None = None
+    # Per-session asyncio.Lock — provided by the runtime so ``_safe_rollback``
+    # and any other cleanup-critical DB op can serialise against the per-tool
+    # commit (which runs in nodes/base.py with the same lock). When ``None``
+    # (test paths, direct callers) the rollback is unguarded — same as before.
+    db_lock: Any | None = None
 
 
 @dataclass
@@ -364,6 +369,37 @@ async def execute_tool(call: dict, ctx: ToolContext) -> ToolExecutionResult:
         await _safe_rollback(ctx)
         return _err_result(tool_call_id, name, str(exc))
     except Exception as exc:
+        # FK violation = LLM tried to create a connection / placement /
+        # child whose parent row doesn't exist (e.g. ``create_connection``
+        # before ``create_object`` for the target). Translate to a
+        # structured ``fk_violation`` so the LLM can self-correct on the
+        # next ReAct step instead of crashing the whole turn with a raw
+        # asyncpg traceback.
+        #
+        # IntegrityError is the SQLAlchemy umbrella; ForeignKeyViolation
+        # is the asyncpg-specific subclass. We sniff via ``isinstance``
+        # but avoid a hard import of sqlalchemy.exc at module level so
+        # this file stays import-light for direct callers / tests.
+        if _is_integrity_error(exc):
+            logger.warning(
+                "tool %s integrity error: %s", name, _short_pg_detail(exc)
+            )
+            await _safe_rollback(ctx)
+            detail = _short_pg_detail(exc)
+            message = (
+                f"database constraint violation: {detail}. "
+                "If the target object/connection doesn't exist yet, "
+                "create it first, then retry this tool."
+            )
+            return ToolExecutionResult(
+                tool_call_id=tool_call_id,
+                name=name,
+                status="error",
+                content=message,
+                preview=f"error: fk_violation — {detail[:80]}",
+                raw={"error": message, "code": "fk_violation"},
+                structured={},
+            )
         # Log full traceback locally, return only the message to the LLM.
         logger.error("tool %s raised: %s\n%s", name, exc, traceback.format_exc())
         # Without rollback, asyncpg leaves the transaction in 'aborted'
@@ -488,6 +524,36 @@ def _err_result(tool_call_id: str, name: str, message: str) -> ToolExecutionResu
     )
 
 
+def _is_integrity_error(exc: BaseException) -> bool:
+    """Return True if *exc* is a SQLAlchemy IntegrityError (or subclass).
+
+    Lazy import: SQLAlchemy may not be present in some narrow test paths
+    and we want this module to stay import-light for direct callers.
+    """
+    try:
+        from sqlalchemy.exc import IntegrityError
+    except Exception:  # pragma: no cover — sqlalchemy unavailable
+        return False
+    return isinstance(exc, IntegrityError)
+
+
+def _short_pg_detail(exc: BaseException) -> str:
+    """Pull the human-readable DETAIL line out of a SQLAlchemy IntegrityError.
+
+    asyncpg/PG raises with a multi-line ``str()``; the DETAIL line carries
+    the concrete fact ("Key (target_id)=(...) is not present in table
+    ...") that's useful to the LLM. Fall back to the first 200 chars when
+    no DETAIL line is present.
+    """
+    text = str(exc) or "unknown integrity error"
+    for line in text.splitlines():
+        line = line.strip()
+        if line.startswith("DETAIL:"):
+            return line[len("DETAIL:") :].strip()[:240]
+    # Trim to keep the LLM context tight.
+    return text.split("\n", 1)[0][:240]
+
+
 async def _safe_rollback(ctx: ToolContext) -> None:
     """Roll back the SQLAlchemy session after a tool failure.
 
@@ -497,12 +563,23 @@ async def _safe_rollback(ctx: ToolContext) -> None:
     even the agent_chat_message INSERT) fails with
     ``InFailedSQLTransactionError``. Logs but does not re-raise — rollback
     is best-effort cleanup.
+
+    Acquires ``ctx.db_lock`` when present so the rollback is serialised
+    against the per-tool commit and any other cleanup-critical DB op —
+    avoids asyncpg's "concurrent operations" trap when an unrelated path
+    (publish helpers, Langfuse, cancel-cleanup) briefly touches the same
+    session at the wrong instant.
     """
     db = getattr(ctx, "db", None)
     if db is None:
         return
+    db_lock = getattr(ctx, "db_lock", None)
     try:
-        await db.rollback()
+        if db_lock is not None:
+            async with db_lock:
+                await db.rollback()
+        else:
+            await db.rollback()
     except Exception:  # noqa: BLE001 — never let rollback mask the real error
         logger.debug("safe rollback failed", exc_info=True)
 

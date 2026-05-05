@@ -917,6 +917,97 @@ export function useDeleteWorkspace() {
   })
 }
 
+// ─── GitHub token + repo lookup ──────────────────────────
+
+export interface GitHubTokenStatus {
+  linked: boolean
+  github_login: string | null
+}
+
+export interface RepoLookupResult {
+  repo_url: string
+  full_name: string
+  description: string | null
+  default_branch: string | null
+  stargazers_count: number | null
+  private: boolean | null
+  html_url: string | null
+}
+
+/**
+ * Returns the workspace's GitHub-token status by calling the test endpoint
+ * with no body — the backend reports linked + login from what's stored.
+ * Owner-only on the backend; non-owners will get a 403/404 and we surface
+ * the resulting error to the UI.
+ */
+export function useGitHubTokenStatus(workspaceId: string | null) {
+  return useQuery({
+    queryKey: ['workspaces', workspaceId, 'github-token'],
+    queryFn: async () => {
+      const { data } = await api.post<GitHubTokenStatus>(
+        `/workspaces/${workspaceId}/github-token/test`,
+        {},
+      )
+      return data
+    },
+    enabled: !!workspaceId,
+  })
+}
+
+export function useSetGitHubToken(workspaceId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (token: string) => {
+      const { data } = await api.post<GitHubTokenStatus>(
+        `/workspaces/${workspaceId}/github-token`,
+        { token },
+      )
+      return data
+    },
+    onSuccess: () =>
+      qc.invalidateQueries({
+        queryKey: ['workspaces', workspaceId, 'github-token'],
+      }),
+  })
+}
+
+export function useTestGitHubToken(workspaceId: string | null) {
+  return useMutation({
+    mutationFn: async (token: string | null) => {
+      const body = token === null ? {} : { token }
+      const { data } = await api.post<GitHubTokenStatus>(
+        `/workspaces/${workspaceId}/github-token/test`,
+        body,
+      )
+      return data
+    },
+  })
+}
+
+export function useClearGitHubToken(workspaceId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async () => {
+      await api.delete(`/workspaces/${workspaceId}/github-token`)
+    },
+    onSuccess: () =>
+      qc.invalidateQueries({
+        queryKey: ['workspaces', workspaceId, 'github-token'],
+      }),
+  })
+}
+
+export function useLookupRepo() {
+  return useMutation({
+    mutationFn: async (repoUrl: string) => {
+      const { data } = await api.post<RepoLookupResult>('/repos/lookup', {
+        repo_url: repoUrl,
+      })
+      return data
+    },
+  })
+}
+
 // ─── Members + invites ────────────────────────────────────
 
 export function useWorkspaceMembers(workspaceId: string | null) {

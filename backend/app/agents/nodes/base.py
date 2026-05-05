@@ -1175,8 +1175,20 @@ async def run_react(
             if tool_status == "ok":
                 db = getattr(enforcer, "db", None)
                 if db is not None:
+                    # Hold ``enforcer.db_lock`` across the commit so any
+                    # concurrent path that briefly touches the same session
+                    # (publish helpers awaiting fanout queries, Langfuse
+                    # callbacks, cancel-cleanup) can't race the commit and
+                    # trip asyncpg's "concurrent operations" error — which
+                    # leaves the session in a bad state and makes the next
+                    # tool's INSERT fail with a confusing FK violation.
+                    db_lock = getattr(enforcer, "db_lock", None)
                     try:
-                        await db.commit()
+                        if db_lock is not None:
+                            async with db_lock:
+                                await db.commit()
+                        else:
+                            await db.commit()
                     except Exception:  # noqa: BLE001 — commit failure must not kill the run
                         logger.warning(
                             "node %r: per-tool commit failed for tool %r",

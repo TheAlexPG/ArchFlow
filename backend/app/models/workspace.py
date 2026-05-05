@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String, UniqueConstraint
+from sqlalchemy import DateTime, Enum, ForeignKey, LargeBinary, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -58,6 +58,12 @@ class Workspace(Base, UUIDMixin, TimestampMixin):
     )
     name: Mapped[str] = mapped_column(String(120))
     slug: Mapped[str] = mapped_column(String(120))
+
+    # Fernet-encrypted GitHub Personal Access Token. Set via the workspace
+    # settings UI; only owners can mutate. See app/services/secret_service.py.
+    github_token_encrypted: Mapped[bytes | None] = mapped_column(
+        LargeBinary, nullable=True, default=None
+    )
 
     organization = relationship("Organization", back_populates="workspaces")
     members = relationship(

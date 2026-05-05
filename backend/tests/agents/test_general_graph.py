@@ -168,6 +168,7 @@ def test_build_returns_compiled_graph_with_expected_nodes():
         "planner",
         "diagram",
         "researcher",
+        "repo_researcher",
         "critic",
         "finalize",
     }

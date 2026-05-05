@@ -60,6 +60,16 @@ _DELEGATE_TO_NODE: dict[str, str] = {
     "finalize": "finalize",
 }
 
+# Per-turn dynamic delegation tools follow this prefix. Routing maps any
+# matching name to the ``repo_researcher`` node; the node wrapper resolves
+# the slug → repo_context just before invoking the node's ``run``.
+#
+# Renamed from ``delegate_to_repo_`` to make the routing intent explicit
+# to the supervisor LLM — ``delegate_to_researcher`` has NO git access,
+# so the repo path uses a distinct prefix the LLM can't confuse with the
+# generic researcher.
+_DELEGATE_REPO_PREFIX = "delegate_to_git_researcher_"
+
 
 # ---------------------------------------------------------------------------
 # Routing helpers
@@ -122,12 +132,14 @@ def _supervisor_routes_next(state: AgentState) -> str:
         logger.debug("supervisor router: no tool call in messages → finalize")
         return "finalize"
     target = _DELEGATE_TO_NODE.get(name)
-    if target is None:
-        logger.debug(
-            "supervisor router: unrecognised tool call %r → finalize", name
-        )
-        return "finalize"
-    return target
+    if target is not None:
+        return target
+    if name.startswith(_DELEGATE_REPO_PREFIX):
+        return "repo_researcher"
+    logger.debug(
+        "supervisor router: unrecognised tool call %r → finalize", name
+    )
+    return "finalize"
 
 
 def _critic_routes_next(state: AgentState) -> str:
@@ -803,6 +815,186 @@ async def researcher_node(state: AgentState, config: Optional[RunnableConfig] = 
     return patch
 
 
+def _resolve_repo_context_from_brief(state: AgentState) -> dict | None:
+    """Find the repo_manifest entry matching the supervisor's brief.
+
+    The supervisor's brief carries ``kind == "repo:<slug>"``; we walk the
+    ``repo_manifest`` list (populated at runtime start) for the matching
+    entry and unpack the four fields the ``repo_researcher`` node needs.
+
+    Returns ``None`` when:
+      * the brief doesn't carry a ``repo:`` kind (defensive — router
+        already gated us on the tool name),
+      * the manifest is empty / has no matching slug (stale state — the
+        supervisor delegated to a slug that no longer exists; treat as
+        a no-op so the node finalizes with an error message).
+    """
+    brief = state.get("delegate_brief")
+    if not isinstance(brief, dict):
+        return None
+    kind = brief.get("kind")
+    if not isinstance(kind, str) or not kind.startswith("repo:"):
+        return None
+    slug = kind[len("repo:") :]
+    manifest = state.get("repo_manifest") or []
+    for entry in manifest:
+        if isinstance(entry, dict) and entry.get("slug") == slug:
+            return {
+                "repo_url": entry.get("repo_url"),
+                "repo_branch": entry.get("repo_branch"),
+                "repo_node_name": entry.get("node_name"),
+                "repo_node_type": entry.get("node_type"),
+                "slug": slug,
+            }
+        # Pydantic model fallback (in-process tests sometimes leave the
+        # manifest as RepoLink instances rather than dicts).
+        if hasattr(entry, "slug") and getattr(entry, "slug") == slug:
+            return {
+                "repo_url": getattr(entry, "repo_url", None),
+                "repo_branch": getattr(entry, "repo_branch", None),
+                "repo_node_name": getattr(entry, "node_name", None),
+                "repo_node_type": getattr(entry, "node_type", None),
+                "slug": slug,
+            }
+    return None
+
+
+async def repo_researcher_node(
+    state: AgentState, config: Optional[RunnableConfig] = None
+) -> dict:
+    """LangGraph node: drains repo_researcher.run() iterator.
+
+    Resolves the ``repo:<slug>`` target from the per-turn manifest, then
+    runs the node with the resolved context overlaid into the state.
+    The node's free-form text response is surfaced on
+    ``state_patch['repo_response']`` and rewritten into the supervisor's
+    ``delegate_to_git_researcher_<slug>`` tool result so the supervisor
+    can read it like any other delegated answer.
+    """
+    from app.agents.builtin.general.nodes import repo_researcher
+    from app.agents.nodes.base import isolated_state_for_subagent
+
+    enforcer, cm, tool_executor, call_meta = _extract_deps(config)
+    tracer = _get_tracer(config)
+    logger.warning("graph: repo_researcher_node ENTER")
+
+    repo_ctx = _resolve_repo_context_from_brief(state)
+    if repo_ctx is None:
+        # Manifest stale or brief malformed: bail out gracefully so the
+        # supervisor's loop doesn't melt down. Emit an empty patch + a
+        # rewritten tool result that explains what happened.
+        message = (
+            "Repo target could not be resolved (manifest is empty or the "
+            "slug no longer matches a linked object). Please pick a "
+            "different delegation target."
+        )
+        return {
+            "repo_response": message,
+            "messages": _rewrite_supervisor_tool_result(
+                state, kind="repo_researcher_error", findings=None
+            )
+            or state.get("messages"),
+        }
+
+    iso_state = isolated_state_for_subagent(state)
+    iso_state["repo_context"] = repo_ctx  # type: ignore[index]
+    # Reset the per-turn LRU cache so cached results from a previous repo
+    # target don't leak into this one.
+    cc = iso_state.get("chat_context")
+    if isinstance(cc, dict):
+        cc = dict(cc)
+        cc["_repo_cache"] = None  # repo_tools._cache lazily re-creates
+        cc["repo_context"] = repo_ctx
+        iso_state["chat_context"] = cc  # type: ignore[index]
+
+    output, forced = await _drain_with_tracing(
+        node_run=lambda meta: repo_researcher.run(
+            iso_state,
+            enforcer=enforcer,
+            context_manager=cm,
+            tool_executor=tool_executor,
+            call_metadata_base=meta,
+        ),
+        tracer=tracer,
+        span_name=f"agent:repo_researcher:{repo_ctx.get('slug') or '?'}",
+        base_call_meta=call_meta,
+        role="subagent",
+        input_payload=_subagent_span_input(state),
+        output_builder=lambda o, f: _subagent_span_output(
+            o, f, kind="repo_researcher"
+        ),
+    )
+
+    patch: dict = _strip_subagent_messages(dict(output.state_patch) if output else {})
+    if forced and "forced_finalize" not in patch:
+        patch["forced_finalize"] = forced
+    response = patch.get("repo_response") or (output.text if output else "")
+    if response:
+        patch["repo_response"] = response
+    # Rewrite supervisor's matching delegate_to_git_researcher_<slug> tool result so
+    # the next supervisor visit reads the actual answer instead of the
+    # echo of the input args.
+    rewritten = _rewrite_subagent_repo_result(
+        state, slug=repo_ctx.get("slug") or "", response=response or ""
+    )
+    if rewritten is not None:
+        patch["messages"] = rewritten
+    logger.warning(
+        "graph: repo_researcher_node EXIT forced=%s response_len=%d",
+        forced,
+        len(response or ""),
+    )
+    return patch
+
+
+def _rewrite_subagent_repo_result(
+    state: AgentState, *, slug: str, response: str
+) -> list[dict] | None:
+    """Find the most recent ``delegate_to_git_researcher_<slug>`` assistant
+    tool call and rewrite its tool-result message ``content`` to the repo
+    agent's free-form reply. Without this the supervisor's next visit
+    only sees its own tool-call args echoed back, never the real answer.
+    """
+    if not slug:
+        return None
+    parent_messages = state.get("messages") or []
+    if not parent_messages:
+        return None
+    target_call_id: str | None = None
+    expected_tool = f"{_DELEGATE_REPO_PREFIX}{slug}"
+    rewritten = list(parent_messages)
+    for idx in range(len(rewritten) - 1, -1, -1):
+        msg = rewritten[idx]
+        if msg.get("role") != "assistant":
+            continue
+        for tc in msg.get("tool_calls") or []:
+            fn = tc.get("function") or {}
+            name = fn.get("name") or tc.get("name")
+            if name == expected_tool:
+                target_call_id = tc.get("id")
+                break
+        if target_call_id is not None:
+            break
+    if target_call_id is None:
+        return None
+    body = response.strip() or "(repo researcher returned an empty answer)"
+    new_content = (
+        f"### Answer from repo:{slug}\n{body}"
+    )
+    for idx, msg in enumerate(rewritten):
+        if (
+            msg.get("role") == "tool"
+            and msg.get("tool_call_id") == target_call_id
+        ):
+            replaced = dict(msg)
+            replaced["content"] = new_content
+            rewritten[idx] = replaced
+            break
+    if rewritten == list(parent_messages):
+        return None
+    return rewritten
+
+
 async def critic_node(state: AgentState, config: Optional[RunnableConfig] = None) -> dict:
     """LangGraph node: drains critic.run() iterator. The node already
     injects the parsed Critique into ``state_patch['critique']``.
@@ -922,6 +1114,7 @@ def build() -> CompiledStateGraph:
     builder.add_node("planner", planner_node)
     builder.add_node("diagram", diagram_node)
     builder.add_node("researcher", researcher_node)
+    builder.add_node("repo_researcher", repo_researcher_node)
     builder.add_node("critic", critic_node)
     builder.add_node("finalize", finalize_node)
 
@@ -934,6 +1127,7 @@ def build() -> CompiledStateGraph:
             "planner": "planner",
             "diagram": "diagram",
             "researcher": "researcher",
+            "repo_researcher": "repo_researcher",
             "critic": "critic",
             "finalize": "finalize",
         },
@@ -943,6 +1137,7 @@ def build() -> CompiledStateGraph:
     builder.add_edge("planner", "diagram")
     builder.add_edge("diagram", "supervisor")
     builder.add_edge("researcher", "supervisor")
+    builder.add_edge("repo_researcher", "supervisor")
 
     builder.add_conditional_edges(
         "critic",
@@ -1013,6 +1208,7 @@ __all__ = [
     "planner_node",
     "diagram_node",
     "researcher_node",
+    "repo_researcher_node",
     "critic_node",
     "finalize_node",
     "_supervisor_routes_next",
