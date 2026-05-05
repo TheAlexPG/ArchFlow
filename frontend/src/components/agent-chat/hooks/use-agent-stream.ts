@@ -18,6 +18,8 @@ import {
 } from '../../../lib/agent-stream'
 import { refreshAccessToken } from '../../../lib/api-client'
 import { maybeTitleSession } from './use-agent-sessions'
+import type { AgentSessionMessage } from './use-agent-sessions'
+import { seedEventsFromMessages } from '../seed-events'
 import { useAuthStore } from '../../../stores/auth-store'
 import { useWorkspaceStore } from '../../../stores/workspace-store'
 import type { AgentInvokeBody, AgentSSEEvent, AgentSSEEventKind } from '../types'
@@ -54,11 +56,13 @@ export interface UseAgentStreamResult {
   retry: () => void
   /** Wipe events + flags. Call before starting a new conversation. */
   reset: () => void
-  /** Replace ``events`` with synthetic ``message`` frames so the chat
-   *  history shows a previously-persisted conversation. Pairs with
-   *  the agent-sessions detail endpoint at the panel level. */
+  /** Replace ``events`` with synthetic frames reconstructed from a
+   *  previously-persisted conversation. Includes ``tool_call`` /
+   *  ``tool_result`` so ToolCallCard renders the same icons in resumed
+   *  history as it does live. Pairs with the agent-sessions detail
+   *  endpoint at the panel level. */
   loadHistory: (
-    messages: Array<{ role: 'user' | 'assistant'; content: string }>,
+    messages: AgentSessionMessage[],
     sessionId: string,
   ) => void
 }
@@ -544,10 +548,7 @@ function useAgentStreamInstance(): UseAgentStreamResult {
   // Aborts any in-flight stream first — switching to an old session means
   // the user no longer cares about the current run.
   const loadHistory = useCallback(
-    (
-      messages: Array<{ role: 'user' | 'assistant'; content: string }>,
-      sid: string,
-    ) => {
+    (messages: AgentSessionMessage[], sid: string) => {
       bag.abort?.abort()
       bag.abort = null
       if (bag.reconnectTimer) {
@@ -563,13 +564,12 @@ function useAgentStreamInstance(): UseAgentStreamResult {
       // don't re-fire the auto-title call when the user picks an old one.
       bag.titleRequested = true
       const seeded: AgentSSEEvent[] = []
-      for (const m of messages) {
-        if (!m.content) continue
+      for (const ev of seedEventsFromMessages(messages)) {
         bag.lastEventId += 1
         seeded.push({
           id: bag.lastEventId,
-          kind: 'message',
-          payload: { role: m.role, text: m.content },
+          kind: ev.kind,
+          payload: ev.payload,
         })
       }
       setEvents(seeded)
