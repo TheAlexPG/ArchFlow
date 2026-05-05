@@ -159,7 +159,7 @@ def compose_messages_for_llm(
     state: AgentState,
     cfg: NodeConfig,
     *,
-    recent_history_limit: int = 20,
+    recent_history_limit: int = 40,
 ) -> list[dict]:
     """Build the message list passed to :class:`LLMClient`.
 
