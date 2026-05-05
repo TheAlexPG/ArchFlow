@@ -22,6 +22,17 @@ export interface StackInfo {
   isInFlight: boolean
 }
 
+// Stable singleton returned by getStackInfo when a context has no entry.
+// Returning a fresh object literal would make Zustand selectors fire on
+// every render and trigger an infinite update loop.
+const EMPTY_STACK: StackInfo = Object.freeze({
+  cursorSeq: null,
+  undoCount: 0,
+  redoCount: 0,
+  recentEntries: [] as HistoryEntry[],
+  isInFlight: false,
+}) as StackInfo
+
 const emptyStack = (): StackInfo => ({
   cursorSeq: null,
   undoCount: 0,
@@ -44,7 +55,7 @@ interface UndoStore {
 
 export const useUndoStore = create<UndoStore>((set, get) => ({
   byContext: {},
-  getStackInfo: (ctx) => get().byContext[ctx] ?? emptyStack(),
+  getStackInfo: (ctx) => get().byContext[ctx] ?? EMPTY_STACK,
   setStackInfo: (ctx, patch) =>
     set((s) => ({
       byContext: {

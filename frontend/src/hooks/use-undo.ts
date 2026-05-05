@@ -6,9 +6,7 @@ import {
   useUndo as useUndoRaw,
   useRedo as useRedoRaw,
   useUndoTo as useUndoToRaw,
-  type UndoActionResponse,
   type UndoHistoryResponse,
-  type UndoToResponse,
 } from './use-undo-api'
 import { ctxKey, useUndoStore, type HistoryEntry } from '../stores/undo-store'
 
