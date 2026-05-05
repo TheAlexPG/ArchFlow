@@ -47,10 +47,12 @@ evals = [
 
 # setuptools sees `app/`, `tests/` and `evals/` as candidate top-level
 # packages (each has an __init__.py). Without an explicit include the
-# wheel build fails with "Multiple top-level packages discovered". We only
-# ship the runtime app — tests and evals are dev/CI-only.
+# wheel build fails with "Multiple top-level packages discovered". Include
+# `app` (runtime) and `evals` (referenced by the eval conftest as
+# `from evals.lib.judge import ...`); skip `tests` so the prod wheel
+# stays lean.
 [tool.setuptools.packages.find]
-include = ["app*"]
+include = ["app*", "evals*"]
 
 [tool.ruff]
 target-version = "py312"
@@ -69,8 +71,3 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
 testpaths = ["tests"]
-# Put backend/ on sys.path so the evals conftest's
-# `from evals.lib.judge import ...` resolves. Now that
-# `[tool.setuptools.packages.find]` ships only `app*`, the `evals` package
-# isn't installed into the venv — pytest discovery alone won't find it.
-pythonpath = ["."]
