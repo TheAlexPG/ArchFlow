@@ -69,3 +69,8 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
 testpaths = ["tests"]
+# Put backend/ on sys.path so the evals conftest's
+# `from evals.lib.judge import ...` resolves. Now that
+# `[tool.setuptools.packages.find]` ships only `app*`, the `evals` package
+# isn't installed into the venv — pytest discovery alone won't find it.
+pythonpath = ["."]
