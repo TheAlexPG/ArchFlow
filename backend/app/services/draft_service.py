@@ -24,6 +24,7 @@ from app.models.connection import Connection
 from app.models.diagram import Diagram, DiagramObject
 from app.models.draft import Draft, DraftDiagram, DraftStatus
 from app.models.object import ModelObject
+from app.models.undo_entry import UndoEntry
 from app.schemas.draft import DraftCreate, DraftUpdate
 
 # Editable fields copied during fork + apply. Keep in sync with ObjectCreate
@@ -104,6 +105,10 @@ async def update_draft(db: AsyncSession, draft: Draft, data: DraftUpdate) -> Dra
 
 
 async def delete_draft(db: AsyncSession, draft: Draft) -> None:
+    # Drop undo entries scoped to this draft before removing the draft row.
+    # The draft_id FK has ON DELETE CASCADE, but we do this explicitly so the
+    # deletion is visible within the same transaction (e.g. for tests).
+    await db.execute(delete(UndoEntry).where(UndoEntry.draft_id == draft.id))
     # Cascade removes forked rows (draft_id FK is ON DELETE CASCADE) and the
     # forked diagram (diagrams.draft_id also cascades).
     await db.delete(draft)
@@ -537,6 +542,9 @@ async def apply_draft(db: AsyncSession, draft: Draft) -> dict:
             await db.delete(forked)
 
     draft.status = DraftStatus.MERGED
+    # Drop all undo entries scoped to this draft — the draft no longer exists
+    # as an editable context, so its undo stack is now orphaned.
+    await db.execute(delete(UndoEntry).where(UndoEntry.draft_id == draft.id))
     await db.flush()
     await db.refresh(draft, ["diagrams"])
 
@@ -805,6 +813,9 @@ async def discard_draft(db: AsyncSession, draft: Draft) -> Draft:
             await db.delete(forked)
 
     draft.status = DraftStatus.DISCARDED
+    # Drop all undo entries scoped to this draft — discarded draft can't be
+    # edited or applied, so its undo stack is permanently orphaned.
+    await db.execute(delete(UndoEntry).where(UndoEntry.draft_id == draft.id))
     await db.flush()
     await db.refresh(draft)
     return draft

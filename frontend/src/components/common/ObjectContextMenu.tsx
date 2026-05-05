@@ -14,9 +14,10 @@ import { InsightsModal } from './InsightsModal'
 interface ObjectContextMenuProps {
   object: ModelObject
   diagramId?: string
+  draftId?: string | null
 }
 
-export function ObjectContextMenu({ object, diagramId }: ObjectContextMenuProps) {
+export function ObjectContextMenu({ object, diagramId, draftId }: ObjectContextMenuProps) {
   const [open, setOpen] = useState(false)
   const [coords, setCoords] = useState<{ top: number; left: number } | null>(null)
   const [insightsOpen, setInsightsOpen] = useState(false)
@@ -88,6 +89,8 @@ export function ObjectContextMenu({ object, diagramId }: ObjectContextMenuProps)
         technology_ids: object.technology_ids,
         tags: object.tags,
         owner_team: object.owner_team,
+        from_diagram_id: diagramId,
+        from_draft_id: draftId,
       },
       {
         onSuccess: (newObj) => {
@@ -107,7 +110,7 @@ export function ObjectContextMenu({ object, diagramId }: ObjectContextMenuProps)
 
   const handleDelete = () => {
     if (!confirm(`Delete "${object.name}"? This cannot be undone.`)) return
-    deleteObject.mutate(object.id)
+    deleteObject.mutate({ id: object.id, from_diagram_id: diagramId, from_draft_id: draftId })
     setOpen(false)
   }
 

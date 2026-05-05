@@ -19,6 +19,8 @@ class ObjectCreate(BaseModel):
     owner_team: str | None = None
     external_links: dict | None = None
     metadata_: dict | None = Field(None, alias="metadata")
+    from_diagram_id: uuid.UUID | None = None  # source diagram for per-user undo
+    from_draft_id: uuid.UUID | None = None
 
     model_config = {"populate_by_name": True}
 
@@ -36,6 +38,8 @@ class ObjectUpdate(BaseModel):
     owner_team: str | None = None
     external_links: dict | None = None
     metadata_: dict | None = Field(None, alias="metadata")
+    from_diagram_id: uuid.UUID | None = None  # source diagram for per-user undo
+    from_draft_id: uuid.UUID | None = None
 
     model_config = {"populate_by_name": True}
 

@@ -126,3 +126,18 @@ instead of public issues.
 By submitting a PR you agree that your contribution is licensed under
 the project's [AGPL-3.0](LICENSE). If your employer has a CLA / IP
 policy, sort that out before opening the PR.
+
+---
+
+## Per-user undo smoke check
+
+Run before each release to catch the bits hard to assert in unit tests:
+
+- [ ] Cmd+Z in name-input field undoes text, not canvas
+- [ ] Typing "Payments DB" then Cmd+Z reverts to original name (not 11 keystrokes back)
+- [ ] Drag 3 objects in a multi-select; Cmd+Z reverts all 3 in one press
+- [ ] Same diagram in two tabs of one browser; undo in tab 1 visually updates tab 2
+- [ ] Redo button greys out after any new action
+- [ ] Comments toggle off → editing a comment doesn't show on the popover; toggle on → next comment edit shows
+- [ ] History popover renders 50 entries smoothly; clicking item 25 traverses correctly
+- [ ] Open a draft of a diagram → Cmd+Z in the draft only undoes draft actions; switching back to live shows the live stack untouched

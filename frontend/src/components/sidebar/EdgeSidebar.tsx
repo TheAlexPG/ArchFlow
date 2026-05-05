@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   useConnection,
   useDeleteConnection,
@@ -7,6 +7,7 @@ import {
   useUpdateConnection,
 } from '../../hooks/use-api'
 import { useDiagram } from '../../hooks/use-diagrams'
+import { useDebouncedMutation } from '../../hooks/use-debounced-mutation'
 import { useCanvasStore } from '../../stores/canvas-store'
 import type { ConnectionDirection, EdgeShape } from '../../types/model'
 import { Pill, SectionLabel } from '../ui'
@@ -47,7 +48,10 @@ export function EdgeSidebar({ diagramId }: EdgeSidebarProps) {
   const deleteConn = useDeleteConnection()
 
   const [label, setLabel] = useState('')
-  const labelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const debouncedLabelUpdate = useDebouncedMutation({
+    mutate: (value: string | null) => updateConn.mutateAsync({ id: conn?.id ?? '', label: value, from_diagram_id: diagramId, from_draft_id: draftId }),
+    delayMs: 400,
+  })
 
   useEffect(() => {
     if (conn) {
@@ -61,24 +65,21 @@ export function EdgeSidebar({ diagramId }: EdgeSidebarProps) {
   const target = objects.find((o) => o.id === conn.target_id)
 
   const handleUpdate = (data: Partial<{ [k: string]: unknown }>) => {
-    updateConn.mutate({ id: conn.id, ...data })
+    updateConn.mutate({ id: conn.id, ...data, from_diagram_id: diagramId, from_draft_id: draftId })
   }
 
   const handleLabelChange = (value: string) => {
     setLabel(value)
-    labelTimerRef.current && clearTimeout(labelTimerRef.current)
-    labelTimerRef.current = setTimeout(() => {
-      handleUpdate({ label: value || null })
-    }, 400)
+    debouncedLabelUpdate.queue(value || null)
   }
 
   const handleFlip = () => {
-    flipConn.mutate({ id: conn.id })
+    flipConn.mutate({ id: conn.id, from_diagram_id: diagramId, from_draft_id: draftId })
   }
 
   const handleDelete = () => {
     if (confirm('Delete this connection?')) {
-      deleteConn.mutate(conn.id)
+      deleteConn.mutate({ id: conn.id, from_diagram_id: diagramId, from_draft_id: draftId })
       selectEdge(null)
     }
   }

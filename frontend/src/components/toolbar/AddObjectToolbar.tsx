@@ -113,7 +113,7 @@ export function AddObjectToolbar({ diagramId }: AddObjectToolbarProps) {
     const placementX = 200 + Math.random() * 300
     const placementY = 150 + Math.random() * 250
     createObject.mutate(
-      { name: name.trim(), type },
+      { name: name.trim(), type, from_diagram_id: diagramId, from_draft_id: draftId },
       {
         onSuccess: (obj) => {
           if (!diagramId) return
@@ -127,7 +127,7 @@ export function AddObjectToolbar({ diagramId }: AddObjectToolbarProps) {
                 const nodeRect = nodeToRect(obj.id, { x: placementX, y: placementY }, undefined, undefined, [obj])
                 const newParentId = detectParentGroup(obj.id, nodeRect, diagramObjects, [...objects, obj])
                 if (newParentId) {
-                  updateObject.mutate({ id: obj.id, parent_id: newParentId })
+                  updateObject.mutate({ id: obj.id, parent_id: newParentId, from_diagram_id: diagramId, from_draft_id: draftId })
                 }
               },
             },
@@ -244,7 +244,7 @@ export function AddObjectToolbar({ diagramId }: AddObjectToolbarProps) {
                           </span>
                         )}
                       </button>
-                      <ObjectContextMenu object={obj} diagramId={diagramId} />
+                      <ObjectContextMenu object={obj} diagramId={diagramId} draftId={draftId} />
                     </div>
                   )
                 })

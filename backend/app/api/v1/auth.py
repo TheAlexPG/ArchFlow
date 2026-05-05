@@ -12,7 +12,7 @@ from app.core.security import (
     verify_password,
 )
 from app.models.user import User
-from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserResponse
+from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserResponse, UserUpdate
 from app.services import workspace_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -78,4 +78,20 @@ async def refresh(refresh_token: str, db: AsyncSession = Depends(get_db)):
 async def get_me(
     current_user: User = Depends(get_current_user),
 ):
+    return current_user
+
+
+@router.patch("/me", response_model=UserResponse)
+async def update_me(
+    data: UserUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update self. Currently only `undo_settings` is mutable."""
+    if data.undo_settings is not None:
+        # Replace, don't merge — caller is responsible for sending the
+        # full settings object. Keeps the contract simple.
+        current_user.undo_settings = data.undo_settings
+    await db.flush()
+    await db.commit()
     return current_user
