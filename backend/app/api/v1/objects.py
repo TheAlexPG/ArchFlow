@@ -95,7 +95,10 @@ async def create_object(
                 workspace_id = ws.id
     try:
         obj = await object_service.create_object(
-            db, data, draft_id=draft_id, workspace_id=workspace_id
+            db, data, draft_id=draft_id, workspace_id=workspace_id,
+            actor_user=current_user,
+            from_diagram_id=data.from_diagram_id,
+            from_draft_id=data.from_draft_id,
         )
     except object_service.DuplicateObjectError as exc:
         existing = exc.existing
@@ -142,12 +145,18 @@ async def update_object(
     object_id: uuid.UUID,
     data: ObjectUpdate,
     db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_optional_user),
 ):
     obj = await object_service.get_object(db, object_id)
     if not obj:
         raise HTTPException(status_code=404, detail="Object not found")
     try:
-        obj = await object_service.update_object(db, obj, data)
+        obj = await object_service.update_object(
+            db, obj, data,
+            actor_user=current_user,
+            from_diagram_id=data.from_diagram_id,
+            from_draft_id=data.from_draft_id,
+        )
     except object_service.RepoLinkNotAllowedError as exc:
         raise HTTPException(
             status_code=422,
@@ -172,7 +181,13 @@ async def update_object(
 
 
 @router.delete("/{object_id}", status_code=204)
-async def delete_object(object_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+async def delete_object(
+    object_id: uuid.UUID,
+    from_diagram_id: uuid.UUID | None = Query(None),
+    from_draft_id: uuid.UUID | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_optional_user),
+):
     obj = await object_service.get_object(db, object_id)
     if not obj:
         raise HTTPException(status_code=404, detail="Object not found")
@@ -186,7 +201,12 @@ async def delete_object(object_id: uuid.UUID, db: AsyncSession = Depends(get_db)
         if not was_draft
         else []
     )
-    await object_service.delete_object(db, obj)
+    await object_service.delete_object(
+        db, obj,
+        actor_user=current_user,
+        from_diagram_id=from_diagram_id,
+        from_draft_id=from_draft_id,
+    )
     if not was_draft:
         fire_and_forget_emit("object.deleted", {"id": obj_id_str})
         fire_and_forget_publish(obj_ws_id, "object.deleted", {"id": obj_id_str})

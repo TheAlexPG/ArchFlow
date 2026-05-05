@@ -15,6 +15,7 @@ from app.models.object import ModelObject, ObjectScope, ObjectStatus, ObjectType
 from app.models.pack import DiagramPack
 from app.models.team import AccessLevel, DiagramAccess, Team, TeamMember
 from app.models.technology import TechCategory, Technology
+from app.models.undo_entry import UndoAction, UndoEntry, UndoState, UndoTargetType  # noqa: F401
 from app.models.user import User
 from app.models.version import Version, VersionSource
 from app.models.webhook import Webhook
@@ -58,6 +59,10 @@ __all__ = [
     "Technology",
     "Team",
     "TeamMember",
+    "UndoAction",
+    "UndoEntry",
+    "UndoState",
+    "UndoTargetType",
     "User",
     "Version",
     "VersionSource",

@@ -489,7 +489,7 @@ export function DiagramPage() {
             {diagramId && <FlowPlaybackBar diagramId={diagramId} />}
             <FilterToolbar />
           </div>
-          {selectedEdgeId ? <EdgeSidebar diagramId={diagramId} /> : <ObjectSidebar />}
+          {selectedEdgeId ? <EdgeSidebar diagramId={diagramId} /> : <ObjectSidebar diagramId={diagramId} draftId={diagram?.draft_id ?? null} />}
         </div>
       </div>
 

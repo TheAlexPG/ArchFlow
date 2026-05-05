@@ -42,6 +42,7 @@ L3                      Component
 - **Live cursors, presence roster, and selection sync** — see your teammates edit in real time.
 - **Optimistic drag & resize** — zero snap-back, WebSocket cache patching under the hood.
 - **Comments on the canvas** — question pins, inaccuracy flags, ideas, notes.
+- **Per-user undo / redo** with `Cmd/Ctrl+Z` — server-backed stack scoped to your own actions, separate per diagram and per draft. History popover lets you undo to a specific past action.
 
 ### 🧱 C4-native data model
 - Objects (`system` / `external_system` / `actor` / `app` / `store` / `component` / `group`) with status, technology, tags, owner team.
@@ -317,6 +318,8 @@ make dev-infra && make db-upgrade
 - [x] Team-level per-diagram ACL
 - [x] API keys + webhooks
 - [x] Packs, pinned, search
+- [x] Per-user undo & redo (Phase 1)
+- [ ] Per-user undo — stale-detection (Phase 2)
 - [ ] Import from Structurizr DSL
 - [ ] Export to Mermaid / PlantUML
 - [ ] SSO (OIDC)

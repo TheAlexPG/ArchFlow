@@ -23,6 +23,8 @@ class ObjectCreate(BaseModel):
     # accepted formats. Only valid on System/Container types.
     repo_url: str | None = None
     repo_branch: str | None = None
+    from_diagram_id: uuid.UUID | None = None  # source diagram for per-user undo
+    from_draft_id: uuid.UUID | None = None
 
     model_config = {"populate_by_name": True}
 
@@ -42,6 +44,8 @@ class ObjectUpdate(BaseModel):
     metadata_: dict | None = Field(None, alias="metadata")
     repo_url: str | None = None
     repo_branch: str | None = None
+    from_diagram_id: uuid.UUID | None = None  # source diagram for per-user undo
+    from_draft_id: uuid.UUID | None = None
 
     model_config = {"populate_by_name": True}
 

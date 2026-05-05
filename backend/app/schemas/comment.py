@@ -16,6 +16,8 @@ class CommentCreate(BaseModel):
     body: str = Field(default="", max_length=8000)
     position_x: float | None = None
     position_y: float | None = None
+    from_diagram_id: uuid.UUID | None = None  # source diagram for per-user undo
+    from_draft_id: uuid.UUID | None = None
 
 
 class CommentUpdate(BaseModel):
@@ -24,6 +26,8 @@ class CommentUpdate(BaseModel):
     resolved: bool | None = None
     position_x: float | None = None
     position_y: float | None = None
+    from_diagram_id: uuid.UUID | None = None  # source diagram for per-user undo
+    from_draft_id: uuid.UUID | None = None
 
 
 class CommentAuthor(BaseModel):

@@ -27,6 +27,7 @@ from app.api.v1.packs import router as packs_router
 from app.api.v1.repos import router as repos_router
 from app.api.v1.teams import router as teams_router
 from app.api.v1.technologies import router as technologies_router
+from app.api.v1.undo import router as undo_router
 from app.api.v1.versions import router as versions_router
 from app.api.v1.webhooks import router as webhooks_router
 from app.api.v1.websocket import router as websocket_router
@@ -100,6 +101,7 @@ def create_app() -> FastAPI:
     app.include_router(versions_router, prefix="/api/v1")
     app.include_router(websocket_router, prefix="/api/v1")
     app.include_router(notifications_router, prefix="/api/v1")
+    app.include_router(undo_router, prefix="/api/v1")
     app.include_router(agent_settings_router, prefix="/api/v1")
     # NOTE: agent_sessions_router MUST be registered before agents_router so
     # its more-specific ``/agents/sessions`` route wins over the

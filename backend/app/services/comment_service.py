@@ -6,6 +6,7 @@ from sqlalchemy.orm import selectinload
 
 from app.models.comment import Comment, CommentTargetType
 from app.schemas.comment import CommentCreate, CommentUpdate
+from app.services import activity_service
 
 
 async def list_comments(
@@ -38,6 +39,11 @@ async def create_comment(
     db: AsyncSession,
     data: CommentCreate,
     author_id: uuid.UUID | None = None,
+    *,
+    actor_user=None,
+    from_diagram_id: uuid.UUID | None = None,
+    from_draft_id: uuid.UUID | None = None,
+    workspace_id: uuid.UUID | None = None,
 ) -> Comment:
     comment = Comment(
         target_type=data.target_type,
@@ -51,20 +57,130 @@ async def create_comment(
     db.add(comment)
     await db.flush()
     await db.refresh(comment, attribute_names=["author"])
+
+    # Undo recording — gated on user's include_comments_in_undo toggle
+    if (
+        actor_user is not None
+        and from_diagram_id is not None
+        and workspace_id is not None
+        and (actor_user.undo_settings or {}).get("include_comments_in_undo")
+    ):
+        from app.models.undo_entry import UndoAction, UndoTargetType
+        from app.services import undo_service
+
+        await undo_service.record(
+            db,
+            user_id=actor_user.id,
+            workspace_id=workspace_id,
+            diagram_id=from_diagram_id,
+            draft_id=from_draft_id,
+            target_type=UndoTargetType.COMMENT,
+            target_id=comment.id,
+            action=UndoAction.CREATE,
+            forward_summary=f"Added comment"[:80],
+            inverse_payload={"target_id": str(comment.id)},
+            after_state=activity_service.snapshot(comment, include_metadata=True),
+            coalesce_key=f"comment:{comment.id}:create",
+        )
+
     return comment
 
 
 async def update_comment(
-    db: AsyncSession, comment: Comment, data: CommentUpdate
+    db: AsyncSession,
+    comment: Comment,
+    data: CommentUpdate,
+    *,
+    actor_user=None,
+    from_diagram_id: uuid.UUID | None = None,
+    from_draft_id: uuid.UUID | None = None,
+    workspace_id: uuid.UUID | None = None,
 ) -> Comment:
+    before = activity_service.snapshot(comment, include_metadata=True)
     update_data = data.model_dump(exclude_unset=True)
+    # Strip undo-context fields
+    update_data.pop("from_diagram_id", None)
+    update_data.pop("from_draft_id", None)
     for field, value in update_data.items():
         setattr(comment, field, value)
     await db.flush()
     await db.refresh(comment, attribute_names=["author"])
+    after = activity_service.snapshot(comment, include_metadata=True)
+
+    # Undo recording — gated on user's include_comments_in_undo toggle
+    if (
+        actor_user is not None
+        and from_diagram_id is not None
+        and workspace_id is not None
+        and (actor_user.undo_settings or {}).get("include_comments_in_undo")
+    ):
+        diff = activity_service.diff_snapshots(before, after)
+        if diff:
+            from app.models.undo_entry import UndoAction, UndoTargetType
+            from app.services import undo_service
+
+            await undo_service.record(
+                db,
+                user_id=actor_user.id,
+                workspace_id=workspace_id,
+                diagram_id=from_diagram_id,
+                draft_id=from_draft_id,
+                target_type=UndoTargetType.COMMENT,
+                target_id=comment.id,
+                action=UndoAction.UPDATE,
+                forward_summary=_summarise_comment_diff(comment, diff),
+                inverse_payload={"before": {k: v["before"] for k, v in diff.items()}},
+                after_state={k: v["after"] for k, v in diff.items()},
+                coalesce_key=f"comment:{comment.id}:{','.join(sorted(diff.keys()))}",
+            )
+
     return comment
 
 
-async def delete_comment(db: AsyncSession, comment: Comment) -> None:
+async def delete_comment(
+    db: AsyncSession,
+    comment: Comment,
+    *,
+    actor_user=None,
+    from_diagram_id: uuid.UUID | None = None,
+    from_draft_id: uuid.UUID | None = None,
+    workspace_id: uuid.UUID | None = None,
+) -> None:
+    # Capture snapshot BEFORE delete — include metadata so restore_service
+    # can rebuild the comment on undo.
+    snapshot = activity_service.snapshot(comment, include_metadata=True)
+    comment_id = comment.id
+
     await db.delete(comment)
     await db.flush()
+
+    # Undo recording — gated on user's include_comments_in_undo toggle
+    if (
+        actor_user is not None
+        and from_diagram_id is not None
+        and workspace_id is not None
+        and (actor_user.undo_settings or {}).get("include_comments_in_undo")
+    ):
+        from app.models.undo_entry import UndoAction, UndoTargetType
+        from app.services import undo_service
+
+        await undo_service.record(
+            db,
+            user_id=actor_user.id,
+            workspace_id=workspace_id,
+            diagram_id=from_diagram_id,
+            draft_id=from_draft_id,
+            target_type=UndoTargetType.COMMENT,
+            target_id=comment_id,
+            action=UndoAction.DELETE,
+            forward_summary=f"Deleted comment"[:80],
+            inverse_payload={"snapshot": snapshot, "id": str(comment_id)},
+            after_state=None,
+            coalesce_key=f"comment:{comment_id}:delete",
+        )
+
+
+def _summarise_comment_diff(comment: Comment, diff: dict) -> str:
+    """Human-readable label for the history popover. Max ~80 chars."""
+    fields = ", ".join(sorted(diff.keys()))
+    return f"Edited comment — {fields}"[:80]
