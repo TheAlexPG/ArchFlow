@@ -34,9 +34,31 @@ async def restore(
 
 def _materialise(model_cls, target_id: uuid.UUID, snapshot: dict):
     """Build a model instance with the original UUID + snapshot fields,
-    skipping computed/virtual columns."""
-    columns = {c.key for c in model_cls.__table__.columns}
-    payload = {k: v for k, v in snapshot.items() if k in columns}
+    skipping computed/virtual columns.
+
+    Uses mapper attribute names (not raw SQL column names) so that columns
+    renamed at mapping time (e.g. ``metadata_`` → SQL ``metadata``) are
+    matched correctly — both spellings in the snapshot are accepted.
+    """
+    from sqlalchemy import inspect as sa_inspect
+
+    mapper = sa_inspect(model_cls)
+    # Build a mapping from Python attr name → SQL column name for every
+    # column attribute so we can accept either spelling from older snapshots.
+    attr_names: set[str] = set()
+    sql_to_attr: dict[str, str] = {}
+    for col_attr in mapper.column_attrs:
+        attr_names.add(col_attr.key)
+        sql_to_attr[col_attr.columns[0].name] = col_attr.key
+
+    payload: dict = {}
+    for k, v in snapshot.items():
+        if k.startswith("_"):
+            continue  # _placements and other meta-keys
+        if k in attr_names:
+            payload[k] = v  # Python attr name — use directly
+        elif k in sql_to_attr:
+            payload[sql_to_attr[k]] = v  # SQL name — map to Python attr name
     payload["id"] = target_id
     return model_cls(**payload)
 
