@@ -117,14 +117,35 @@ class _ScalarResult:
 
 
 class _FakeTreeSession:
-    """Sessions that handle BOTH the diagram-objects query (returns objects
-    placed on a diagram) and the child-diagram-id query (returns the id of
-    a diagram whose ``scope_object_id`` equals a given object id).
+    """Sessions that handle every query the manifest walk emits:
+
+      1. Diagram-objects placement listing — returns objects placed on a
+         diagram (SQL: ``FROM model_objects JOIN diagram_objects``).
+      2. Child-diagram-id lookup — diagram whose ``scope_object_id``
+         matches a given object id (SQL: ``FROM diagrams WHERE
+         scope_object_id``).
+      3. (D3 bidirectional) Diagram scope_object_id lookup — the
+         ``scope_object_id`` of a given diagram (SQL: ``FROM diagrams
+         WHERE id``).
+      4. (D3 bidirectional) Object-by-id fetch — the ModelObject row
+         matching an id (SQL: ``FROM model_objects WHERE id``, no join).
+      5. (D3 bidirectional) Parent-diagram-of-object lookup — the
+         diagram that contains an object as a placed entity (SQL:
+         ``FROM diagram_objects WHERE object_id``).
 
     The walk dispatches on the SQL string the production code generates;
-    we use a coarse heuristic (look for ``FROM diagrams`` vs
-    ``FROM model_objects``) which is robust enough for the in-process
-    tests we run here.
+    we use coarse heuristics (which ``FROM`` table appears, presence of a
+    join, which UUID parameter is bound) which are robust for the
+    in-process tests we run here.
+
+    Optional kwargs:
+      * ``scope_object_of_diagram``: ``{diagram_id: scope_object_id}`` —
+        what query 3 returns. Missing entries return ``None`` (= root
+        diagram, ancestor walk stops).
+      * ``object_by_id``: ``{object_id: _FakeObject}`` — what query 4
+        returns. Missing entries return ``None``.
+      * ``parent_diagram_of_object``: ``{object_id: diagram_id}`` — what
+        query 5 returns. Missing entries return ``None`` (= unplaced).
     """
 
     def __init__(
@@ -132,9 +153,15 @@ class _FakeTreeSession:
         *,
         diagram_objects: dict[UUID, list[_FakeObject]],
         child_diagram_of_object: dict[UUID, UUID],
+        scope_object_of_diagram: dict[UUID, UUID] | None = None,
+        object_by_id: dict[UUID, _FakeObject] | None = None,
+        parent_diagram_of_object: dict[UUID, UUID] | None = None,
     ) -> None:
         self._objects_by_diagram = diagram_objects
         self._child_by_object = child_diagram_of_object
+        self._scope_of_diagram = scope_object_of_diagram or {}
+        self._object_by_id = object_by_id or {}
+        self._parent_of_object = parent_diagram_of_object or {}
         self.call_count = 0
         self.execute = AsyncMock(side_effect=self._execute)
 
@@ -142,14 +169,38 @@ class _FakeTreeSession:
         self.call_count += 1
         sql = str(stmt).lower()
         # Object-list query joins diagram_objects and filters by diagram_id.
-        if "from model_objects" in sql or "join diagram_objects" in sql:
+        # Match this BEFORE the bare ``from model_objects`` branch so the
+        # join-form is handled correctly.
+        if "join diagram_objects" in sql:
             diagram_id = _extract_uuid_param(stmt, "diagram_id")
             return _ListResult(self._objects_by_diagram.get(diagram_id, []))
-        # Child-diagram-id query selects from diagrams.
+        # Parent-diagram-of-object query: ``FROM diagram_objects`` with
+        # ``WHERE object_id = ...``. Distinct from the join-form above.
+        if "from diagram_objects" in sql:
+            object_id = _extract_uuid_param(stmt, "object_id")
+            parent_id = self._parent_of_object.get(object_id)
+            return _ScalarResult(parent_id)
+        # Diagram-targeted queries: either the child-diagram-id lookup
+        # (WHERE scope_object_id = ...) or the diagram scope_object_id
+        # lookup (WHERE id = ...). Distinguish by which column is bound.
         if "from diagrams" in sql:
+            if "where diagrams.scope_object_id" in sql:
+                object_id = _extract_uuid_param(stmt, "scope_object_id")
+                child_id = self._child_by_object.get(object_id)
+                return _ScalarResult(child_id)
+            if "where diagrams.id" in sql:
+                diagram_id = _extract_uuid_param(stmt, "id")
+                return _ScalarResult(self._scope_of_diagram.get(diagram_id))
+            # Fallback (shouldn't fire): treat as the legacy scope-object
+            # lookup so the test still degrades gracefully.
             object_id = _extract_uuid_param(stmt, "scope_object_id")
-            child_id = self._child_by_object.get(object_id)
-            return _ScalarResult(child_id)
+            return _ScalarResult(self._child_by_object.get(object_id))
+        # Standalone object-by-id fetch: ``FROM model_objects`` with no
+        # diagram_objects join. Comes AFTER the join check above so the
+        # placement listing wins when both patterns would match.
+        if "from model_objects" in sql:
+            object_id = _extract_uuid_param(stmt, "id")
+            return _ScalarResult(self._object_by_id.get(object_id))
         # Fallback: empty.
         return _ListResult([])
 
@@ -502,6 +553,336 @@ async def test_collect_distinct_repo_urls_no_owner_prefix_at_depth():
     assert slugs[0] == "auth-l0"
     assert slugs[1] == "auth-l1"
     assert len(set(slugs)) == 2
+
+
+# ---------------------------------------------------------------------------
+# D3 (bidirectional): ancestor walk via scope_object_id chain
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_walks_ancestors_up_to_3_levels():
+    """Three-level ancestor chain (SystemLandscape root → Container child →
+    Component grandchild). User opens the grandchild diagram. The
+    Container scope_object carries a repo. The manifest must surface
+    that repo with ``is_ancestor=True`` and ``depth=1`` (= the immediate
+    scope_object of the grandchild = the Container)."""
+    diagram_root = uuid4()  # System Landscape (root)
+    diagram_container = uuid4()  # Frontend Components (active)
+
+    # The Container scope_object — carries a repo.
+    obj_container = _FakeObject(
+        name="Frontend",
+        type=ObjectType.APP,
+        repo_url="https://github.com/me/frontend",
+    )
+
+    session = _FakeTreeSession(
+        diagram_objects={
+            # Active diagram has no objects (leaf — components don't link
+            # to repos in this scenario).
+            diagram_container: [],
+            diagram_root: [obj_container],
+        },
+        child_diagram_of_object={},
+        scope_object_of_diagram={
+            diagram_container: obj_container.id,
+            diagram_root: None,  # explicit None tolerated
+        },
+        object_by_id={obj_container.id: obj_container},
+        parent_diagram_of_object={obj_container.id: diagram_root},
+    )
+    out = await collect_repo_manifest(diagram_container, session)  # type: ignore[arg-type]
+    assert len(out) == 1
+    entry = out[0]
+    assert entry.slug == "frontend"
+    assert entry.is_ancestor is True
+    # depth=1 = immediate scope_object of the active diagram.
+    assert entry.depth == 1
+    assert entry.repo_url == "https://github.com/me/frontend"
+
+
+@pytest.mark.asyncio
+async def test_ancestor_walk_caps_at_3_levels():
+    """A 4-level ancestor chain: from the deepest diagram, only the top 3
+    ancestors are collected. The 4th-up scope_object is pruned."""
+    assert MAX_DEPTH == 3
+    # Build chain: d0 (root) ← obj_l1 placed on d0 ← d1 (decomposes obj_l1)
+    # ← obj_l2 placed on d1 ← d2 ← obj_l3 placed on d2 ← d3 (active)
+    # ← obj_l4 placed on … wait, we want 4 ANCESTOR levels above the active.
+    # Active diagram = d_active. Ancestors:
+    #   step 1 = scope_object of d_active = obj_a1 (placed on d_a1)
+    #   step 2 = scope_object of d_a1 = obj_a2 (placed on d_a2)
+    #   step 3 = scope_object of d_a2 = obj_a3 (placed on d_a3)
+    #   step 4 = scope_object of d_a3 = obj_a4 — MUST NOT be collected.
+    d_active, d_a1, d_a2, d_a3 = (uuid4() for _ in range(4))
+    obj_a1 = _FakeObject(name="A1", type=ObjectType.APP, repo_url="https://github.com/me/a1")
+    obj_a2 = _FakeObject(name="A2", type=ObjectType.APP, repo_url="https://github.com/me/a2")
+    obj_a3 = _FakeObject(name="A3", type=ObjectType.APP, repo_url="https://github.com/me/a3")
+    obj_a4 = _FakeObject(name="A4", type=ObjectType.APP, repo_url="https://github.com/me/a4")
+
+    session = _FakeTreeSession(
+        diagram_objects={d_active: []},
+        child_diagram_of_object={},
+        scope_object_of_diagram={
+            d_active: obj_a1.id,
+            d_a1: obj_a2.id,
+            d_a2: obj_a3.id,
+            d_a3: obj_a4.id,  # Would-be 4th level — never reached
+        },
+        object_by_id={
+            obj_a1.id: obj_a1,
+            obj_a2.id: obj_a2,
+            obj_a3.id: obj_a3,
+            obj_a4.id: obj_a4,
+        },
+        parent_diagram_of_object={
+            obj_a1.id: d_a1,
+            obj_a2.id: d_a2,
+            obj_a3.id: d_a3,
+        },
+    )
+    out = await collect_repo_manifest(d_active, session)  # type: ignore[arg-type]
+    slugs = [link.slug for link in out]
+    # Only top-3 ancestors surface. ``a4`` is below the cap and never
+    # appears.
+    assert slugs == ["a1", "a2", "a3"]
+    assert all(link.is_ancestor for link in out)
+    # depth values are 1 / 2 / 3 — closest-first ordering.
+    assert [link.depth for link in out] == [1, 2, 3]
+
+
+@pytest.mark.asyncio
+async def test_root_diagram_has_no_ancestors():
+    """When the active diagram is a root (``scope_object_id`` is null),
+    the ancestor walk returns empty. No crash. Descendants still walk."""
+    diagram_root = uuid4()
+    obj = _FakeObject(
+        name="Some System",
+        type=ObjectType.SYSTEM,
+        repo_url="https://github.com/me/some-system",
+    )
+    session = _FakeTreeSession(
+        diagram_objects={diagram_root: [obj]},
+        child_diagram_of_object={},
+        scope_object_of_diagram={diagram_root: None},
+        object_by_id={},
+        parent_diagram_of_object={},
+    )
+    out = await collect_repo_manifest(diagram_root, session)  # type: ignore[arg-type]
+    # No ancestors — but descendants (= the active level here) still
+    # surface.
+    assert len(out) == 1
+    assert out[0].is_ancestor is False
+    assert out[0].slug == "some-system"
+
+
+@pytest.mark.asyncio
+async def test_ancestor_with_no_repo_url_skipped_but_walk_continues():
+    """Middle ancestor has no repo_url. The walk SKIPS it (no entry
+    emitted) but continues upward and surfaces the further-up parent's
+    repo at the correct depth."""
+    d_active, d_a1, d_a2 = (uuid4() for _ in range(3))
+    # Direct parent has NO repo — must not surface.
+    obj_a1_no_repo = _FakeObject(
+        name="Middle Container",
+        type=ObjectType.APP,
+        repo_url=None,
+    )
+    # Grandparent HAS a repo — must surface at depth=2.
+    obj_a2_with_repo = _FakeObject(
+        name="Top System",
+        type=ObjectType.SYSTEM,
+        repo_url="https://github.com/me/top-system",
+    )
+    session = _FakeTreeSession(
+        diagram_objects={d_active: []},
+        child_diagram_of_object={},
+        scope_object_of_diagram={
+            d_active: obj_a1_no_repo.id,
+            d_a1: obj_a2_with_repo.id,
+        },
+        object_by_id={
+            obj_a1_no_repo.id: obj_a1_no_repo,
+            obj_a2_with_repo.id: obj_a2_with_repo,
+        },
+        parent_diagram_of_object={
+            obj_a1_no_repo.id: d_a1,
+            obj_a2_with_repo.id: d_a2,
+        },
+    )
+    out = await collect_repo_manifest(d_active, session)  # type: ignore[arg-type]
+    assert len(out) == 1
+    entry = out[0]
+    assert entry.slug == "top-system"
+    assert entry.is_ancestor is True
+    assert entry.depth == 2  # grandparent — middle is skipped
+
+
+@pytest.mark.asyncio
+async def test_ancestor_and_descendant_share_repo_url_aggregates():
+    """The same repo URL is linked from BOTH an ancestor (the active
+    diagram's scope_object, depth=1) AND a descendant of the active
+    diagram. ``collect_repo_manifest`` returns two RepoLink entries (one
+    per node), but they share the same slug, and the render block
+    aggregates them into ONE bullet that lists both linked components."""
+    d_active, d_parent, d_child = (uuid4() for _ in range(3))
+    same_url = "https://github.com/me/shared"
+    # Ancestor (active diagram's scope_object)
+    obj_ancestor = _FakeObject(
+        name="ParentContainer",
+        type=ObjectType.APP,
+        repo_url=same_url,
+    )
+    # Descendant: an object placed on the active diagram, linking to the
+    # same repo.
+    obj_descendant = _FakeObject(
+        name="ChildLinker",
+        type=ObjectType.APP,
+        repo_url=same_url,
+    )
+    session = _FakeTreeSession(
+        diagram_objects={
+            d_active: [obj_descendant],
+            d_parent: [obj_ancestor],
+        },
+        child_diagram_of_object={},
+        scope_object_of_diagram={
+            d_active: obj_ancestor.id,
+        },
+        object_by_id={obj_ancestor.id: obj_ancestor},
+        parent_diagram_of_object={obj_ancestor.id: d_parent},
+    )
+    out = await collect_repo_manifest(d_active, session)  # type: ignore[arg-type]
+    # Two RepoLink entries (one ancestor + one descendant) — but they
+    # share a slug because supervisor aggregates by URL.
+    assert len(out) == 2
+    assert {link.slug for link in out} == {"shared"}
+    # Ordering: ancestor first (closest-first), descendant second.
+    assert out[0].is_ancestor is True
+    assert out[1].is_ancestor is False
+    # Render block emits ONE bullet listing both linked components.
+    block = render_repo_manifest_block(out)
+    assert block.count("repo:shared") == 1
+    assert "ParentContainer" in block
+    assert "ChildLinker" in block
+
+
+@pytest.mark.asyncio
+async def test_total_cap_50_after_combining_ancestor_active_descendant():
+    """When ancestors + active-level entries together would exceed 50,
+    the cap kicks in and additional entries are dropped — applies across
+    BOTH directions, not per-direction."""
+    # 3 ancestors with repos + 60 descendant-level repos = 63 candidate
+    # entries; only 50 may surface.
+    d_active, d_a1, d_a2, d_a3 = (uuid4() for _ in range(4))
+    obj_a1 = _FakeObject(name="A1", type=ObjectType.APP, repo_url="https://github.com/me/anc1")
+    obj_a2 = _FakeObject(name="A2", type=ObjectType.APP, repo_url="https://github.com/me/anc2")
+    obj_a3 = _FakeObject(name="A3", type=ObjectType.APP, repo_url="https://github.com/me/anc3")
+    descendants = [
+        _FakeObject(
+            name=f"D{i:02d}",
+            type=ObjectType.SYSTEM,
+            repo_url=f"https://github.com/me/d{i:02d}",
+        )
+        for i in range(60)
+    ]
+    session = _FakeTreeSession(
+        diagram_objects={d_active: descendants},
+        child_diagram_of_object={},
+        scope_object_of_diagram={
+            d_active: obj_a1.id,
+            d_a1: obj_a2.id,
+            d_a2: obj_a3.id,
+        },
+        object_by_id={
+            obj_a1.id: obj_a1,
+            obj_a2.id: obj_a2,
+            obj_a3.id: obj_a3,
+        },
+        parent_diagram_of_object={
+            obj_a1.id: d_a1,
+            obj_a2.id: d_a2,
+            obj_a3.id: d_a3,
+        },
+    )
+    out = await collect_repo_manifest(d_active, session)  # type: ignore[arg-type]
+    # Cap applies across the merged list.
+    assert len(out) == MAX_MANIFEST_ENTRIES
+    # Ancestors come first (closest-first), so all 3 are present even
+    # under the cap — the cap eats descendants instead.
+    ancestor_slugs = [link.slug for link in out if link.is_ancestor]
+    assert ancestor_slugs == ["anc1", "anc2", "anc3"]
+    # Render block surfaces the truncation hint.
+    block = render_repo_manifest_block(out)
+    assert str(MAX_MANIFEST_ENTRIES) in block
+    assert "first" in block.lower()
+
+
+@pytest.mark.asyncio
+async def test_ancestor_walk_cycle_guard():
+    """Defensive: if a misshapen tree caused d_a → d_b → d_a, the
+    ancestor walk must terminate without looping. A cycle is structurally
+    impossible in production but the guard means a corrupt DB row never
+    hangs the supervisor."""
+    d_active, d_other = uuid4(), uuid4()
+    obj_a = _FakeObject(
+        name="A",
+        type=ObjectType.APP,
+        repo_url="https://github.com/me/a",
+    )
+    obj_b = _FakeObject(
+        name="B",
+        type=ObjectType.APP,
+        repo_url="https://github.com/me/b",
+    )
+    session = _FakeTreeSession(
+        diagram_objects={d_active: []},
+        child_diagram_of_object={},
+        scope_object_of_diagram={
+            d_active: obj_a.id,
+            d_other: obj_b.id,
+        },
+        object_by_id={obj_a.id: obj_a, obj_b.id: obj_b},
+        parent_diagram_of_object={
+            obj_a.id: d_other,
+            obj_b.id: d_active,  # cycle: d_active → d_other → d_active
+        },
+    )
+    out = await collect_repo_manifest(d_active, session)  # type: ignore[arg-type]
+    # Walk terminates and surfaces the two ancestor entries it found
+    # before the cycle would have closed. (Each diagram visited at most
+    # once.)
+    assert len(out) == 2
+    assert {link.slug for link in out} == {"a", "b"}
+
+
+@pytest.mark.asyncio
+async def test_ancestor_filters_non_eligible_types():
+    """If an ancestor scope_object is a Group (non-eligible) with a
+    stale repo_url, the entry is skipped but the walk continues to the
+    next ancestor up."""
+    d_active, d_parent = uuid4(), uuid4()
+    obj_group = _FakeObject(
+        name="Some Group",
+        type=ObjectType.GROUP,  # NOT in REPO_LINKABLE_TYPES
+        repo_url="https://github.com/me/should-not-surface",
+    )
+    session = _FakeTreeSession(
+        diagram_objects={d_active: []},
+        child_diagram_of_object={},
+        scope_object_of_diagram={d_active: obj_group.id},
+        object_by_id={obj_group.id: obj_group},
+        parent_diagram_of_object={obj_group.id: d_parent},
+    )
+    out = await collect_repo_manifest(d_active, session)  # type: ignore[arg-type]
+    # Group is filtered — the stale repo_url never reaches the manifest.
+    assert out == []
+
+
+# ---------------------------------------------------------------------------
+# D3 (descendant): pre-existing tests (unaffected by ancestor walk)
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
