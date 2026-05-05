@@ -27,8 +27,9 @@ from app.agents.tools.base import all_tools
 # Constants
 # ---------------------------------------------------------------------------
 
-# Expected tool count as of task 057; update when tools are added/removed.
-EXPECTED_TOOL_COUNT = 41
+# Expected tool count — bump whenever the registry grows. Recent additions:
+# the 9 read-only repo_* tools for the GitHub Repo Researcher (task 060).
+EXPECTED_TOOL_COUNT = 50
 
 VALID_SCOPES = {"agents:read", "agents:invoke", "agents:write", "agents:admin"}
 

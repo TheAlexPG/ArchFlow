@@ -1,6 +1,9 @@
 .PHONY: fast slow planner diagram critic researcher explainer e2e draft permission tool budget compact layout eval-quick eval-release eval-baseline eval-golden
 
-PYTEST = uv run --extra agents --extra dev --extra evals pytest
+# Targets assume `make` is invoked from this directory (or via `make -C evals`).
+# Test paths are relative to here so pytest resolves the conftest from
+# backend/evals/conftest.py and the `evals.lib.*` package imports work.
+PYTEST = uv run --extra agents --extra dev --extra evals --directory .. pytest
 
 fast: draft permission tool compact budget layout
 slow: planner diagram critic researcher explainer e2e
