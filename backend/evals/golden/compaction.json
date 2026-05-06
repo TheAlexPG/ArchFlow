@@ -1,0 +1,94 @@
+[
+  {
+    "id": "stage1-trim-large-tool-result",
+    "description": "Stage 1: a >2000-token tool result is replaced with a truncated placeholder",
+    "stage": 1,
+    "strategy": "trim_large_tool_results",
+    "current_stage": 0,
+    "messages": [
+      {"role": "system", "content": "You are an agent."},
+      {"role": "user", "content": "Run the tool."},
+      {"role": "assistant", "content": null},
+      {"role": "tool", "name": "list_objects", "content": "__BIG__", "tool_call_id": "tc-1"}
+    ],
+    "big_content_placeholder": "__BIG__",
+    "big_content_char_count": 30000,
+    "threshold_fraction": 0.01,
+    "expected_stage_applied": 1,
+    "expected_strategy": "trim_large_tool_results",
+    "assert_placeholder_in_tool_messages": true
+  },
+  {
+    "id": "stage2-drop-oldest-tool-messages",
+    "description": "Stage 2: drop_oldest_tool_messages replaces old tool replies with sentinels",
+    "stage": 2,
+    "strategy": "drop_oldest_tool_messages",
+    "current_stage": 1,
+    "threshold_fraction": 0.01,
+    "num_turn_pairs": 6,
+    "expected_stage_applied": 2,
+    "expected_strategy": "drop_oldest_tool_messages",
+    "assert_sentinel_in_old_tool_messages": true
+  },
+  {
+    "id": "stage3-summarize-oldest-half",
+    "description": "Stage 3: summarize_oldest_half replaces older messages with system summary",
+    "stage": 3,
+    "strategy": "summarize_oldest_half",
+    "current_stage": 2,
+    "threshold_fraction": 0.01,
+    "num_messages": 12,
+    "fake_summary": "User asked to create an architecture diagram for the payments system.",
+    "expected_stage_applied": 3,
+    "expected_strategy": "summarize_oldest_half",
+    "assert_summary_message": true
+  },
+  {
+    "id": "stage4-hard-truncate-keep-recent",
+    "description": "Stage 4: hard_truncate_keep_recent keeps system + last 10 messages",
+    "stage": 4,
+    "strategy": "hard_truncate_keep_recent",
+    "current_stage": 3,
+    "threshold_fraction": 0.01,
+    "num_messages": 25,
+    "expected_stage_applied": 4,
+    "expected_strategy": "hard_truncate_keep_recent",
+    "assert_max_non_system": 10
+  },
+  {
+    "id": "no-compaction-below-threshold",
+    "description": "Below threshold: maybe_compact returns stage_applied=0 (no-op)",
+    "stage": 0,
+    "strategy": null,
+    "current_stage": 0,
+    "threshold_fraction": 0.99,
+    "num_messages": 3,
+    "expected_stage_applied": 0,
+    "expected_strategy": null
+  },
+  {
+    "id": "escalation-current-stage-2-applies-stage-3",
+    "description": "Escalation: current_stage=2 means next applied is stage 3",
+    "stage": 3,
+    "strategy": "summarize_oldest_half",
+    "current_stage": 2,
+    "threshold_fraction": 0.01,
+    "num_messages": 12,
+    "fake_summary": "Earlier context summary.",
+    "expected_stage_applied": 3,
+    "expected_strategy": "summarize_oldest_half",
+    "assert_summary_message": true
+  },
+  {
+    "id": "stage-cap-at-last-ladder-step",
+    "description": "When current_stage > ladder length, clamps to last stage (hard_truncate)",
+    "stage": 4,
+    "strategy": "hard_truncate_keep_recent",
+    "current_stage": 99,
+    "threshold_fraction": 0.01,
+    "num_messages": 20,
+    "expected_stage_applied": 4,
+    "expected_strategy": "hard_truncate_keep_recent",
+    "assert_max_non_system": 10
+  }
+]

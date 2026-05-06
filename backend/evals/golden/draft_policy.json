@@ -1,0 +1,168 @@
+[
+  {
+    "id": "branch1-explicit-draft-id",
+    "description": "Branch 1: explicit draft_id in context is returned immediately",
+    "chat_context": {
+      "kind": "diagram",
+      "id": "11111111-1111-1111-1111-111111111111",
+      "draft_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+    },
+    "agent_edits_policy": "ask",
+    "mode": "full",
+    "actor_kind": "user",
+    "actor_agent_access": "full",
+    "expected_draft_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+    "expected_requires_choice": null
+  },
+  {
+    "id": "branch2-read-only-mode",
+    "description": "Branch 2: read_only mode returns (None, None) regardless of policy",
+    "chat_context": {
+      "kind": "diagram",
+      "id": "11111111-1111-1111-1111-111111111111",
+      "draft_id": null
+    },
+    "agent_edits_policy": "drafts_only",
+    "mode": "read_only",
+    "actor_kind": "user",
+    "actor_agent_access": "read_only",
+    "expected_draft_id": null,
+    "expected_requires_choice": null
+  },
+  {
+    "id": "branch3-live-only-policy",
+    "description": "Branch 3: live_only policy returns (None, None)",
+    "chat_context": {
+      "kind": "diagram",
+      "id": "11111111-1111-1111-1111-111111111111",
+      "draft_id": null
+    },
+    "agent_edits_policy": "live_only",
+    "mode": "full",
+    "actor_kind": "user",
+    "actor_agent_access": "full",
+    "expected_draft_id": null,
+    "expected_requires_choice": null
+  },
+  {
+    "id": "branch4-drafts-only-one-draft",
+    "description": "Branch 4: drafts_only with 1 open draft auto-picks it",
+    "chat_context": {
+      "kind": "diagram",
+      "id": "22222222-2222-2222-2222-222222222222",
+      "draft_id": null
+    },
+    "agent_edits_policy": "drafts_only",
+    "mode": "full",
+    "actor_kind": "user",
+    "actor_agent_access": "full",
+    "open_drafts": [{"draft_id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "draft_name": "My Draft"}],
+    "expected_draft_id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+    "expected_requires_choice": null
+  },
+  {
+    "id": "branch4-drafts-only-no-drafts",
+    "description": "Branch 4: drafts_only with 0 open drafts suspends with draft_required payload",
+    "chat_context": {
+      "kind": "diagram",
+      "id": "22222222-2222-2222-2222-222222222222",
+      "draft_id": null
+    },
+    "agent_edits_policy": "drafts_only",
+    "mode": "full",
+    "actor_kind": "user",
+    "actor_agent_access": "full",
+    "open_drafts": [],
+    "expected_draft_id": null,
+    "expected_requires_choice_kind": "draft_required"
+  },
+  {
+    "id": "branch4-drafts-only-multiple-drafts",
+    "description": "Branch 4: drafts_only with 2+ open drafts suspends with choices listing them",
+    "chat_context": {
+      "kind": "diagram",
+      "id": "22222222-2222-2222-2222-222222222222",
+      "draft_id": null
+    },
+    "agent_edits_policy": "drafts_only",
+    "mode": "full",
+    "actor_kind": "user",
+    "actor_agent_access": "full",
+    "open_drafts": [
+      {"draft_id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "draft_name": "Draft A"},
+      {"draft_id": "cccccccc-cccc-cccc-cccc-cccccccccccc", "draft_name": "Draft B"}
+    ],
+    "expected_draft_id": null,
+    "expected_requires_choice_kind": "draft_required"
+  },
+  {
+    "id": "branch5-ask-policy-no-drafts",
+    "description": "Branch 5: ask policy with 0 drafts defers to first mutation (draft_or_live payload)",
+    "chat_context": {
+      "kind": "diagram",
+      "id": "22222222-2222-2222-2222-222222222222",
+      "draft_id": null
+    },
+    "agent_edits_policy": "ask",
+    "mode": "full",
+    "actor_kind": "user",
+    "actor_agent_access": "full",
+    "open_drafts": [],
+    "expected_draft_id": null,
+    "expected_requires_choice_kind": "draft_or_live"
+  },
+  {
+    "id": "branch5-ask-policy-existing-drafts",
+    "description": "Branch 5: ask policy with 1+ existing drafts offers use-existing | new | edit-live",
+    "chat_context": {
+      "kind": "diagram",
+      "id": "22222222-2222-2222-2222-222222222222",
+      "draft_id": null
+    },
+    "agent_edits_policy": "ask",
+    "mode": "full",
+    "actor_kind": "user",
+    "actor_agent_access": "full",
+    "open_drafts": [{"draft_id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "draft_name": "Draft A"}],
+    "expected_draft_id": null,
+    "expected_requires_choice_kind": "draft_or_live"
+  },
+  {
+    "id": "clamp-mode-apikey-no-write-scope",
+    "description": "_clamp_mode: api_key without agents:write requesting full → clamped to read_only",
+    "test_type": "clamp_mode",
+    "requested_mode": "full",
+    "actor_kind": "api_key",
+    "actor_scopes": ["agents:invoke"],
+    "expected_mode": "read_only"
+  },
+  {
+    "id": "clamp-mode-apikey-with-write-scope",
+    "description": "_clamp_mode: api_key with agents:write requesting full → full honored",
+    "test_type": "clamp_mode",
+    "requested_mode": "full",
+    "actor_kind": "api_key",
+    "actor_scopes": ["agents:write"],
+    "expected_mode": "full"
+  },
+  {
+    "id": "clamp-mode-user-none-access",
+    "description": "_clamp_mode: user with agent_access=none → PermissionError",
+    "test_type": "clamp_mode",
+    "requested_mode": "full",
+    "actor_kind": "user",
+    "actor_agent_access": "none",
+    "expected_exception": "PermissionError"
+  },
+  {
+    "id": "check-ask-policy-second-call-idempotent",
+    "description": "_check_ask_policy_first_mutation: second call returns None (idempotent)",
+    "test_type": "ask_policy",
+    "policy": "ask",
+    "mode": "full",
+    "active_draft_id": null,
+    "choice_already_presented": true,
+    "pending_payload": {"kind": "draft_or_live"},
+    "expected_result": null
+  }
+]

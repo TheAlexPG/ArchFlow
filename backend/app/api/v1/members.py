@@ -8,7 +8,7 @@ from app.api.deps import get_current_user
 from app.api.permissions_dep import require_role
 from app.core.database import get_db
 from app.models.user import User
-from app.models.workspace import Role
+from app.models.workspace import AgentAccessLevel, Role
 from app.services import member_service
 
 router = APIRouter(prefix="/workspaces/{workspace_id}", tags=["workspace-members"])
@@ -19,11 +19,14 @@ class MemberResponse(BaseModel):
     email: str
     name: str
     role: str
+    agent_access: AgentAccessLevel
 
 
 class InviteCreateRequest(BaseModel):
     email: EmailStr
     role: Role
+    # Agent access level granted on invite acceptance. Defaults to read_only.
+    agent_access: AgentAccessLevel = AgentAccessLevel.READ_ONLY
     # Teams to auto-add the user to on acceptance. Ignored entries (wrong
     # workspace, deleted team) are silently skipped.
     team_ids: list[UUID] = []
@@ -42,7 +45,15 @@ class AcceptInviteRequest(BaseModel):
 
 
 class RoleUpdateRequest(BaseModel):
-    role: Role
+    """Partial update of a workspace member.
+
+    Both fields are optional so the client can flip just one (e.g. raise the
+    user's agent_access without touching their role). At least one must be
+    provided — empty body would be a no-op.
+    """
+
+    role: Role | None = None
+    agent_access: AgentAccessLevel | None = None
 
 
 @router.get("/members", response_model=list[MemberResponse])
@@ -54,7 +65,11 @@ async def list_members(
     rows = await member_service.list_members(db, workspace_id)
     return [
         MemberResponse(
-            user_id=user.id, email=user.email, name=user.name, role=member.role.value
+            user_id=user.id,
+            email=user.email,
+            name=user.name,
+            role=member.role.value,
+            agent_access=member.agent_access,
         )
         for member, user in rows
     ]
@@ -130,9 +145,19 @@ async def update_member_role(
     _: Role = Depends(require_role(Role.ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
+    if payload.role is None and payload.agent_access is None:
+        raise HTTPException(400, "At least one of 'role' or 'agent_access' is required")
+
     try:
         member = await member_service.update_member_role(
-            db, workspace_id, user_id, payload.role
+            db,
+            workspace_id,
+            user_id,
+            # When the caller only changes agent_access, keep the existing
+            # role (service will fetch it; we pass a sentinel that triggers
+            # a no-op for role).
+            payload.role,  # type: ignore[arg-type]  — service handles None
+            agent_access=payload.agent_access,
         )
     except member_service.LastOwnerError as e:
         raise HTTPException(400, str(e)) from e
@@ -148,7 +173,11 @@ async def update_member_role(
     ).scalar_one_or_none()
     assert user is not None
     return MemberResponse(
-        user_id=user.id, email=user.email, name=user.name, role=member.role.value
+        user_id=user.id,
+        email=user.email,
+        name=user.name,
+        role=member.role.value,
+        agent_access=member.agent_access,
     )
 
 

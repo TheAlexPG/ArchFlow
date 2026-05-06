@@ -72,11 +72,18 @@ L3                      Component
 - **Pinned / Recent** on the Overview dashboard.
 - Full-text search across all objects and diagrams (⌘K / Ctrl+K).
 
+### 🤖 AI agents
+- **Multi-agent supervisor** orchestrating specialized sub-agents (planner, researcher, diagram, critic) over a LangGraph state machine — handles "describe this", "build me X", "review this design" inside the chat panel.
+- **GitHub Repo Researcher** — link any Container/System to a GitHub URL and a read-only sub-agent fetches code, READMEs, issues, PRs, commits, and diffs to ground its answers in the actual implementation. Per-workspace GitHub PAT (encrypted at rest); 9 tools with per-turn LRU cache.
+- **Diagram Explainer** — one-click natural-language summary of any object or connection, with inline popovers.
+- **Provider-agnostic LLMs** via LiteLLM — pick OpenAI, Anthropic, OpenRouter, or any OpenAI-compatible endpoint per workspace; model + base URL stored encrypted.
+- **Tool-call streaming UI** — live tool icons, sub-agent transitions, applied-change pills, and full transcripts that survive page reloads.
+- **Optional Langfuse tracing** — per-workspace consent (`off` / `errors_only` / `full`).
+
 ### 🔌 Extensibility
 - **REST API** (OpenAPI / Swagger UI at `/docs`) + orval-generated TypeScript client.
 - **API keys** with prefix-based detection (`ak_…`), first-class citizens alongside JWT.
 - **Webhooks** for `object.*`, `connection.*`, `diagram.*`, and more.
-- Optional **AI insights** (Claude) — summarize an object's role, spot missing connections.
 - **JSON export / import** for migration or CI snapshotting.
 
 ### 🌐 Realtime collaboration
@@ -97,6 +104,7 @@ L3                      Component
 - Alembic migrations
 - PostgreSQL 16
 - Redis (realtime fanout)
+- LangGraph + LiteLLM (agents)
 - pytest + pytest-asyncio
 - uv package manager
 
@@ -247,9 +255,29 @@ DATABASE_URL=postgresql+asyncpg://archflow:archflow@localhost:5432/archflow
 JWT_SECRET=change-me-in-production
 BACKEND_CORS_ORIGINS=http://localhost:5173
 
-# Optional — enables AI insights on ModelObjects
-ANTHROPIC_API_KEY=sk-ant-...
+# Optional — Langfuse tracing for agent calls (per-workspace consent gates each call).
+LANGFUSE_PUBLIC_KEY=
+LANGFUSE_SECRET_KEY=
+LANGFUSE_HOST=
 ```
+
+### ⚠️ Required for AI agents: `AGENTS_SECRET_KEY`
+
+If you want the AI agent features (supervisor, repo researcher, diagram explainer) to work, you **must** set `AGENTS_SECRET_KEY` in `.env`. It's the symmetric Fernet key that encrypts every workspace's stored LLM provider API key and GitHub PAT at rest.
+
+**Without it:**
+- Saving a workspace LLM key → 500 error → no agent can reach an LLM
+- Saving a GitHub PAT → 500 error → repo researcher can't read repos
+
+Generate **once per deployment** and store like any other secret:
+
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+> 🛑 **Don't rotate it after secrets are saved.** There's no automatic re-encryption — losing this key locks every workspace's LLM and GitHub credentials forever. Back it up alongside `JWT_SECRET`.
+
+LLM provider keys (OpenAI / Anthropic / OpenRouter / …) and the GitHub PAT for the repo-researcher are stored **per-workspace** in the database (encrypted by `AGENTS_SECRET_KEY`) — not in `.env`. Configure them from the workspace Settings page.
 
 ---
 

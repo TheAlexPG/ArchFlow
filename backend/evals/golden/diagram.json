@@ -1,0 +1,262 @@
+[
+  {
+    "id": "diagram_happy_001",
+    "category": "happy_path",
+    "input": "Execute plan: create API gateway, two services, Postgres, and connect them.",
+    "plan": {
+      "goal": "Bootstrap a minimal microservices L2 diagram",
+      "steps": [
+        {"index": 0, "kind": "create_object", "args": {"name": "API Gateway", "kind": "application"}, "rationale": "entry"},
+        {"index": 1, "kind": "create_object", "args": {"name": "Orders Service", "kind": "application"}, "rationale": "service"},
+        {"index": 2, "kind": "create_object", "args": {"name": "Billing Service", "kind": "application"}, "rationale": "service"},
+        {"index": 3, "kind": "create_object", "args": {"name": "Postgres", "kind": "store"}, "rationale": "store"},
+        {"index": 4, "kind": "create_connection", "args": {"from_index": 0, "to_index": 1}, "depends_on": [0, 1], "rationale": "edge"},
+        {"index": 5, "kind": "create_connection", "args": {"from_index": 0, "to_index": 2}, "depends_on": [0, 2], "rationale": "edge"},
+        {"index": 6, "kind": "create_connection", "args": {"from_index": 1, "to_index": 3}, "depends_on": [1, 3], "rationale": "edge"},
+        {"index": 7, "kind": "create_connection", "args": {"from_index": 2, "to_index": 3}, "depends_on": [2, 3], "rationale": "edge"}
+      ]
+    },
+    "expected_outcome": {
+      "min_applied_changes": 6,
+      "must_call_tools": ["create_object", "create_connection"],
+      "no_forced_finalize": true
+    },
+    "geval_criteria": "All planned objects + connections were created and surfaced in applied_changes; no duplicate creations."
+  },
+  {
+    "id": "diagram_happy_002",
+    "category": "happy_path",
+    "input": "Place existing objects on the active diagram and lay them out.",
+    "plan": {
+      "goal": "Place + auto-layout",
+      "steps": [
+        {"index": 0, "kind": "place_on_diagram", "args": {"object_name": "API"}, "rationale": "place"},
+        {"index": 1, "kind": "place_on_diagram", "args": {"object_name": "Postgres"}, "rationale": "place"},
+        {"index": 2, "kind": "auto_layout_diagram", "args": {}, "depends_on": [0, 1], "rationale": "layout"}
+      ]
+    },
+    "expected_outcome": {
+      "min_applied_changes": 2,
+      "must_call_tools": ["place_on_diagram", "auto_layout_diagram"],
+      "no_forced_finalize": true
+    },
+    "geval_criteria": "Both placements applied before auto_layout; auto_layout invoked exactly once."
+  },
+  {
+    "id": "diagram_happy_003",
+    "category": "happy_path",
+    "input": "Update the description of the Orders service and add a Kafka technology tag.",
+    "plan": {
+      "goal": "Edit Orders metadata",
+      "steps": [
+        {"index": 0, "kind": "update_object", "args": {"name": "Orders", "description": "Order intake + fulfilment"}, "rationale": "desc"},
+        {"index": 1, "kind": "update_object", "args": {"name": "Orders", "add_technology": "Kafka"}, "rationale": "tech"}
+      ]
+    },
+    "expected_outcome": {
+      "min_applied_changes": 1,
+      "must_call_tools": ["update_object"],
+      "no_forced_finalize": true
+    },
+    "geval_criteria": "Update applied without touching unrelated objects."
+  },
+  {
+    "id": "diagram_happy_004",
+    "category": "happy_path",
+    "input": "Create a child L3 diagram for Orders and link it.",
+    "plan": {
+      "goal": "Add child diagram",
+      "steps": [
+        {"index": 0, "kind": "create_child_diagram_for_object", "args": {"object_name": "Orders", "level": "L3"}, "rationale": "drill"}
+      ]
+    },
+    "expected_outcome": {
+      "min_applied_changes": 1,
+      "must_call_tools": ["create_child_diagram_for_object"],
+      "no_forced_finalize": true
+    },
+    "geval_criteria": "Child diagram created and linked exactly once."
+  },
+  {
+    "id": "diagram_happy_005",
+    "category": "happy_path",
+    "input": "Delete the unused 'LegacyCron' object and its connections.",
+    "plan": {
+      "goal": "Cleanup",
+      "steps": [
+        {"index": 0, "kind": "delete_object", "args": {"name": "LegacyCron"}, "rationale": "remove"}
+      ]
+    },
+    "expected_outcome": {
+      "min_applied_changes": 1,
+      "must_call_tools": ["delete_object"],
+      "no_forced_finalize": true
+    },
+    "geval_criteria": "Object deleted; cascading deletes for connections recorded if applicable."
+  },
+  {
+    "id": "diagram_edge_001",
+    "category": "edge",
+    "input": "Create object that already exists (idempotent expected).",
+    "plan": {
+      "goal": "Idempotent create",
+      "steps": [
+        {"index": 0, "kind": "create_object", "args": {"name": "Postgres", "kind": "store"}, "rationale": "exists"}
+      ]
+    },
+    "expected_outcome": {
+      "max_applied_changes": 1,
+      "no_forced_finalize": true
+    },
+    "geval_criteria": "Diagram-agent searches first and either reuses the existing object or records exactly one create."
+  },
+  {
+    "id": "diagram_edge_002",
+    "category": "edge",
+    "input": "Empty plan (no steps).",
+    "plan": {"goal": "noop", "steps": []},
+    "expected_outcome": {
+      "max_applied_changes": 0
+    },
+    "expect_empty_plan_handled": true,
+    "geval_criteria": "Empty plan is handled gracefully — no mutations, no crash."
+  },
+  {
+    "id": "diagram_edge_003",
+    "category": "edge",
+    "input": "Plan with only a read step (no mutations).",
+    "plan": {
+      "goal": "Read-only sanity",
+      "steps": [
+        {"index": 0, "kind": "search_existing_object", "args": {"query": "Postgres"}, "rationale": "lookup"}
+      ]
+    },
+    "expected_outcome": {
+      "max_applied_changes": 0,
+      "no_forced_finalize": true
+    },
+    "geval_criteria": "No mutations applied for a read-only plan."
+  },
+  {
+    "id": "diagram_edge_004",
+    "category": "edge",
+    "input": "Plan with a step depending on a sibling that fails — recovery expected.",
+    "plan": {
+      "goal": "Skip-on-fail",
+      "steps": [
+        {"index": 0, "kind": "create_object", "args": {"name": "Foo", "kind": "application"}, "rationale": "ok"},
+        {"index": 1, "kind": "create_connection", "args": {"from_name": "Foo", "to_name": "DoesNotExist"}, "depends_on": [0], "rationale": "will-fail"}
+      ]
+    },
+    "expected_outcome": {
+      "min_applied_changes": 1,
+      "no_forced_finalize": true
+    },
+    "geval_criteria": "Failing connection step is reported but does not abort the whole run; first step still applied."
+  },
+  {
+    "id": "diagram_edge_005",
+    "category": "edge",
+    "input": "Auto-layout an empty diagram.",
+    "plan": {
+      "goal": "Layout empty",
+      "steps": [
+        {"index": 0, "kind": "auto_layout_diagram", "args": {}, "rationale": "layout"}
+      ]
+    },
+    "expected_outcome": {
+      "max_applied_changes": 1
+    },
+    "geval_criteria": "Auto-layout on an empty diagram returns success or a benign no-op without raising."
+  },
+  {
+    "id": "diagram_failure_001",
+    "category": "failure",
+    "input": "Plan tries to write while runtime_mode=read_only.",
+    "runtime_mode": "read_only",
+    "plan": {
+      "goal": "Should be denied",
+      "steps": [
+        {"index": 0, "kind": "create_object", "args": {"name": "X", "kind": "application"}, "rationale": "denied"}
+      ]
+    },
+    "expected_outcome": {
+      "max_applied_changes": 0,
+      "expect_denied": true
+    },
+    "geval_criteria": "Tool calls denied with a clear ACL error; no mutations recorded."
+  },
+  {
+    "id": "diagram_failure_002",
+    "category": "failure",
+    "input": "Plan with an unsupported action kind.",
+    "plan": {
+      "goal": "Bad kind",
+      "steps": [
+        {"index": 0, "kind": "create_object", "args": {"name": "Bad", "kind": "totally_made_up_kind"}, "rationale": "invalid"}
+      ]
+    },
+    "expected_outcome": {
+      "max_applied_changes": 0
+    },
+    "geval_criteria": "Diagram-agent surfaces the schema validation error rather than silently succeeding."
+  },
+  {
+    "id": "diagram_failure_003",
+    "category": "failure",
+    "input": "Plan exceeds max_steps (>10).",
+    "plan": {
+      "goal": "Too many",
+      "steps": [
+        {"index": 0, "kind": "create_object", "args": {"name": "A1", "kind": "application"}, "rationale": "1"},
+        {"index": 1, "kind": "create_object", "args": {"name": "A2", "kind": "application"}, "rationale": "2"},
+        {"index": 2, "kind": "create_object", "args": {"name": "A3", "kind": "application"}, "rationale": "3"},
+        {"index": 3, "kind": "create_object", "args": {"name": "A4", "kind": "application"}, "rationale": "4"},
+        {"index": 4, "kind": "create_object", "args": {"name": "A5", "kind": "application"}, "rationale": "5"},
+        {"index": 5, "kind": "create_object", "args": {"name": "A6", "kind": "application"}, "rationale": "6"},
+        {"index": 6, "kind": "create_object", "args": {"name": "A7", "kind": "application"}, "rationale": "7"},
+        {"index": 7, "kind": "create_object", "args": {"name": "A8", "kind": "application"}, "rationale": "8"},
+        {"index": 8, "kind": "create_object", "args": {"name": "A9", "kind": "application"}, "rationale": "9"},
+        {"index": 9, "kind": "create_object", "args": {"name": "A10", "kind": "application"}, "rationale": "10"},
+        {"index": 10, "kind": "create_object", "args": {"name": "A11", "kind": "application"}, "rationale": "11"},
+        {"index": 11, "kind": "create_object", "args": {"name": "A12", "kind": "application"}, "rationale": "12"}
+      ]
+    },
+    "expected_outcome": {
+      "expect_forced_finalize_in": ["max_steps", "turns"]
+    },
+    "geval_criteria": "Diagram-agent halts with forced_finalize=max_steps (or turns) rather than infinitely looping."
+  },
+  {
+    "id": "diagram_failure_004",
+    "category": "failure",
+    "input": "Plan attempts cyclic dependency.",
+    "plan": {
+      "goal": "Cycle",
+      "steps": [
+        {"index": 0, "kind": "create_object", "args": {"name": "X", "kind": "application"}, "depends_on": [1], "rationale": "cycle"},
+        {"index": 1, "kind": "create_object", "args": {"name": "Y", "kind": "application"}, "depends_on": [0], "rationale": "cycle"}
+      ]
+    },
+    "expected_outcome": {
+      "max_applied_changes": 0,
+      "expect_plan_validation_error": true
+    },
+    "geval_criteria": "Cyclic plan rejected before any mutation."
+  },
+  {
+    "id": "diagram_failure_005",
+    "category": "failure",
+    "input": "Tool execution throws an exception mid-run.",
+    "plan": {
+      "goal": "Tool throws",
+      "steps": [
+        {"index": 0, "kind": "create_object", "args": {"name": "Z", "kind": "application", "_force_error": true}, "rationale": "throw"}
+      ]
+    },
+    "expected_outcome": {
+      "max_applied_changes": 0
+    },
+    "geval_criteria": "Diagram-agent recovers from the tool exception and reports it cleanly without crashing the loop."
+  }
+]

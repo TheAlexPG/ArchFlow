@@ -1,3 +1,4 @@
+import re
 import uuid
 
 from sqlalchemy import or_, select
@@ -7,10 +8,69 @@ from sqlalchemy.orm import selectinload
 from app.models.activity_log import ActivityTargetType
 from app.models.connection import Connection
 from app.models.diagram import DiagramObject
-from app.models.object import ModelObject
+from app.models.object import ModelObject, ObjectType
 from app.models.technology import Technology
 from app.schemas.object import ObjectCreate, ObjectUpdate
 from app.services import activity_service
+
+
+# Object types that may carry a GitHub repo link. Mirrors the C4 model:
+# `system` is C4 System, `app`/`store` are C4 Containers (deployable units).
+# Group is L2 conceptually but is just a logical bucket — repos do not
+# attach to groups.
+REPO_LINKABLE_TYPES: frozenset[ObjectType] = frozenset(
+    {ObjectType.SYSTEM, ObjectType.APP, ObjectType.STORE}
+)
+
+
+class InvalidRepoUrlError(ValueError):
+    """The supplied repo_url did not match an accepted GitHub URL format."""
+
+
+class RepoLinkNotAllowedError(ValueError):
+    """repo_url was set on an object whose type is not eligible for repo links."""
+
+
+# https://github.com/{owner}/{name}, optional trailing slash, optional .git
+_GITHUB_HTTPS_RE = re.compile(
+    r"^https?://github\.com/([A-Za-z0-9][A-Za-z0-9-_.]*)/([A-Za-z0-9][A-Za-z0-9-_.]*?)(?:\.git)?/?$"
+)
+# git@github.com:{owner}/{name}.git
+_GITHUB_SSH_RE = re.compile(
+    r"^git@github\.com:([A-Za-z0-9][A-Za-z0-9-_.]*)/([A-Za-z0-9][A-Za-z0-9-_.]*?)(?:\.git)?$"
+)
+
+
+def normalize_repo_url(repo_url: str) -> tuple[str, str]:
+    """Validate + normalise a GitHub URL into the canonical
+    ``https://github.com/{owner}/{name}`` form.
+
+    Returns the (canonical_url, "{owner}/{name}") tuple.
+    Raises InvalidRepoUrlError on a mismatch.
+    """
+    candidate = repo_url.strip()
+    if not candidate:
+        raise InvalidRepoUrlError("repo_url is empty")
+    m = _GITHUB_HTTPS_RE.match(candidate) or _GITHUB_SSH_RE.match(candidate)
+    if m is None:
+        raise InvalidRepoUrlError(
+            "repo_url must look like https://github.com/{owner}/{name} or "
+            "git@github.com:{owner}/{name}.git"
+        )
+    owner, name = m.group(1), m.group(2)
+    return f"https://github.com/{owner}/{name}", f"{owner}/{name}"
+
+
+def _is_repo_linkable(obj_type: ObjectType | str | None) -> bool:
+    """True iff the given object type may carry a repo_url."""
+    if obj_type is None:
+        return False
+    value = getattr(obj_type, "value", obj_type)
+    try:
+        enum_val = ObjectType(value)
+    except ValueError:
+        return False
+    return enum_val in REPO_LINKABLE_TYPES
 
 
 async def validate_technology_ids(
@@ -74,6 +134,23 @@ async def get_object(db: AsyncSession, object_id: uuid.UUID) -> ModelObject | No
     return result.scalar_one_or_none()
 
 
+class DuplicateObjectError(ValueError):
+    """Raised by :func:`create_object` when a live (non-draft) object with the
+    same ``(workspace_id, type, lower(name))`` already exists.
+
+    Carries the existing :class:`ModelObject` so callers (e.g. the agent's
+    ``create_object`` tool wrapper) can return its id instead of failing the
+    whole turn — the right behaviour for "reuse, don't duplicate" semantics.
+    """
+
+    def __init__(self, existing: ModelObject) -> None:
+        super().__init__(
+            f"object already exists: name={existing.name!r} type={getattr(existing.type, 'value', existing.type)!r} "
+            f"id={existing.id} (use that id with place_on_diagram instead)"
+        )
+        self.existing = existing
+
+
 async def create_object(
     db: AsyncSession,
     data: ObjectCreate,
@@ -85,6 +162,43 @@ async def create_object(
     from_draft_id: uuid.UUID | None = None,
 ) -> ModelObject:
     await validate_technology_ids(db, workspace_id, data.technology_ids)
+
+    # Repo-link validation. Reject links on non-Container/System types up
+    # front so the API surface returns 422 with a clear message.
+    repo_url_normalized: str | None = None
+    if data.repo_url is not None and data.repo_url.strip():
+        if not _is_repo_linkable(data.type):
+            raise RepoLinkNotAllowedError(
+                "repo_url can only be set on System or Container "
+                "(app/store) objects"
+            )
+        repo_url_normalized, _ = normalize_repo_url(data.repo_url)
+    elif data.repo_branch is not None and data.repo_branch.strip():
+        # A branch without a URL is a config error — surface it.
+        raise InvalidRepoUrlError(
+            "repo_branch requires repo_url to be set"
+        )
+
+    # Refuse silent duplicates on the live (non-draft) model. Drafts are
+    # private workspaces; same-name copies there are intentional. For live
+    # creates we look for ``(workspace_id, type, lower(name))`` and raise
+    # :class:`DuplicateObjectError` carrying the existing row so the caller
+    # can reuse it.
+    if draft_id is None and data.name and data.name.strip():
+        type_value = getattr(data.type, "value", data.type)
+        from sqlalchemy import func as _func
+
+        existing_q = select(ModelObject).where(
+            ModelObject.draft_id.is_(None),
+            ModelObject.type == type_value,
+            _func.lower(ModelObject.name) == data.name.strip().lower(),
+        )
+        if workspace_id is not None:
+            existing_q = existing_q.where(ModelObject.workspace_id == workspace_id)
+        existing_row = (await db.execute(existing_q.limit(1))).scalar_one_or_none()
+        if existing_row is not None:
+            raise DuplicateObjectError(existing_row)
+
     obj = ModelObject(
         name=data.name,
         type=data.type,
@@ -98,6 +212,8 @@ async def create_object(
         owner_team=data.owner_team,
         external_links=data.external_links,
         metadata_=data.metadata_,
+        repo_url=repo_url_normalized,
+        repo_branch=(data.repo_branch.strip() or None) if data.repo_branch else None,
         draft_id=draft_id,
         workspace_id=workspace_id,
     )
@@ -150,14 +266,51 @@ async def update_object(
 ) -> ModelObject:
     if "technology_ids" in data.model_fields_set:
         await validate_technology_ids(db, obj.workspace_id, data.technology_ids)
-    # Two snapshot pairs: activity log keeps metadata out of audit diffs,
-    # undo needs metadata to detect metadata-only edits and round-trip them.
-    before_for_log = activity_service.snapshot(obj)
-    before_for_undo = activity_service.snapshot(obj, include_metadata=True)
+
+    # Compute the effective object type post-update — if the caller is
+    # changing both type and repo_url in the same request, the new type
+    # is what matters for the eligibility check.
+    effective_type = data.type if "type" in data.model_fields_set else obj.type
     update_data = data.model_dump(exclude_unset=True)
     # Strip undo-context fields that are not object attributes
     update_data.pop("from_diagram_id", None)
     update_data.pop("from_draft_id", None)
+
+    if "repo_url" in update_data:
+        raw = update_data["repo_url"]
+        if raw is not None and str(raw).strip():
+            if not _is_repo_linkable(effective_type):
+                raise RepoLinkNotAllowedError(
+                    "repo_url can only be set on System or Container "
+                    "(app/store) objects"
+                )
+            update_data["repo_url"], _ = normalize_repo_url(str(raw))
+        else:
+            # Empty / None clears the link AND the branch (a branch without
+            # a URL is meaningless).
+            update_data["repo_url"] = None
+            if "repo_branch" not in update_data:
+                update_data["repo_branch"] = None
+
+    if "repo_branch" in update_data and update_data["repo_branch"] is not None:
+        cleaned = str(update_data["repo_branch"]).strip()
+        update_data["repo_branch"] = cleaned or None
+        # Verify there's actually a URL after this update — either set in
+        # this request or already on the row.
+        effective_url = (
+            update_data.get("repo_url", obj.repo_url)
+            if "repo_url" in update_data
+            else obj.repo_url
+        )
+        if update_data["repo_branch"] is not None and not effective_url:
+            raise InvalidRepoUrlError(
+                "repo_branch requires repo_url to be set"
+            )
+
+    # Two snapshot pairs: activity log keeps metadata out of audit diffs,
+    # undo needs metadata to detect metadata-only edits and round-trip them.
+    before_for_log = activity_service.snapshot(obj)
+    before_for_undo = activity_service.snapshot(obj, include_metadata=True)
     for field, value in update_data.items():
         if field == "metadata_" and value and obj.metadata_:
             # Merge metadata instead of replacing

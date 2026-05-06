@@ -3,9 +3,15 @@ import uuid
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.runtime import ActorRef
 from app.api.deps import get_current_workspace_id, get_optional_user
+from app.api.v1.agents import get_current_actor
 from app.core.database import get_db
 from app.models.activity_log import ActivityTargetType
+from app.realtime.manager import (
+    fire_and_forget_publish,
+    fire_and_forget_publish_diagram,
+)
 from app.schemas.activity import ActivityLogResponse
 from app.schemas.diagram import DiagramResponse
 from app.schemas.object import ObjectCreate, ObjectResponse, ObjectUpdate
@@ -15,10 +21,6 @@ from app.services import (
     diagram_service,
     object_service,
     workspace_service,
-)
-from app.realtime.manager import (
-    fire_and_forget_publish,
-    fire_and_forget_publish_diagram,
 )
 from app.services.webhook_service import fire_and_forget_emit
 
@@ -91,12 +93,35 @@ async def create_object(
             )
             if ws is not None:
                 workspace_id = ws.id
-    obj = await object_service.create_object(
-        db, data, draft_id=draft_id, workspace_id=workspace_id,
-        actor_user=current_user,
-        from_diagram_id=data.from_diagram_id,
-        from_draft_id=data.from_draft_id,
-    )
+    try:
+        obj = await object_service.create_object(
+            db, data, draft_id=draft_id, workspace_id=workspace_id,
+            actor_user=current_user,
+            from_diagram_id=data.from_diagram_id,
+            from_draft_id=data.from_draft_id,
+        )
+    except object_service.DuplicateObjectError as exc:
+        existing = exc.existing
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "duplicate_object",
+                "message": str(exc),
+                "existing_id": str(existing.id),
+                "existing_name": existing.name,
+                "type": getattr(existing.type, "value", existing.type),
+            },
+        ) from exc
+    except object_service.RepoLinkNotAllowedError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "repo_link_not_allowed", "message": str(exc)},
+        ) from exc
+    except object_service.InvalidRepoUrlError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "invalid_repo_url", "message": str(exc)},
+        ) from exc
     response = ObjectResponse.from_model(obj)
     if draft_id is None:
         body = response.model_dump(mode="json")
@@ -125,12 +150,23 @@ async def update_object(
     obj = await object_service.get_object(db, object_id)
     if not obj:
         raise HTTPException(status_code=404, detail="Object not found")
-    obj = await object_service.update_object(
-        db, obj, data,
-        actor_user=current_user,
-        from_diagram_id=data.from_diagram_id,
-        from_draft_id=data.from_draft_id,
-    )
+    try:
+        obj = await object_service.update_object(
+            db, obj, data,
+            actor_user=current_user,
+            from_diagram_id=data.from_diagram_id,
+            from_draft_id=data.from_draft_id,
+        )
+    except object_service.RepoLinkNotAllowedError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "repo_link_not_allowed", "message": str(exc)},
+        ) from exc
+    except object_service.InvalidRepoUrlError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "invalid_repo_url", "message": str(exc)},
+        ) from exc
     response = ObjectResponse.from_model(obj)
     if obj.draft_id is None:
         body = response.model_dump(mode="json")
@@ -217,9 +253,11 @@ async def get_object_history(
     return [ActivityLogResponse.model_validate(e) for e in entries]
 
 
-@router.post("/{object_id}/insights")
+@router.get("/{object_id}/insights")
 async def get_object_insights(
-    object_id: uuid.UUID, db: AsyncSession = Depends(get_db)
+    object_id: uuid.UUID,
+    actor: ActorRef = Depends(get_current_actor),
+    db: AsyncSession = Depends(get_db),
 ):
     obj = await object_service.get_object(db, object_id)
     if not obj:
@@ -228,12 +266,11 @@ async def get_object_insights(
         raise HTTPException(
             status_code=503,
             detail=(
-                "AI features are disabled. Set ANTHROPIC_API_KEY in the backend "
-                "environment to enable Get insights."
+                "AI features are disabled. The diagram-explainer agent is not registered."
             ),
         )
     try:
-        return await ai_service.get_insights(db, object_id)
+        return await ai_service.get_insights(db, object_id, actor=actor)
     except Exception as e:  # noqa: BLE001 — surface upstream errors to the UI
         raise HTTPException(status_code=502, detail=f"AI call failed: {e}") from e
 

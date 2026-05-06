@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import { useAuthStore } from '../../stores/auth-store'
-import { useDrafts, useMe, useMyInvites } from '../../hooks/use-api'
+import { useDrafts, useMe, useMyInvites, useWorkspaces } from '../../hooks/use-api'
+import { useWorkspaceStore } from '../../stores/workspace-store'
 import { NotificationsBell } from './NotificationsBell'
 import { WorkspaceSwitcher } from './WorkspaceSwitcher'
 import { Avatar } from '../ui/Avatar'
@@ -109,6 +110,14 @@ const SettingsIcon = () => (
   </svg>
 )
 
+const AgentSettingsIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <rect x="4" y="6" width="16" height="12" rx="2"/>
+    <path d="M9 10h.01M15 10h.01M9 14h6"/>
+    <path d="M12 2v4M2 12h2M20 12h2"/>
+  </svg>
+)
+
 const SignOutIcon = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
     <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
@@ -140,6 +149,10 @@ const TEAM_ITEMS: NavItemDef[] = [
 
 const SETTINGS_ITEM: NavItemDef = {
   label: 'Settings', path: '/settings', icon: <SettingsIcon />,
+}
+
+const AGENT_SETTINGS_ITEM: NavItemDef = {
+  label: 'Agent settings', path: '/agents-settings', icon: <AgentSettingsIcon />,
 }
 
 // ─── NavRow ─────────────────────────────────────────────────────────────────
@@ -215,6 +228,13 @@ export function AppSidebar() {
   const { data: drafts = [] } = useDrafts()
   const openDraftCount = drafts.filter((d) => d.status === 'open').length
 
+  // Agent settings is admin-only — hide the entry for non-admins so the
+  // sidebar stays uncluttered (the page itself also gates).
+  const wsId = useWorkspaceStore((s) => s.currentWorkspaceId)
+  const { data: workspaces = [] } = useWorkspaces()
+  const currentWs = workspaces.find((w) => w.id === wsId) ?? null
+  const isAdmin = currentWs?.role === 'owner' || currentWs?.role === 'admin'
+
   return (
     <div className="w-[240px] flex-shrink-0 border-r border-border-base bg-panel flex flex-col h-full">
 
@@ -280,6 +300,7 @@ export function AppSidebar() {
         {/* Settings (standalone) */}
         <div className="pt-5">
           <NavRow item={SETTINGS_ITEM} />
+          {isAdmin && <NavRow item={AGENT_SETTINGS_ITEM} />}
         </div>
       </nav>
 

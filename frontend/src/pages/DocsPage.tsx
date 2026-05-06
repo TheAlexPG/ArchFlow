@@ -10,6 +10,9 @@ import { TechnologiesSection } from './docs/sections/TechnologiesSection'
 import { WebhooksSection } from './docs/sections/WebhooksSection'
 import { RealtimeSection } from './docs/sections/RealtimeSection'
 import { MiscSection } from './docs/sections/MiscSection'
+import { AgentsSection } from './docs/sections/AgentsSection'
+import { AgentsRecommendedWorkflowSection } from './docs/sections/AgentsRecommendedWorkflowSection'
+import { AgentsA2ASection } from './docs/sections/AgentsA2ASection'
 
 const TOC: TocEntry[] = [
   { id: 'intro', label: 'Overview' },
@@ -23,6 +26,9 @@ const TOC: TocEntry[] = [
   { id: 'webhooks', label: 'Webhooks' },
   { id: 'realtime', label: 'Realtime (WS)' },
   { id: 'misc', label: 'Other endpoints' },
+  { id: 'agents', label: 'AI Agents' },
+  { id: 'agents-recommended-workflow', label: 'Agent workflow' },
+  { id: 'agents-a2a', label: 'A2A API' },
 ]
 
 export function DocsPage() {
@@ -39,6 +45,9 @@ export function DocsPage() {
       <WebhooksSection />
       <RealtimeSection />
       <MiscSection />
+      <AgentsSection />
+      <AgentsRecommendedWorkflowSection />
+      <AgentsA2ASection />
     </DocsLayout>
   )
 }

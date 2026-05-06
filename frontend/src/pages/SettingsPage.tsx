@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { AppSidebar } from '../components/nav/AppSidebar'
 import { PageToolbar } from '../components/nav/PageToolbar'
+import { GitHubTokenSection } from '../components/settings/GitHubTokenSection'
 import {
   useApiKeys,
   useCreateApiKey,
@@ -97,6 +98,8 @@ export function SettingsPage() {
             </table>
           </div>
         </section>
+
+        <GitHubTokenSection />
 
         <WebhooksSection />
         </div>

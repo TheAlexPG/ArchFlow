@@ -1,7 +1,35 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+# ---------------------------------------------------------------------------
+# Allowed scope / permission tokens for API keys.
+#
+# Legacy coarse tokens ("read", "write", "admin") are preserved for backward
+# compatibility with keys created before the agents-scope epic.
+#
+# New agent-specific tokens map to the scope hierarchy:
+#   agents:read < agents:invoke < agents:write < agents:admin
+#
+# Wildcard "*" grants all permissions; reserved for internal / service use.
+# ---------------------------------------------------------------------------
+
+ALLOWED_SCOPES: frozenset[str] = frozenset(
+    {
+        # Wildcard — satisfies any scope check.
+        "*",
+        # Legacy coarse tokens (preserved for backward compat).
+        "read",
+        "write",
+        "admin",
+        # Agent-specific scope hierarchy (§2.10).
+        "agents:read",
+        "agents:invoke",
+        "agents:write",
+        "agents:admin",
+    }
+)
 
 
 class ApiKeyCreate(BaseModel):
@@ -9,6 +37,14 @@ class ApiKeyCreate(BaseModel):
     permissions: list[str] = Field(default_factory=lambda: ["read"])
     # Optional lifetime in days. None = never expires.
     expires_in_days: int | None = Field(default=None, ge=1, le=3650)
+
+    @field_validator("permissions")
+    @classmethod
+    def _validate_permissions(cls, v: list[str]) -> list[str]:
+        invalid = [s for s in v if s not in ALLOWED_SCOPES]
+        if invalid:
+            raise ValueError(f"unknown scopes: {invalid}")
+        return v
 
 
 class ApiKeyResponse(BaseModel):

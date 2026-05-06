@@ -19,6 +19,10 @@ class ObjectCreate(BaseModel):
     owner_team: str | None = None
     external_links: dict | None = None
     metadata_: dict | None = Field(None, alias="metadata")
+    # GitHub link — see object_service.normalize_and_validate_repo_url for
+    # accepted formats. Only valid on System/Container types.
+    repo_url: str | None = None
+    repo_branch: str | None = None
     from_diagram_id: uuid.UUID | None = None  # source diagram for per-user undo
     from_draft_id: uuid.UUID | None = None
 
@@ -38,6 +42,8 @@ class ObjectUpdate(BaseModel):
     owner_team: str | None = None
     external_links: dict | None = None
     metadata_: dict | None = Field(None, alias="metadata")
+    repo_url: str | None = None
+    repo_branch: str | None = None
     from_diagram_id: uuid.UUID | None = None  # source diagram for per-user undo
     from_draft_id: uuid.UUID | None = None
 
@@ -59,6 +65,8 @@ class ObjectResponse(BaseModel):
     owner_team: str | None = None
     external_links: dict | None = None
     metadata: dict | None = None
+    repo_url: str | None = None
+    repo_branch: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -81,6 +89,8 @@ class ObjectResponse(BaseModel):
             owner_team=obj.owner_team,
             external_links=obj.external_links,
             metadata=obj.metadata_,
+            repo_url=obj.repo_url,
+            repo_branch=obj.repo_branch,
             created_at=obj.created_at,
             updated_at=obj.updated_at,
         )

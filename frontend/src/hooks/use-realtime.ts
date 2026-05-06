@@ -1,8 +1,14 @@
 import { useEffect, useRef, useCallback, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { refreshAccessToken } from '../lib/api-client'
 import { useAuthStore } from '../stores/auth-store'
 import { useWorkspaceStore } from '../stores/workspace-store'
 import { ctxKey, useUndoStore } from '../stores/undo-store'
+
+// Max reconnect attempts before we stop hammering. Refreshing the token is
+// attempted once on the first failure (covers the common "stale tab whose
+// access token expired" case) — if the new token still fails, we bail.
+const WS_MAX_RECONNECT_ATTEMPTS = 5
 
 // ── Inline types ──────────────────────────────────────────────────────────────
 
@@ -172,9 +178,14 @@ export function useDiagramSocket(diagramId: string | null): DiagramSocketResult 
 
     let backoff = 500
     let destroyed = false
+    let attempts = 0
+    let refreshTried = false
+    let opened = false
 
     function connect() {
       if (destroyed) return
+      opened = false
+      attempts += 1
       const ws = new WebSocket(wsUrl(`/api/v1/ws/diagrams/${diagramId}`, token!))
       wsRef.current = ws
 
@@ -354,11 +365,24 @@ export function useDiagramSocket(diagramId: string | null): DiagramSocketResult 
       ws.onopen = () => {
         // Reset backoff on successful connection
         backoff = 500
+        attempts = 0
+        opened = true
       }
 
       ws.onclose = () => {
         if (destroyed) return
-        reconnectTimer.current = setTimeout(() => {
+        if (attempts >= WS_MAX_RECONNECT_ATTEMPTS) return
+        reconnectTimer.current = setTimeout(async () => {
+          // First failure without ever opening → most likely auth: try refresh
+          // once. The store update propagates through useAuthStore and triggers
+          // the parent useEffect to re-run with the fresh token.
+          if (!opened && !refreshTried) {
+            refreshTried = true
+            const fresh = await refreshAccessToken()
+            if (fresh) return // useEffect rerun handles reconnect
+            destroyed = true // refresh failed — give up
+            return
+          }
           backoff = Math.min(backoff * 2, 10000)
           connect()
         }, backoff)
@@ -429,9 +453,14 @@ export function useUserSocket(): void {
 
     let backoff = 500
     let destroyed = false
+    let attempts = 0
+    let refreshTried = false
+    let opened = false
 
     function connect() {
       if (destroyed) return
+      opened = false
+      attempts += 1
       const ws = new WebSocket(wsUrl('/api/v1/ws/me', token!))
       wsRef.current = ws
 
@@ -475,11 +504,21 @@ export function useUserSocket(): void {
 
       ws.onopen = () => {
         backoff = 500
+        attempts = 0
+        opened = true
       }
 
       ws.onclose = () => {
         if (destroyed) return
-        reconnectTimer.current = setTimeout(() => {
+        if (attempts >= WS_MAX_RECONNECT_ATTEMPTS) return
+        reconnectTimer.current = setTimeout(async () => {
+          if (!opened && !refreshTried) {
+            refreshTried = true
+            const fresh = await refreshAccessToken()
+            if (fresh) return
+            destroyed = true
+            return
+          }
           backoff = Math.min(backoff * 2, 10000)
           connect()
         }, backoff)
@@ -520,9 +559,14 @@ export function useWorkspaceSocket(): void {
 
     let backoff = 500
     let destroyed = false
+    let attempts = 0
+    let refreshTried = false
+    let opened = false
 
     function connect() {
       if (destroyed) return
+      opened = false
+      attempts += 1
       const ws = new WebSocket(
         wsUrl(`/api/v1/ws/workspace/${workspaceId}`, token!),
       )
@@ -679,11 +723,21 @@ export function useWorkspaceSocket(): void {
 
       ws.onopen = () => {
         backoff = 500
+        attempts = 0
+        opened = true
       }
 
       ws.onclose = () => {
         if (destroyed) return
-        reconnectTimer.current = setTimeout(() => {
+        if (attempts >= WS_MAX_RECONNECT_ATTEMPTS) return
+        reconnectTimer.current = setTimeout(async () => {
+          if (!opened && !refreshTried) {
+            refreshTried = true
+            const fresh = await refreshAccessToken()
+            if (fresh) return
+            destroyed = true
+            return
+          }
           backoff = Math.min(backoff * 2, 10000)
           connect()
         }, backoff)

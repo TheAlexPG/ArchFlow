@@ -14,6 +14,7 @@ class ActivityTargetType(str, enum.Enum):
     CONNECTION = "connection"
     DIAGRAM = "diagram"
     TECHNOLOGY = "technology"
+    WORKSPACE = "workspace"
 
 
 class ActivityAction(str, enum.Enum):
