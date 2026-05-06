@@ -67,9 +67,10 @@ jobs:
           KEY=$(uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
           echo "AGENTS_SECRET_KEY=$KEY" >> "$GITHUB_ENV"
 
-      - name: Apply migrations
-        run: uv run alembic upgrade head
-
+      # No explicit `alembic upgrade` step: backend/conftest.py auto-derives
+      # an `archflow_test` sibling DB, creates it if missing, and migrates
+      # it on session start. This is the same code path that protects the
+      # local dev DB from being truncated by accident.
       - name: Unit tests
         run: uv run pytest tests/ -v
 
