@@ -866,8 +866,8 @@ async def _resolve_active_draft_id(
       1. ``chat_context.draft_id`` explicit → verify workspace ownership and
          return it immediately (``requires_choice=None``).
       2. ``mode == 'read_only'`` → drafts irrelevant; return ``(None, None)``.
-      3. ``live_only`` policy → no draft; return ``(None, None)``.
-      4. ``drafts_only`` policy + diagram context:
+      3. ``live`` policy → no draft; return ``(None, None)``.
+      4. ``drafts`` policy + diagram context:
            * 0 open drafts → suspend with ``requires_choice`` (create / cancel).
            * 1 open draft  → auto-pick it; return ``(draft_id, None)``.
            * 2+ open drafts → suspend with ``requires_choice`` listing choices.
@@ -906,8 +906,14 @@ async def _resolve_active_draft_id(
     if mode == "read_only":
         return None, None
 
-    # ── Branch 3: live_only policy ───────────────────────────────────────────
-    if agent_edits_policy == "live_only":
+    # Normalise legacy values so callers (tests, golden runtime, older DB
+    # rows) that still pass ``"live_only"`` / ``"drafts_only"`` keep working.
+    from app.services.agent_settings_service import normalise_edits_policy
+
+    agent_edits_policy = normalise_edits_policy(agent_edits_policy)
+
+    # ── Branch 3: live policy (no draft) ─────────────────────────────────────
+    if agent_edits_policy == "live":
         return None, None
 
     # For branches 4 & 5 we need a diagram context with an id.
@@ -915,8 +921,8 @@ async def _resolve_active_draft_id(
         chat_context.kind == "diagram" and chat_context.id is not None
     )
 
-    # ── Branch 4: drafts_only ────────────────────────────────────────────────
-    if agent_edits_policy == "drafts_only":
+    # ── Branch 4: drafts policy ──────────────────────────────────────────────
+    if agent_edits_policy == "drafts":
         if not has_diagram_context:
             return None, None
 
@@ -1004,7 +1010,8 @@ async def _resolve_active_draft_id(
         }
         return None, payload
 
-    # Fallback for unknown policy values → treat as live_only.
+    # Unknown / fallthrough → behave like 'live' (don't push the user into
+    # a draft they didn't ask for).
     return None, None
 
 

@@ -22,8 +22,11 @@ frontend/src/api/generated/
 # Same exception for the backend eval helpers (judge, agent_helpers, etc.) —
 # the global `lib/` rule was hiding the entire `backend/evals/lib/` package
 # from git, which then broke CI's eval suite with ModuleNotFoundError.
+# The `__pycache__` re-ignore below stops the wildcard exception from
+# accidentally tracking compiled bytecode.
 !backend/evals/lib/
 !backend/evals/lib/**
+backend/evals/lib/**/__pycache__/
 
 # Environment
 .env

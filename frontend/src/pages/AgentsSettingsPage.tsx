@@ -693,9 +693,21 @@ const EDITS_POLICY_OPTIONS: {
   label: string
   hint: string
 }[] = [
-  { value: 'live_only', label: 'live_only', hint: 'Apply edits directly to the live model' },
-  { value: 'drafts_only', label: 'drafts_only', hint: 'Always create drafts; never touch live' },
-  { value: 'ask', label: 'ask', hint: 'Ask each time before applying' },
+  {
+    value: 'live',
+    label: 'Live',
+    hint: 'Apply edits directly to the live diagram (default).',
+  },
+  {
+    value: 'drafts',
+    label: 'Drafts',
+    hint: 'Always edit inside a draft; never touch live.',
+  },
+  {
+    value: 'ask',
+    label: 'Ask',
+    hint: 'Ask before each edit session whether to use a draft or live.',
+  },
 ]
 
 // ─── Layout primitives ──────────────────────────────────────────────────────

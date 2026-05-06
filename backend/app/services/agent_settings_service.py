@@ -26,6 +26,43 @@ from app.models.workspace_agent_setting import WorkspaceAgentSetting
 from app.services import secret_service
 
 # ---------------------------------------------------------------------------
+# Edits-policy values + legacy aliases
+# ---------------------------------------------------------------------------
+#
+# Canonical values: ``"live"``, ``"drafts"``, ``"ask"``.
+# Legacy aliases: ``"live_only"`` → ``"live"``, ``"drafts_only"`` → ``"drafts"``
+# (kept so existing rows in ``workspace_agent_setting`` keep working without
+# a data migration). Anything else falls back to the default below.
+
+EDITS_POLICY_LIVE = "live"
+EDITS_POLICY_DRAFTS = "drafts"
+EDITS_POLICY_ASK = "ask"
+EDITS_POLICY_DEFAULT = EDITS_POLICY_LIVE
+_EDITS_POLICY_ALIASES: dict[str, str] = {
+    "live_only": EDITS_POLICY_LIVE,
+    "drafts_only": EDITS_POLICY_DRAFTS,
+}
+_EDITS_POLICY_VALID = {EDITS_POLICY_LIVE, EDITS_POLICY_DRAFTS, EDITS_POLICY_ASK}
+
+
+def normalise_edits_policy(raw: str | None) -> str:
+    """Map any legacy / unknown value to a canonical policy string.
+
+    >>> normalise_edits_policy("live_only")
+    'live'
+    >>> normalise_edits_policy("drafts")
+    'drafts'
+    >>> normalise_edits_policy(None)
+    'live'
+    """
+    if not raw:
+        return EDITS_POLICY_DEFAULT
+    raw = raw.strip()
+    raw = _EDITS_POLICY_ALIASES.get(raw, raw)
+    return raw if raw in _EDITS_POLICY_VALID else EDITS_POLICY_DEFAULT
+
+
+# ---------------------------------------------------------------------------
 # Per-agent defaults for known builtin agents (see spec §3 max_steps + models)
 # ---------------------------------------------------------------------------
 
@@ -88,7 +125,9 @@ class ResolvedAgentSettings:
 
     # Privacy / external
     analytics_consent: str = "full"  # 'off' | 'errors_only' | 'full'
-    agent_edits_policy: str = "ask"  # 'live_only' | 'drafts_only' | 'ask'
+    # 'live' | 'drafts' | 'ask'. Legacy values 'live_only' / 'drafts_only'
+    # are accepted on read and normalised by ``normalise_edits_policy``.
+    agent_edits_policy: str = "live"
 
     def litellm_api_key(self) -> str | None:
         """Decrypt and return the LLM API key, or None if not configured."""
@@ -372,5 +411,10 @@ async def resolve_for_agent(
             ctx = None
         if ctx is not None and ctx > 0:
             resolved.litellm_context_window = ctx
+
+    # Normalise legacy edits-policy values from rows persisted before the
+    # rename. Done here (post-apply) so both global and per-agent rows
+    # benefit, and the runtime never sees ``"live_only"`` / ``"drafts_only"``.
+    resolved.agent_edits_policy = normalise_edits_policy(resolved.agent_edits_policy)
 
     return resolved

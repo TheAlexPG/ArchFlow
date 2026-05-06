@@ -41,7 +41,16 @@ export interface ModelPricing {
 }
 
 export type AnalyticsConsent = 'off' | 'errors_only' | 'full'
-export type AgentEditsPolicy = 'live_only' | 'drafts_only' | 'ask'
+export type AgentEditsPolicy = 'live' | 'drafts' | 'ask'
+
+/** Map any legacy value coming back from older backend rows to the
+ *  current canonical set. Safe to call on already-canonical values. */
+export function normaliseEditsPolicy(raw: string | null | undefined): AgentEditsPolicy {
+  if (raw === 'live_only') return 'live'
+  if (raw === 'drafts_only') return 'drafts'
+  if (raw === 'live' || raw === 'drafts' || raw === 'ask') return raw
+  return 'live'
+}
 
 export interface AgentSettings {
   litellm: LLMSettings
@@ -93,7 +102,13 @@ export function useAgentsSettings(opts?: { enabled?: boolean }) {
     queryKey: KEY,
     queryFn: async () => {
       const { data } = await api.get<AgentSettings>('/agents/settings')
-      return data
+      // Normalise legacy edits-policy values from rows persisted before the
+      // rename (live_only → live, drafts_only → drafts) so UI components
+      // never see the old strings.
+      return {
+        ...data,
+        agent_edits_policy: normaliseEditsPolicy(data.agent_edits_policy),
+      } as AgentSettings
     },
     enabled: opts?.enabled ?? true,
     // Settings drift slowly and the page is workspace-admin-only — cache
