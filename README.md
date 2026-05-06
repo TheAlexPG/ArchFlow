@@ -255,20 +255,29 @@ DATABASE_URL=postgresql+asyncpg://archflow:archflow@localhost:5432/archflow
 JWT_SECRET=change-me-in-production
 BACKEND_CORS_ORIGINS=http://localhost:5173
 
-# Required to enable the AI agents — encrypts workspace LLM keys / Langfuse keys at rest.
-# Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-AGENTS_SECRET_KEY=
-
 # Optional — Langfuse tracing for agent calls (per-workspace consent gates each call).
 LANGFUSE_PUBLIC_KEY=
 LANGFUSE_SECRET_KEY=
 LANGFUSE_HOST=
 ```
 
-LLM provider keys (OpenAI / Anthropic / OpenRouter / …) and the GitHub PAT used by
-the repo-researcher live **per-workspace** in the database, encrypted with
-`AGENTS_SECRET_KEY`. Configure them from the workspace Settings page — they're
-not env-level config.
+### ⚠️ Required for AI agents: `AGENTS_SECRET_KEY`
+
+If you want the AI agent features (supervisor, repo researcher, diagram explainer) to work, you **must** set `AGENTS_SECRET_KEY` in `.env`. It's the symmetric Fernet key that encrypts every workspace's stored LLM provider API key and GitHub PAT at rest.
+
+**Without it:**
+- Saving a workspace LLM key → 500 error → no agent can reach an LLM
+- Saving a GitHub PAT → 500 error → repo researcher can't read repos
+
+Generate **once per deployment** and store like any other secret:
+
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+> 🛑 **Don't rotate it after secrets are saved.** There's no automatic re-encryption — losing this key locks every workspace's LLM and GitHub credentials forever. Back it up alongside `JWT_SECRET`.
+
+LLM provider keys (OpenAI / Anthropic / OpenRouter / …) and the GitHub PAT for the repo-researcher are stored **per-workspace** in the database (encrypted by `AGENTS_SECRET_KEY`) — not in `.env`. Configure them from the workspace Settings page.
 
 ---
 
