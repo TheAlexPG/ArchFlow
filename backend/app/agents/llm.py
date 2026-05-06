@@ -100,7 +100,7 @@ class LLMClient:
         tools: list[dict] | None = None,
         tool_choice: str | dict | None = None,
         response_format: dict | None = None,
-        metadata: LLMCallMetadata,
+        metadata: LLMCallMetadata | None,
         model_override: str | None = None,
         max_tokens: int | None = None,
         temperature: float | None = None,
@@ -465,7 +465,7 @@ class LLMClient:
             return None
 
     def _build_langfuse_metadata(
-        self, call_meta: LLMCallMetadata
+        self, call_meta: LLMCallMetadata | None
     ) -> dict | None:
         """Build per-call metadata for the LiteLLM Langfuse callback.
 
@@ -474,6 +474,12 @@ class LLMClient:
         env vars at app startup by ``app/agents/tracing.py`` (task 013); this
         method only constructs the trace identifying info.
         """
+        # Some callers (e.g. the auto-title endpoint) intentionally pass no
+        # metadata — they don't belong to an agent invocation and must never
+        # show up in Langfuse. Treat that as "tracing off" to avoid an
+        # AttributeError on call_meta.analytics_consent.
+        if call_meta is None:
+            return None
         if call_meta.analytics_consent == "off":
             return None
         if not os.environ.get(_LANGFUSE_PUBLIC_KEY_ENV):
