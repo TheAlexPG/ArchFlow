@@ -249,3 +249,22 @@ def fire_and_forget_publish_diagram(
             logger.exception("ws publish failed for %s", event_type)
 
     asyncio.create_task(_go())
+
+
+def fire_and_forget_publish_user(
+    user_id: uuid.UUID | str | None, event_type: str, payload: dict[str, Any]
+) -> None:
+    """Publish to `user:{id}` — every socket the user has open across
+    tabs/devices receives the event. Used for events scoped to a single
+    user's UI state (e.g. per-user undo/redo)."""
+    if user_id is None:
+        return
+    room_id = f"user:{user_id}"
+
+    async def _go() -> None:
+        try:
+            await manager.publish(room_id, {"type": event_type, **payload})
+        except Exception:
+            logger.exception("ws publish failed for %s", event_type)
+
+    asyncio.create_task(_go())

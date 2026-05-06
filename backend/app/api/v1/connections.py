@@ -70,6 +70,7 @@ async def create_connection(
     data: ConnectionCreate,
     draft_id: uuid.UUID | None = Query(None),
     db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_optional_user),
 ):
     source = await object_service.get_object(db, data.source_id)
     if not source:
@@ -77,7 +78,12 @@ async def create_connection(
     target = await object_service.get_object(db, data.target_id)
     if not target:
         raise HTTPException(status_code=400, detail="Target object not found")
-    conn = await connection_service.create_connection(db, data, draft_id=draft_id)
+    conn = await connection_service.create_connection(
+        db, data, draft_id=draft_id,
+        actor_user=current_user,
+        from_diagram_id=data.from_diagram_id,
+        from_draft_id=data.from_draft_id,
+    )
     if draft_id is None:
         body = ConnectionResponse.model_validate(conn).model_dump(mode="json")
         fire_and_forget_emit("connection.created", body)
@@ -98,11 +104,17 @@ async def update_connection(
     connection_id: uuid.UUID,
     data: ConnectionUpdate,
     db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_optional_user),
 ):
     conn = await connection_service.get_connection(db, connection_id)
     if not conn:
         raise HTTPException(status_code=404, detail="Connection not found")
-    conn = await connection_service.update_connection(db, conn, data)
+    conn = await connection_service.update_connection(
+        db, conn, data,
+        actor_user=current_user,
+        from_diagram_id=data.from_diagram_id,
+        from_draft_id=data.from_draft_id,
+    )
     if conn.draft_id is None:
         body = ConnectionResponse.model_validate(conn).model_dump(mode="json")
         fire_and_forget_emit("connection.updated", body)
@@ -122,12 +134,20 @@ async def update_connection(
 @router.post("/{connection_id}/flip", response_model=ConnectionResponse)
 async def flip_connection(
     connection_id: uuid.UUID,
+    from_diagram_id: uuid.UUID | None = Query(None),
+    from_draft_id: uuid.UUID | None = Query(None),
     db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_optional_user),
 ):
     conn = await connection_service.get_connection(db, connection_id)
     if not conn:
         raise HTTPException(status_code=404, detail="Connection not found")
-    conn = await connection_service.flip_connection(db, conn)
+    conn = await connection_service.flip_connection(
+        db, conn,
+        actor_user=current_user,
+        from_diagram_id=from_diagram_id,
+        from_draft_id=from_draft_id,
+    )
     if conn.draft_id is None:
         body = ConnectionResponse.model_validate(conn).model_dump(mode="json")
         fire_and_forget_emit("connection.updated", body)
@@ -145,7 +165,13 @@ async def flip_connection(
 
 
 @router.delete("/{connection_id}", status_code=204)
-async def delete_connection(connection_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+async def delete_connection(
+    connection_id: uuid.UUID,
+    from_diagram_id: uuid.UUID | None = Query(None),
+    from_draft_id: uuid.UUID | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_optional_user),
+):
     conn = await connection_service.get_connection(db, connection_id)
     if not conn:
         raise HTTPException(status_code=404, detail="Connection not found")
@@ -155,7 +181,12 @@ async def delete_connection(connection_id: uuid.UUID, db: AsyncSession = Depends
     src_ws_id = getattr(src, "workspace_id", None)
     source_id = conn.source_id
     target_id = conn.target_id
-    await connection_service.delete_connection(db, conn)
+    await connection_service.delete_connection(
+        db, conn,
+        actor_user=current_user,
+        from_diagram_id=from_diagram_id,
+        from_draft_id=from_draft_id,
+    )
     if not was_draft:
         fire_and_forget_emit("connection.deleted", {"id": conn_id_str})
         fire_and_forget_publish(src_ws_id, "connection.deleted", {"id": conn_id_str})

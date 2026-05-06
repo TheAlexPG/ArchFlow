@@ -13,6 +13,7 @@ from app.schemas.diagram import (
     DiagramObjectUpdate,
     DiagramUpdate,
 )
+from app.services import activity_service
 
 
 async def get_diagram_payload(
@@ -161,7 +162,13 @@ async def get_diagrams_containing_object(
 
 
 async def add_object_to_diagram(
-    db: AsyncSession, diagram_id: uuid.UUID, data: DiagramObjectCreate
+    db: AsyncSession,
+    diagram_id: uuid.UUID,
+    data: DiagramObjectCreate,
+    *,
+    actor_user=None,
+    workspace_id: uuid.UUID | None = None,
+    from_draft_id: uuid.UUID | None = None,
 ) -> DiagramObject:
     obj = DiagramObject(
         diagram_id=diagram_id,
@@ -174,6 +181,30 @@ async def add_object_to_diagram(
     db.add(obj)
     await db.flush()
     await db.refresh(obj)
+
+    # Undo recording
+    if (
+        actor_user is not None
+        and workspace_id is not None
+    ):
+        from app.models.undo_entry import UndoAction, UndoTargetType
+        from app.services import undo_service
+
+        await undo_service.record(
+            db,
+            user_id=actor_user.id,
+            workspace_id=workspace_id,
+            diagram_id=diagram_id,
+            draft_id=from_draft_id,
+            target_type=UndoTargetType.DIAGRAM_OBJECT,
+            target_id=obj.id,
+            action=UndoAction.CREATE,
+            forward_summary=f"Added object to diagram"[:80],
+            inverse_payload={"target_id": str(obj.id)},
+            after_state=activity_service.snapshot(obj, include_metadata=True),
+            coalesce_key=f"diagram_object:{obj.id}:create",
+        )
+
     return obj
 
 
@@ -182,6 +213,10 @@ async def update_diagram_object(
     diagram_id: uuid.UUID,
     object_id: uuid.UUID,
     data: DiagramObjectUpdate,
+    *,
+    actor_user=None,
+    workspace_id: uuid.UUID | None = None,
+    from_draft_id: uuid.UUID | None = None,
 ) -> DiagramObject | None:
     result = await db.execute(
         select(DiagramObject).where(
@@ -192,16 +227,94 @@ async def update_diagram_object(
     obj = result.scalar_one_or_none()
     if not obj:
         return None
+
+    before = activity_service.snapshot(obj, include_metadata=True)
     update_data = data.model_dump(exclude_unset=True)
+    # Strip undo-context fields
+    update_data.pop("from_draft_id", None)
     for field, value in update_data.items():
         setattr(obj, field, value)
     await db.flush()
     await db.refresh(obj)
+    after = activity_service.snapshot(obj, include_metadata=True)
+
+    # Undo recording — separate coalesce keys for position vs size
+    if (
+        actor_user is not None
+        and workspace_id is not None
+    ):
+        diff = activity_service.diff_snapshots(before, after)
+        if diff:
+            from app.models.undo_entry import UndoAction, UndoTargetType
+            from app.services import undo_service
+
+            position_keys = {"position_x", "position_y"}
+            size_keys = {"width", "height"}
+            changed_keys = set(diff.keys())
+
+            if changed_keys & position_keys:
+                pos_diff = {k: diff[k] for k in diff if k in position_keys}
+                await undo_service.record(
+                    db,
+                    user_id=actor_user.id,
+                    workspace_id=workspace_id,
+                    diagram_id=diagram_id,
+                    draft_id=from_draft_id,
+                    target_type=UndoTargetType.DIAGRAM_OBJECT,
+                    target_id=obj.id,
+                    action=UndoAction.UPDATE,
+                    forward_summary=f"Moved object in diagram"[:80],
+                    inverse_payload={"before": {k: v["before"] for k, v in pos_diff.items()}},
+                    after_state={k: v["after"] for k, v in pos_diff.items()},
+                    coalesce_key=f"diagram_object:{obj.id}:position",
+                )
+
+            if changed_keys & size_keys:
+                size_diff = {k: diff[k] for k in diff if k in size_keys}
+                await undo_service.record(
+                    db,
+                    user_id=actor_user.id,
+                    workspace_id=workspace_id,
+                    diagram_id=diagram_id,
+                    draft_id=from_draft_id,
+                    target_type=UndoTargetType.DIAGRAM_OBJECT,
+                    target_id=obj.id,
+                    action=UndoAction.UPDATE,
+                    forward_summary=f"Resized object in diagram"[:80],
+                    inverse_payload={"before": {k: v["before"] for k, v in size_diff.items()}},
+                    after_state={k: v["after"] for k, v in size_diff.items()},
+                    coalesce_key=f"diagram_object:{obj.id}:size",
+                )
+
+            # Any other changed fields (unlikely, but catch-all)
+            other_diff = {k: diff[k] for k in diff if k not in position_keys | size_keys}
+            if other_diff:
+                await undo_service.record(
+                    db,
+                    user_id=actor_user.id,
+                    workspace_id=workspace_id,
+                    diagram_id=diagram_id,
+                    draft_id=from_draft_id,
+                    target_type=UndoTargetType.DIAGRAM_OBJECT,
+                    target_id=obj.id,
+                    action=UndoAction.UPDATE,
+                    forward_summary=f"Updated diagram object"[:80],
+                    inverse_payload={"before": {k: v["before"] for k, v in other_diff.items()}},
+                    after_state={k: v["after"] for k, v in other_diff.items()},
+                    coalesce_key=f"diagram_object:{obj.id}:{','.join(sorted(other_diff.keys()))}",
+                )
+
     return obj
 
 
 async def remove_object_from_diagram(
-    db: AsyncSession, diagram_id: uuid.UUID, object_id: uuid.UUID
+    db: AsyncSession,
+    diagram_id: uuid.UUID,
+    object_id: uuid.UUID,
+    *,
+    actor_user=None,
+    workspace_id: uuid.UUID | None = None,
+    from_draft_id: uuid.UUID | None = None,
 ) -> bool:
     result = await db.execute(
         select(DiagramObject).where(
@@ -212,6 +325,36 @@ async def remove_object_from_diagram(
     obj = result.scalar_one_or_none()
     if not obj:
         return False
+
+    # Capture snapshot BEFORE delete — include metadata so restore_service
+    # can reconstruct the placement on undo.
+    snapshot = activity_service.snapshot(obj, include_metadata=True)
+    do_id = obj.id
+
     await db.delete(obj)
     await db.flush()
+
+    # Undo recording
+    if (
+        actor_user is not None
+        and workspace_id is not None
+    ):
+        from app.models.undo_entry import UndoAction, UndoTargetType
+        from app.services import undo_service
+
+        await undo_service.record(
+            db,
+            user_id=actor_user.id,
+            workspace_id=workspace_id,
+            diagram_id=diagram_id,
+            draft_id=from_draft_id,
+            target_type=UndoTargetType.DIAGRAM_OBJECT,
+            target_id=do_id,
+            action=UndoAction.DELETE,
+            forward_summary=f"Removed object from diagram"[:80],
+            inverse_payload={"snapshot": snapshot, "id": str(do_id)},
+            after_state=None,
+            coalesce_key=f"diagram_object:{do_id}:delete",
+        )
+
     return True

@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '../stores/auth-store'
 import { useWorkspaceStore } from '../stores/workspace-store'
+import { ctxKey, useUndoStore } from '../stores/undo-store'
 
 // ── Inline types ──────────────────────────────────────────────────────────────
 
@@ -331,6 +332,21 @@ export function useDiagramSocket(diagramId: string | null): DiagramSocketResult 
             },
           }))
           scheduleEvict(userId)
+        } else if (type === 'diagram.refetch') {
+          // Server-side undo/redo/undo_to mutates entities directly via the
+          // _apply path and skips the per-route entity events the canvas
+          // would normally pick up. The backend fires `diagram.refetch` so
+          // every client (including the actor's own tab) drops its caches
+          // and re-reads. Multi-user collab on undo also routes through
+          // here — Bob sees Alice's undo this way.
+          const dId = (msg.diagram_id as string | undefined) ?? diagramId
+          if (dId) {
+            void queryClient.invalidateQueries({ queryKey: ['objects'] })
+            void queryClient.invalidateQueries({ queryKey: ['connections'] })
+            void queryClient.invalidateQueries({ queryKey: ['diagram-objects', dId] })
+            void queryClient.invalidateQueries({ queryKey: ['comments'] })
+            void queryClient.invalidateQueries({ queryKey: ['undo-history', dId] })
+          }
         }
         // selection frames and pong are accepted but not stored in state
       }
@@ -428,6 +444,32 @@ export function useUserSocket(): void {
         }
         if (msg.type === 'notification.new') {
           void queryClient.invalidateQueries({ queryKey: ['notifications'] })
+        } else if (msg.type === 'user.undo' || msg.type === 'user.redo') {
+          // Per-user undo events fire to `user:{id}` — this is the right
+          // socket to receive them. They keep the actor's other tabs in
+          // sync on cursor/undo/redo counts. Cache refresh for canvas
+          // entities is handled separately via `diagram.refetch` on
+          // useDiagramSocket.
+          const evt = msg as unknown as {
+            diagram_id: string
+            draft_id: string | null
+            cursor_seq: number | null
+            redo_count: number
+          }
+          useUndoStore.getState().applyUserUndoEvent(
+            ctxKey(evt.diagram_id, evt.draft_id),
+            { cursor_seq: evt.cursor_seq, redo_count: evt.redo_count },
+          )
+        } else if (msg.type === 'user.undo_to') {
+          const evt = msg as unknown as {
+            diagram_id: string
+            draft_id: string | null
+            cursor_seq: number | null
+          }
+          useUndoStore.getState().setStackInfo(
+            ctxKey(evt.diagram_id, evt.draft_id),
+            { cursorSeq: evt.cursor_seq },
+          )
         }
       }
 

@@ -329,7 +329,7 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
     const type = newObjectType
     const { x: placementX, y: placementY } = viewportCenter()
     createObject.mutate(
-      { name: name.trim(), type },
+      { name: name.trim(), type, from_diagram_id: diagramId, from_draft_id: draftId },
       {
         onSuccess: (obj) => {
           if (!diagramId) return
@@ -350,7 +350,7 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
                   obj,
                 ])
                 if (newParentId) {
-                  updateObject.mutate({ id: obj.id, parent_id: newParentId })
+                  updateObject.mutate({ id: obj.id, parent_id: newParentId, from_diagram_id: diagramId, from_draft_id: draftId })
                 }
               },
             },

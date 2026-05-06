@@ -21,19 +21,36 @@ from app.models.activity_log import ActivityAction, ActivityLog, ActivityTargetT
 _IGNORED_DIFF_FIELDS = {"id", "created_at", "updated_at", "metadata", "metadata_"}
 
 
-def _snapshot(obj: Any) -> dict:
-    """Pick the user-visible attributes off an ORM row for a change diff."""
+def _snapshot(obj: Any, *, include_metadata: bool = False) -> dict:
+    """Pick the user-visible attributes off an ORM row.
+
+    By default `metadata_` (alias `metadata`) is excluded — the activity log's
+    diff would be noisy if every metadata blob change rendered as a row.
+    Pass `include_metadata=True` from undo recording sites where the snapshot
+    must be sufficient to reconstruct the entity on undo of a delete, or to
+    detect metadata-only edits.
+    """
     if obj is None:
         return {}
+    ignored = (
+        _IGNORED_DIFF_FIELDS - {"metadata", "metadata_"}
+        if include_metadata
+        else _IGNORED_DIFF_FIELDS
+    )
+    from sqlalchemy import inspect as sa_inspect
+
     result = {}
-    for col in obj.__table__.columns:
-        # Read via the Python attribute name (`col.key`), not the SQL
-        # column name — otherwise columns renamed at mapping time (e.g.
-        # `metadata_` → SQL `metadata`) would shadow `Base.metadata`
-        # and we'd try to JSON-serialize a SQLAlchemy MetaData instance.
-        attr_name = col.key
-        sql_name = col.name
-        if attr_name in _IGNORED_DIFF_FIELDS or sql_name in _IGNORED_DIFF_FIELDS:
+    mapper = sa_inspect(type(obj))
+    for col_attr in mapper.column_attrs:
+        # col_attr.key is the *Python* attribute name (e.g. `metadata_`), which
+        # may differ from the SQL column name (e.g. `metadata`).  Always use
+        # the Python name so that `getattr(obj, attr_name)` returns the actual
+        # column value, not a shadowing class attribute (e.g. Base.metadata).
+        attr_name = col_attr.key
+        # For filtering purposes also check the SQL column name so that callers
+        # can pass either spelling in _IGNORED_DIFF_FIELDS.
+        sql_name = col_attr.columns[0].name
+        if attr_name in ignored or sql_name in ignored:
             continue
         value = getattr(obj, attr_name, None)
         result[attr_name] = _to_jsonable(value)
@@ -130,9 +147,15 @@ async def log_deleted(
     return entry
 
 
-def snapshot(obj: Any) -> dict:
-    """Public helper so callers can capture `before` state for later diffing."""
-    return _snapshot(obj)
+def snapshot(obj: Any, *, include_metadata: bool = False) -> dict:
+    """Public helper so callers can capture `before` state for later diffing.
+
+    Pass `include_metadata=True` from undo recording sites — the activity
+    log's default keeps metadata out of audit diffs (it's blob churn), but
+    undo needs the full row to reconstruct entities and detect metadata-only
+    edits.
+    """
+    return _snapshot(obj, include_metadata=include_metadata)
 
 
 async def get_history(

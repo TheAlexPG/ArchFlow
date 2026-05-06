@@ -476,7 +476,7 @@ export function DiagramPage() {
             <FilterToolbar />
             <ExportToolbar diagramId={diagramId} />
           </div>
-          {selectedEdgeId ? <EdgeSidebar diagramId={diagramId} /> : <ObjectSidebar />}
+          {selectedEdgeId ? <EdgeSidebar diagramId={diagramId} /> : <ObjectSidebar diagramId={diagramId} draftId={diagram?.draft_id ?? null} />}
         </div>
       </div>
 

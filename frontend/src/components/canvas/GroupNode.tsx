@@ -3,6 +3,7 @@ import { useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import type { C4NodeData } from './C4Node'
 import { useSaveDiagramSize, useUpdateObject } from '../../hooks/use-api'
+import { useDiagram } from '../../hooks/use-diagrams'
 import { stripHtml } from './node-utils'
 
 export function GroupNode({ data, selected }: NodeProps) {
@@ -11,6 +12,8 @@ export function GroupNode({ data, selected }: NodeProps) {
   const nodeId = useNodeId()
   const saveSize = useSaveDiagramSize()
   const updateObject = useUpdateObject()
+  const { data: diagram } = useDiagram(params.diagramId)
+  const draftId = diagram?.draft_id ?? null
 
   const [editing, setEditing] = useState(false)
   const [editValue, setEditValue] = useState(obj.name)
@@ -26,7 +29,7 @@ export function GroupNode({ data, selected }: NodeProps) {
   const commitEdit = () => {
     const trimmed = editValue.trim()
     if (trimmed && trimmed !== obj.name) {
-      updateObject.mutate({ id: obj.id, name: trimmed })
+      updateObject.mutate({ id: obj.id, name: trimmed, from_diagram_id: params.diagramId, from_draft_id: draftId })
     }
     setEditing(false)
   }
@@ -63,6 +66,7 @@ export function GroupNode({ data, selected }: NodeProps) {
               objectId: nodeId,
               width: p.width,
               height: p.height,
+              from_draft_id: draftId,
             })
           }
         }}

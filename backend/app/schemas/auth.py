@@ -26,5 +26,14 @@ class UserResponse(BaseModel):
     email: str
     name: str
     created_at: datetime
+    undo_settings: dict = {}
+
+    model_config = {"from_attributes": True}
+
+
+class UserUpdate(BaseModel):
+    """Self-update fields. Only fields that are explicitly provided are
+    written. All-optional shape; PATCH semantics."""
+    undo_settings: dict | None = None
 
     model_config = {"from_attributes": True}
