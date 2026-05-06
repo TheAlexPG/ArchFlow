@@ -37,6 +37,8 @@ export interface ModelObject {
   owner_team: string | null
   external_links: Record<string, string> | null
   metadata: Record<string, unknown> | null
+  repo_url: string | null
+  repo_branch: string | null
   created_at: string
   updated_at: string
 }
@@ -158,6 +160,8 @@ export interface ObjectCreate {
   tags?: string[] | null
   owner_team?: string | null
   metadata?: Record<string, unknown> | null
+  repo_url?: string | null
+  repo_branch?: string | null
 }
 
 export interface ObjectUpdate {
@@ -172,6 +176,8 @@ export interface ObjectUpdate {
   tags?: string[] | null
   owner_team?: string | null
   metadata?: Record<string, unknown> | null
+  repo_url?: string | null
+  repo_branch?: string | null
 }
 
 export interface ConnectionCreate {
@@ -381,11 +387,16 @@ export interface Workspace {
   created_at: string
 }
 
+export type AgentAccess = 'full' | 'read_only' | 'none'
+
 export interface WorkspaceMember {
   user_id: string
   email: string
   name: string
   role: WorkspaceRole
+  /** Controls whether AI agent features are visible to this member.
+   *  Defaults to 'full' when absent (graceful degradation for older API responses). */
+  agent_access?: AgentAccess
 }
 
 export interface WorkspaceInvite {

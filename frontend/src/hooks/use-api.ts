@@ -976,6 +976,97 @@ export function useDeleteWorkspace() {
   })
 }
 
+// ─── GitHub token + repo lookup ──────────────────────────
+
+export interface GitHubTokenStatus {
+  linked: boolean
+  github_login: string | null
+}
+
+export interface RepoLookupResult {
+  repo_url: string
+  full_name: string
+  description: string | null
+  default_branch: string | null
+  stargazers_count: number | null
+  private: boolean | null
+  html_url: string | null
+}
+
+/**
+ * Returns the workspace's GitHub-token status by calling the test endpoint
+ * with no body — the backend reports linked + login from what's stored.
+ * Owner-only on the backend; non-owners will get a 403/404 and we surface
+ * the resulting error to the UI.
+ */
+export function useGitHubTokenStatus(workspaceId: string | null) {
+  return useQuery({
+    queryKey: ['workspaces', workspaceId, 'github-token'],
+    queryFn: async () => {
+      const { data } = await api.post<GitHubTokenStatus>(
+        `/workspaces/${workspaceId}/github-token/test`,
+        {},
+      )
+      return data
+    },
+    enabled: !!workspaceId,
+  })
+}
+
+export function useSetGitHubToken(workspaceId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (token: string) => {
+      const { data } = await api.post<GitHubTokenStatus>(
+        `/workspaces/${workspaceId}/github-token`,
+        { token },
+      )
+      return data
+    },
+    onSuccess: () =>
+      qc.invalidateQueries({
+        queryKey: ['workspaces', workspaceId, 'github-token'],
+      }),
+  })
+}
+
+export function useTestGitHubToken(workspaceId: string | null) {
+  return useMutation({
+    mutationFn: async (token: string | null) => {
+      const body = token === null ? {} : { token }
+      const { data } = await api.post<GitHubTokenStatus>(
+        `/workspaces/${workspaceId}/github-token/test`,
+        body,
+      )
+      return data
+    },
+  })
+}
+
+export function useClearGitHubToken(workspaceId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async () => {
+      await api.delete(`/workspaces/${workspaceId}/github-token`)
+    },
+    onSuccess: () =>
+      qc.invalidateQueries({
+        queryKey: ['workspaces', workspaceId, 'github-token'],
+      }),
+  })
+}
+
+export function useLookupRepo() {
+  return useMutation({
+    mutationFn: async (repoUrl: string) => {
+      const { data } = await api.post<RepoLookupResult>('/repos/lookup', {
+        repo_url: repoUrl,
+      })
+      return data
+    },
+  })
+}
+
 // ─── Members + invites ────────────────────────────────────
 
 export function useWorkspaceMembers(workspaceId: string | null) {
@@ -998,6 +1089,7 @@ export function useInviteMember(workspaceId: string | null) {
       email: string
       role: WorkspaceRole
       team_ids?: string[]
+      agent_access?: import('../types/model').AgentAccess
     }) => {
       const { data } = await api.post(`/workspaces/${workspaceId}/invites`, payload)
       return data as { type: 'invite_created'; invite: WorkspaceInvite }
@@ -1077,16 +1169,97 @@ export function useDeclineMyInvite() {
 export function useUpdateMemberRole(workspaceId: string | null) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async ({ userId, role }: { userId: string; role: WorkspaceRole }) => {
+    mutationFn: async ({
+      userId,
+      role,
+      agent_access,
+    }: {
+      userId: string
+      role?: WorkspaceRole
+      agent_access?: import('../types/model').AgentAccess
+    }) => {
+      const body: Record<string, unknown> = {}
+      if (role !== undefined) body.role = role
+      if (agent_access !== undefined) body.agent_access = agent_access
       const { data } = await api.patch<WorkspaceMember>(
         `/workspaces/${workspaceId}/members/${userId}`,
-        { role },
+        body,
       )
       return data
+    },
+    onMutate: async ({ userId, role, agent_access }) => {
+      await qc.cancelQueries({ queryKey: ['workspaces', workspaceId, 'members'] })
+      const prev = qc.getQueryData<WorkspaceMember[]>([
+        'workspaces',
+        workspaceId,
+        'members',
+      ])
+      qc.setQueryData<WorkspaceMember[]>(
+        ['workspaces', workspaceId, 'members'],
+        (rows) =>
+          rows
+            ? rows.map((m) =>
+                m.user_id === userId
+                  ? {
+                      ...m,
+                      ...(role !== undefined ? { role } : {}),
+                      ...(agent_access !== undefined ? { agent_access } : {}),
+                    }
+                  : m,
+              )
+            : rows,
+      )
+      return { prev }
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.prev)
+        qc.setQueryData(['workspaces', workspaceId, 'members'], context.prev)
     },
     onSuccess: () =>
       qc.invalidateQueries({ queryKey: ['workspaces', workspaceId, 'members'] }),
   })
+}
+
+// ─── Current member agent access ─────────────────────────────────────────────
+//
+// Returns the agent_access value for the currently-authenticated user within
+// the active workspace. Defaults to 'full' while loading (graceful degradation).
+
+export function useCurrentMemberAgentAccess(): import('../types/model').AgentAccess {
+  const workspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
+  const isAuthenticated = useAuthStore((s) => !!s.accessToken)
+  const { data: me } = useQuery({
+    queryKey: ['me'],
+    queryFn: async () => {
+      const { data } = await api.get<MeResponse>('/auth/me')
+      return data
+    },
+    staleTime: 2 * 60 * 1000,
+    enabled: isAuthenticated,
+  })
+  const { data: members = [] } = useWorkspaceMembers(workspaceId)
+  const member = me ? members.find((m) => m.user_id === me.id) : undefined
+  return member?.agent_access ?? 'full'
+}
+
+// Returns the WorkspaceRole of the currently-authenticated user within the
+// active workspace. Used by the agent-chat upgrade modal to decide whether
+// to show a self-serve link to /members or to point the user at their admin.
+export function useCurrentMemberRole(): WorkspaceRole | null {
+  const workspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
+  const isAuthenticated = useAuthStore((s) => !!s.accessToken)
+  const { data: me } = useQuery({
+    queryKey: ['me'],
+    queryFn: async () => {
+      const { data } = await api.get<MeResponse>('/auth/me')
+      return data
+    },
+    staleTime: 2 * 60 * 1000,
+    enabled: isAuthenticated,
+  })
+  const { data: members = [] } = useWorkspaceMembers(workspaceId)
+  const member = me ? members.find((m) => m.user_id === me.id) : undefined
+  return member?.role ?? null
 }
 
 export function useRemoveMember(workspaceId: string | null) {

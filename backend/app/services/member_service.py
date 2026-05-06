@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.invite import WorkspaceInvite
 from app.models.user import User
-from app.models.workspace import Role, Workspace, WorkspaceMember
+from app.models.workspace import AgentAccessLevel, Role, Workspace, WorkspaceMember
 
 
 class LastOwnerError(ValueError):
@@ -37,8 +37,17 @@ async def _count_owners(db: AsyncSession, workspace_id: uuid.UUID) -> int:
 
 
 async def update_member_role(
-    db: AsyncSession, workspace_id: uuid.UUID, user_id: uuid.UUID, new_role: Role
+    db: AsyncSession,
+    workspace_id: uuid.UUID,
+    user_id: uuid.UUID,
+    new_role: Role | None,
+    agent_access: AgentAccessLevel | None = None,
 ) -> WorkspaceMember:
+    """Update role and/or agent_access for one workspace member.
+
+    Either field can be ``None`` to leave it untouched. The last-owner guard
+    still applies — demoting the only owner is refused.
+    """
     result = await db.execute(
         select(WorkspaceMember).where(
             WorkspaceMember.workspace_id == workspace_id,
@@ -49,11 +58,18 @@ async def update_member_role(
     if member is None:
         raise ValueError("Not a member of this workspace")
 
-    if member.role == Role.OWNER and new_role != Role.OWNER:
+    if (
+        new_role is not None
+        and member.role == Role.OWNER
+        and new_role != Role.OWNER
+    ):
         if await _count_owners(db, workspace_id) <= 1:
             raise LastOwnerError("Can't demote the last owner")
 
-    member.role = new_role
+    if new_role is not None:
+        member.role = new_role
+    if agent_access is not None:
+        member.agent_access = agent_access
     await db.commit()
     await db.refresh(member)
     return member

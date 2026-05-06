@@ -66,6 +66,12 @@ class ModelObject(Base, UUIDMixin, TimestampMixin):
     external_links: Mapped[dict | None] = mapped_column(JSONB, default=None)
     metadata_: Mapped[dict | None] = mapped_column("metadata", JSONB, default=None)
 
+    # GitHub repo link — only populated on System/Container (app/store) types.
+    # Service layer enforces the type constraint and normalises repo_url to
+    # the canonical https://github.com/{owner}/{name} form on write.
+    repo_url: Mapped[str | None] = mapped_column(Text, default=None)
+    repo_branch: Mapped[str | None] = mapped_column(Text, default=None)
+
     # Draft ownership — set when this row is a forked clone living inside a
     # draft. Live queries filter draft_id IS NULL by default; the fork is
     # only visible when the caller explicitly asks for its draft.

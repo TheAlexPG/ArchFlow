@@ -1,0 +1,74 @@
+[
+  {
+    "id": "preflight-denies-when-cost-exceeds-budget",
+    "description": "Pre-flight raises BudgetExhausted when projected cost > budget",
+    "turns_used": 0,
+    "cost_usd_used": "0.95",
+    "budget_usd": "1.00",
+    "estimated_next_cost": "0.10",
+    "expected_exception": "BudgetExhausted"
+  },
+  {
+    "id": "preflight-allows-when-cost-within-budget",
+    "description": "Pre-flight allows LLM call when cost is within budget",
+    "turns_used": 0,
+    "cost_usd_used": "0.50",
+    "budget_usd": "1.00",
+    "estimated_next_cost": "0.05",
+    "expected_exception": null
+  },
+  {
+    "id": "mid-execution-exhaustion",
+    "description": "Budget exhaustion mid-run (accumulated cost crosses budget after post-call accounting)",
+    "turns_used": 0,
+    "cost_usd_used": "0.96",
+    "budget_usd": "1.00",
+    "estimated_next_cost": "0.10",
+    "expected_exception": "BudgetExhausted"
+  },
+  {
+    "id": "can-delegate-per-request-scope-false",
+    "description": "can_delegate returns False when cost >= budget in per_request scope",
+    "budget_scope": "per_request",
+    "cost_usd_used": "1.00",
+    "budget_usd": "1.00",
+    "expected_can_delegate": false
+  },
+  {
+    "id": "can-delegate-per-invocation-scope-always-true",
+    "description": "can_delegate returns True in per_invocation scope even at budget",
+    "budget_scope": "per_invocation",
+    "cost_usd_used": "1.00",
+    "budget_usd": "1.00",
+    "expected_can_delegate": true
+  },
+  {
+    "id": "turn-limit-health-check-progressing-extends",
+    "description": "Health-check verdict=progressing extends active_turn_limit by turn_extension",
+    "turns_used": 10,
+    "turn_limit": 10,
+    "turn_extension": 5,
+    "health_check_verdict": "progressing",
+    "expected_exception": null,
+    "expected_active_turn_limit_after": 15
+  },
+  {
+    "id": "turn-limit-health-check-stuck-raises",
+    "description": "Health-check verdict=stuck raises TurnLimitReached",
+    "turns_used": 10,
+    "turn_limit": 10,
+    "turn_extension": 5,
+    "health_check_verdict": "stuck",
+    "expected_exception": "TurnLimitReached"
+  },
+  {
+    "id": "hard-cap-after-3-extensions",
+    "description": "After max_health_check_extensions=3 extensions, 4th turn-limit hit raises unconditionally",
+    "turns_used": 10,
+    "turn_limit": 10,
+    "health_check_count": 3,
+    "max_health_check_extensions": 3,
+    "health_check_verdict": "progressing",
+    "expected_exception": "TurnLimitReached"
+  }
+]

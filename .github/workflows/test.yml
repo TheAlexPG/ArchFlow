@@ -1,0 +1,84 @@
+name: Tests & Fast Evals
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    # Most service / scenario tests hit a real Postgres + Redis (the agent
+    # platform's encryption + per-user undo flows can't be faithfully
+    # exercised against fakes). Spin both up as job services and point the
+    # backend env at them; the `localhost` address resolves to the service
+    # via GitHub Actions' default networking.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: archflow
+          POSTGRES_PASSWORD: archflow
+          POSTGRES_DB: archflow
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U archflow -d archflow"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql+asyncpg://archflow:archflow@localhost:5432/archflow
+      DATABASE_URL_SYNC: postgresql://archflow:archflow@localhost:5432/archflow
+      REDIS_URL: redis://localhost:6379/0
+      JWT_SECRET: test-secret-not-for-production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: latest
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install deps
+        run: uv sync --frozen --extra agents --extra dev --extra evals
+
+      # Generate a throwaway Fernet key so agents code that wraps secrets
+      # at rest doesn't fail at import time. Real deployments set this in
+      # their environment; CI just needs *something* valid.
+      - name: Generate AGENTS_SECRET_KEY
+        run: |
+          KEY=$(uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+          echo "AGENTS_SECRET_KEY=$KEY" >> "$GITHUB_ENV"
+
+      # No explicit `alembic upgrade` step: backend/conftest.py auto-derives
+      # an `archflow_test` sibling DB, creates it if missing, and migrates
+      # it on session start. This is the same code path that protects the
+      # local dev DB from being truncated by accident.
+      - name: Unit tests
+        run: uv run pytest tests/ -v
+
+      # uv treats this project as a virtual workspace ("source = virtual"),
+      # which means `evals` isn't materialised in site-packages even though
+      # setuptools packages.find lists it. Put backend/ on PYTHONPATH so
+      # the eval conftest's `from evals.lib.judge import ...` resolves.
+      - name: Fast eval suite (deterministic, no LLM cost)
+        env:
+          PYTHONPATH: ${{ github.workspace }}/backend
+        run: make -C evals fast

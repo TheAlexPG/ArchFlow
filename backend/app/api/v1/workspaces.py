@@ -11,9 +11,24 @@ from app.core.database import get_db
 from app.models.user import User
 from app.models.workspace import Role, WorkspaceMember
 from app.schemas.workspace import WorkspaceResponse
-from app.services import workspace_service
+from app.services import repo_credentials_service, workspace_service
 
 router = APIRouter(prefix="/workspaces", tags=["workspaces"])
+
+
+class GitHubTokenRequest(BaseModel):
+    token: str | None = None
+
+
+class GitHubTokenStatusResponse(BaseModel):
+    linked: bool
+    github_login: str | None = None
+
+
+class GitHubTokenTestRequest(BaseModel):
+    """Optional token override — if absent, tests the stored token."""
+
+    token: str | None = None
 
 
 class WorkspaceCreateRequest(BaseModel):
@@ -132,3 +147,123 @@ async def delete_workspace(
         raise HTTPException(400, str(e)) from e
     except ValueError as e:
         raise HTTPException(404, str(e)) from e
+
+
+# ---------------------------------------------------------------------------
+# GitHub token endpoints
+# ---------------------------------------------------------------------------
+
+
+async def _ensure_workspace_membership(
+    workspace_id: UUID, user: User, db: AsyncSession
+) -> WorkspaceMember:
+    """Cheap re-check that the path workspace_id matches the caller's
+    membership. The OWNER role gate uses ``get_current_workspace`` which
+    relies on the X-Workspace-ID header — but the github-token endpoints
+    are addressed by path, so we double-check the ID matches here.
+    """
+    membership = await workspace_service.get_user_membership(
+        db, user.id, workspace_id
+    )
+    if membership is None:
+        raise HTTPException(404, "Workspace not found")
+    return membership
+
+
+def _require_owner(role: Role) -> None:
+    if role != Role.OWNER:
+        raise HTTPException(
+            403, f"Requires owner (you are {role.value})"
+        )
+
+
+async def _validate_and_extract_login(token: str) -> str | None:
+    """Helper — calls validate_token and returns the github login on success."""
+    try:
+        payload = await repo_credentials_service.validate_token(token)
+    except repo_credentials_service.GitHubServerError as e:
+        raise HTTPException(502, f"GitHub upstream error: {e}") from e
+    except repo_credentials_service.GitHubRateLimitError as e:
+        raise HTTPException(429, str(e)) from e
+    if payload is None:
+        return None
+    login = payload.get("login")
+    return str(login) if login is not None else None
+
+
+@router.post(
+    "/{workspace_id}/github-token", response_model=GitHubTokenStatusResponse
+)
+async def set_github_token(
+    workspace_id: UUID,
+    payload: GitHubTokenRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    membership = await _ensure_workspace_membership(
+        workspace_id, current_user, db
+    )
+    _require_owner(membership.role)
+    if not payload.token or not payload.token.strip():
+        raise HTTPException(
+            422,
+            detail={"error": "missing_token", "message": "token is required"},
+        )
+    login = await _validate_and_extract_login(payload.token)
+    if login is None:
+        raise HTTPException(
+            422,
+            detail={
+                "error": "invalid_token",
+                "message": "GitHub rejected this token (401)",
+            },
+        )
+    try:
+        await workspace_service.set_github_token(
+            db, workspace_id, payload.token.strip()
+        )
+    except RuntimeError as e:
+        raise HTTPException(503, str(e)) from e
+    except ValueError as e:
+        raise HTTPException(404, str(e)) from e
+    return GitHubTokenStatusResponse(linked=True, github_login=login)
+
+
+@router.delete("/{workspace_id}/github-token", status_code=204)
+async def clear_github_token(
+    workspace_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    membership = await _ensure_workspace_membership(
+        workspace_id, current_user, db
+    )
+    _require_owner(membership.role)
+    await workspace_service.clear_github_token(db, workspace_id)
+    return None
+
+
+@router.post(
+    "/{workspace_id}/github-token/test",
+    response_model=GitHubTokenStatusResponse,
+)
+async def test_github_token(
+    workspace_id: UUID,
+    payload: GitHubTokenTestRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    membership = await _ensure_workspace_membership(
+        workspace_id, current_user, db
+    )
+    _require_owner(membership.role)
+    token = (payload.token or "").strip()
+    if not token:
+        stored = await workspace_service.get_github_token(db, workspace_id)
+        if stored is None:
+            return GitHubTokenStatusResponse(linked=False, github_login=None)
+        token = stored
+    login = await _validate_and_extract_login(token)
+    if login is None:
+        return GitHubTokenStatusResponse(linked=False, github_login=None)
+    return GitHubTokenStatusResponse(linked=True, github_login=login)

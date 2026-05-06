@@ -28,6 +28,7 @@ import {
   useSaveDiagramPosition,
   useUpdateObject,
 } from '../../hooks/use-api'
+import { useFocusObjectListener, useFocusConnectionListener } from '../../lib/canvas-events'
 import { useDiagram } from '../../hooks/use-diagrams'
 import { useCanvasStore } from '../../stores/canvas-store'
 import type { ModelObject, Connection } from '../../types/model'
@@ -165,7 +166,37 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     const currentConnId = branchSteps[playingStepIdx]?.connection_id ?? null
     return { stepNumbers, currentConnId }
   }, [playingFlowId, playingStepIdx, activeBranch, flows])
-  const { setNodes, setEdges, getNodes, getEdges, screenToFlowPosition } = useReactFlow()
+  const { setNodes, setEdges, getNodes, getEdges, screenToFlowPosition, fitView } = useReactFlow()
+
+  // ── Agent chat deep-links: focus object / connection from archflow:// URIs ──
+  // `emitFocusObject` / `emitFocusConnection` are dispatched as CustomEvents on
+  // `window` by the ArchflowLink component (which lives outside the React Flow
+  // provider). We listen here and call fitView to centre the viewport.
+  useFocusObjectListener(
+    useCallback(
+      (id: string) => {
+        fitView({ nodes: [{ id }], duration: 400, padding: 0.3, maxZoom: 1 })
+      },
+      [fitView],
+    ),
+  )
+
+  useFocusConnectionListener(
+    useCallback(
+      (connId: string) => {
+        // Connections use fingerprinted edge ids ({connId}:{direction}:...).
+        // We match by the raw connId embedded in edge.data.connId.
+        const edges = getEdges()
+        const edge = edges.find(
+          (e) => ((e.data as { connId?: string })?.connId ?? e.id) === connId,
+        )
+        if (edge) {
+          fitView({ nodes: [{ id: edge.source }, { id: edge.target }], duration: 400, padding: 0.4, maxZoom: 1 })
+        }
+      },
+      [fitView, getEdges],
+    ),
+  )
 
   // Realtime collaboration: cursor sharing with other users in the same diagram.
   const { cursors, selections, presence, sendCursor, sendSelection } = useDiagramSocket(

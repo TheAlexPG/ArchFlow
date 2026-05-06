@@ -19,10 +19,47 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """Upgrade schema."""
-    pass
+    """Upgrade schema.
+
+    Mirrors ``app.models.notification.Notification`` (UUIDMixin + TimestampMixin
+    + per-user notification fields). The original revision shipped empty,
+    which only worked when the schema was bootstrapped via
+    ``Base.metadata.create_all`` outside Alembic. Restoring the real CREATE
+    so a clean ``alembic upgrade head`` builds a working schema.
+    """
+    op.create_table(
+        "notifications",
+        sa.Column("id", sa.dialects.postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column(
+            "user_id",
+            sa.dialects.postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("users.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.Column("kind", sa.String(64), nullable=False),
+        sa.Column("title", sa.String(255), nullable=False),
+        sa.Column("body", sa.Text(), nullable=True),
+        sa.Column("target_url", sa.String(512), nullable=True),
+        sa.Column("read_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
+    )
+    op.create_index(
+        "ix_notifications_user_id", "notifications", ["user_id"]
+    )
 
 
 def downgrade() -> None:
     """Downgrade schema."""
-    pass
+    op.drop_index("ix_notifications_user_id", table_name="notifications")
+    op.drop_table("notifications")

@@ -5,11 +5,15 @@ import {
   useAddObjectToDiagram,
   useCreateObject,
   useDeleteObject,
+  useMe,
+  useWorkspaceMembers,
 } from '../../hooks/use-api'
 import { useObjectDiagrams } from '../../hooks/use-diagrams'
 import { useCanvasStore } from '../../stores/canvas-store'
+import { useWorkspaceStore } from '../../stores/workspace-store'
 import type { ModelObject } from '../../types/model'
 import { InsightsModal } from './InsightsModal'
+import { openInlineExplainer, openInlineResearcher } from '../agent-chat/inline'
 
 interface ObjectContextMenuProps {
   object: ModelObject
@@ -29,6 +33,16 @@ export function ObjectContextMenu({ object, diagramId, draftId }: ObjectContextM
   const addToDiagram = useAddObjectToDiagram()
   const deleteObject = useDeleteObject()
   const { selectNode, setDependenciesFocus } = useCanvasStore()
+
+  // ── Agent access gate ─────────────────────────────────────────────────────
+  // Read the current user's agent_access from their workspace membership.
+  // Defaults to 'full' while loading or if the field is absent (graceful).
+  const workspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
+  const { data: me } = useMe()
+  const { data: members = [] } = useWorkspaceMembers(workspaceId)
+  const currentMember = me ? members.find((m) => m.user_id === me.id) : undefined
+  const agentAccess = currentMember?.agent_access ?? 'full'
+  const showAiItems = agentAccess !== 'none'
 
   // Position menu near button, flip if near edges
   useLayoutEffect(() => {
@@ -176,6 +190,27 @@ export function ObjectContextMenu({ object, diagramId, draftId }: ObjectContextM
               setOpen(false)
             }}
           />
+          {showAiItems && (
+            <>
+              <div style={{ height: 1, background: '#333', margin: '4px 0' }} />
+              <MenuItem
+                icon="🤖"
+                label="AI explain"
+                onClick={() => {
+                  if (btnRef.current) openInlineExplainer(object.id, btnRef.current)
+                  setOpen(false)
+                }}
+              />
+              <MenuItem
+                icon="🔍"
+                label="Get details"
+                onClick={() => {
+                  if (btnRef.current) openInlineResearcher(object.id, btnRef.current)
+                  setOpen(false)
+                }}
+              />
+            </>
+          )}
           <div style={{ height: 1, background: '#333', margin: '4px 0' }} />
           <MenuItem
             icon="🗑"

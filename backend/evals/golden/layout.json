@@ -1,0 +1,77 @@
+[
+  {
+    "id": "no-overlap-after-batch-layout-actors-apps",
+    "description": "3 actors + 4 apps placed via batch helpers → no overlapping bboxes",
+    "test_type": "batch_helpers",
+    "objects": [
+      {"type": "actor", "lane": "top"},
+      {"type": "actor", "lane": "top"},
+      {"type": "actor", "lane": "top"},
+      {"type": "app", "lane": "middle"},
+      {"type": "app", "lane": "middle"},
+      {"type": "app", "lane": "middle"},
+      {"type": "app", "lane": "middle"}
+    ],
+    "connections": [],
+    "diagram_level": "L2",
+    "expected_overlap_count": 0,
+    "expected_lane_violations": 0
+  },
+  {
+    "id": "grid-alignment-zero-violations",
+    "description": "All placements produced by _group_by_lane + snap_to_grid are grid-aligned",
+    "test_type": "grid_alignment",
+    "objects": [
+      {"type": "system", "lane": "middle"},
+      {"type": "actor", "lane": "top"},
+      {"type": "external_system", "lane": "middle"}
+    ],
+    "diagram_level": "L1",
+    "expected_grid_violations": 0
+  },
+  {
+    "id": "topo-order-respected-services",
+    "description": "5-service chain: topological order has A before B before C etc.",
+    "test_type": "topo_order",
+    "num_nodes": 5,
+    "connections": [[0, 1], [1, 2], [2, 3], [3, 4]],
+    "expected_topo_ordered": true
+  },
+  {
+    "id": "edge-crossings-linear-chain",
+    "description": "Linear chain A→B→C has 0 edge crossings",
+    "test_type": "edge_crossings",
+    "bboxes": [
+      {"x": 100, "y": 100, "w": 100, "h": 60},
+      {"x": 300, "y": 100, "w": 100, "h": 60},
+      {"x": 500, "y": 100, "w": 100, "h": 60}
+    ],
+    "edges": [[0, 1], [1, 2]],
+    "expected_max_crossings": 0
+  },
+  {
+    "id": "edge-crossings-x-pattern",
+    "description": "Two crossing edges (X-pattern) register exactly 1 crossing",
+    "test_type": "edge_crossings",
+    "bboxes": [
+      {"x": 100, "y": 100, "w": 80, "h": 50},
+      {"x": 400, "y": 400, "w": 80, "h": 50},
+      {"x": 100, "y": 400, "w": 80, "h": 50},
+      {"x": 400, "y": 100, "w": 80, "h": 50}
+    ],
+    "edges": [[0, 1], [2, 3]],
+    "expected_crossings": 1
+  },
+  {
+    "id": "compactness-dense-layout",
+    "description": "4 cards covering 80%+ of their bounding box → compactness >= 0.5",
+    "test_type": "compactness",
+    "bboxes": [
+      {"x": 0, "y": 0, "w": 200, "h": 100},
+      {"x": 200, "y": 0, "w": 200, "h": 100},
+      {"x": 0, "y": 100, "w": 200, "h": 100},
+      {"x": 200, "y": 100, "w": 200, "h": 100}
+    ],
+    "expected_min_compactness": 0.9
+  }
+]
