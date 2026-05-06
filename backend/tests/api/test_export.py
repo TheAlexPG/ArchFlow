@@ -262,3 +262,55 @@ async def test_export_empty_diagram(client):
     assert r.status_code == 200
     assert "C4Container" in r.text
     assert "objects: 0; connections: 0" in r.text
+
+
+async def test_export_live_diagram_excludes_draft_connections(client):
+    """Codex M1: a draft-scoped Connection that wires two live objects must
+    not appear in the live diagram's export. Without the fix in
+    diagram_service.get_diagram_payload, the connection set is built only
+    from object IDs and ignores Connection.draft_id, leaking unmerged work
+    into the live model."""
+    token = await _register(client, "draftleak")
+    ws_id = await _workspace_id(client, token)
+    auth = {"Authorization": f"Bearer {token}", "X-Workspace-ID": ws_id}
+    fixture = await _build_landscape(client, auth, ws_id)
+
+    # Fork the diagram so we have a real draft id to scope the rogue connection
+    # to (Connection.draft_id has an FK on drafts.id).
+    r = await client.post(
+        f"/api/v1/drafts/from-diagram/{fixture['diagram_id']}",
+        json={"name": "leak-feature"},
+        headers=auth,
+    )
+    assert r.status_code == 201, r.text
+    draft_id = r.json()["id"]
+
+    # Wire a draft-scoped connection between two LIVE objects on this diagram.
+    r = await client.post(
+        f"/api/v1/connections?draft_id={draft_id}",
+        json={
+            "source_id": fixture["objects"]["User"],
+            "target_id": fixture["objects"]["DB"],
+            "label": "DRAFT-ONLY-LEAK",
+        },
+        headers=auth,
+    )
+    assert r.status_code == 201, r.text
+
+    r = await client.get(
+        f"/api/v1/diagrams/{fixture['diagram_id']}/export?format=mermaid",
+        headers=auth,
+    )
+    assert r.status_code == 200, r.text
+    assert "DRAFT-ONLY-LEAK" not in r.text, (
+        "Draft-scoped connection leaked into live export"
+    )
+
+    # The same caller exporting as JSON sees connection counts that exclude
+    # the draft-scoped row.
+    r = await client.get(
+        f"/api/v1/diagrams/{fixture['diagram_id']}/export?format=json",
+        headers=auth,
+    )
+    assert r.status_code == 200
+    assert len(r.json()["connections"]) == 2

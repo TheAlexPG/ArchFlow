@@ -37,10 +37,20 @@ async def get_diagram_payload(
     if not object_ids:
         return {"placements": [], "connections": [], "tech_names": {}}
 
+    # Scope connections by the diagram's draft context so a forked diagram's
+    # in-progress edges never leak into a live export, and vice versa. Mirrors
+    # connection_service.get_connections().
     conn_q = select(Connection).where(
         Connection.source_id.in_(object_ids),
         Connection.target_id.in_(object_ids),
     )
+    if diagram.draft_id is None:
+        conn_q = conn_q.where(Connection.draft_id.is_(None))
+    else:
+        conn_q = conn_q.where(
+            (Connection.draft_id.is_(None))
+            | (Connection.draft_id == diagram.draft_id)
+        )
     connections = list((await db.execute(conn_q)).scalars().all())
 
     tech_ids: set[uuid.UUID] = set()
