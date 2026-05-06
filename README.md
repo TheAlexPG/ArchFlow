@@ -258,7 +258,8 @@ BACKEND_CORS_ORIGINS=http://localhost:5173
 # Optional — Langfuse tracing for agent calls (per-workspace consent gates each call).
 LANGFUSE_PUBLIC_KEY=
 LANGFUSE_SECRET_KEY=
-LANGFUSE_HOST=
+LANGFUSE_HOST=          # canonical, matches LiteLLM/Langfuse SDK
+# LANGFUSE_BASE_URL=    # accepted as alias for LANGFUSE_HOST
 ```
 
 ### ⚠️ Required for AI agents: `AGENTS_SECRET_KEY`

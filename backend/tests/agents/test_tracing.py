@@ -129,6 +129,34 @@ def test_is_langfuse_configured_false_when_all_missing(
 
 
 # ---------------------------------------------------------------------------
+# Env-var alias: LANGFUSE_HOST is canonical, LANGFUSE_BASE_URL is accepted
+# as a fallback so a misnamed env var doesn't silently disable tracing.
+# ---------------------------------------------------------------------------
+
+
+def test_settings_picks_up_langfuse_base_url_alias(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.delenv("LANGFUSE_HOST", raising=False)
+    monkeypatch.setenv("LANGFUSE_BASE_URL", "https://lf.example.test")
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk-lf-x")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk-lf-x")
+    fresh = config_module.Settings()
+    assert fresh.langfuse_host == "https://lf.example.test"
+
+
+def test_settings_prefers_langfuse_host_over_base_url(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("LANGFUSE_HOST", "https://canonical.example.test")
+    monkeypatch.setenv("LANGFUSE_BASE_URL", "https://alias.example.test")
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk-lf-x")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk-lf-x")
+    fresh = config_module.Settings()
+    assert fresh.langfuse_host == "https://canonical.example.test"
+
+
+# ---------------------------------------------------------------------------
 # setup_litellm_callbacks
 # ---------------------------------------------------------------------------
 

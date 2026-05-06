@@ -1,4 +1,4 @@
-from pydantic import SecretStr
+from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings
 
 
@@ -48,7 +48,14 @@ class Settings(BaseSettings):
     # convention and the langfuse/skills setup pattern.
     langfuse_public_key: SecretStr | None = None
     langfuse_secret_key: SecretStr | None = None
-    langfuse_host: str | None = None
+    # Accept either LANGFUSE_HOST (LiteLLM/SDK convention) or
+    # LANGFUSE_BASE_URL (a common typo / alternative naming) so a misnamed
+    # env var doesn't silently disable tracing. Both are documented in
+    # .env.example.
+    langfuse_host: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("LANGFUSE_HOST", "LANGFUSE_BASE_URL"),
+    )
 
     # Agent invocation rate limits — operator-level, not per-workspace.
     # Defaults are 10× the original spec defaults (which were 600/h, 6000/d,
