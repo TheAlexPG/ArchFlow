@@ -5,6 +5,7 @@ import { ArchFlowCanvas } from '../components/canvas/ArchFlowCanvas'
 import { DiagramAccessModal } from '../components/diagram/DiagramAccessModal'
 import { CreateDraftModal } from '../components/drafts/CreateDraftModal'
 import { AddObjectFAB } from '../components/canvas/AddObjectFAB'
+import { ExportToolbar } from '../components/toolbar/ExportToolbar'
 import { FilterToolbar } from '../components/toolbar/FilterToolbar'
 import { FlowPlaybackBar } from '../components/toolbar/FlowPlaybackBar'
 import { FlowsPanel } from '../components/toolbar/FlowsPanel'
@@ -488,6 +489,7 @@ export function DiagramPage() {
             {diagramId && <FlowsPanel diagramId={diagramId} />}
             {diagramId && <FlowPlaybackBar diagramId={diagramId} />}
             <FilterToolbar />
+            <ExportToolbar diagramId={diagramId} />
           </div>
           {selectedEdgeId ? <EdgeSidebar diagramId={diagramId} /> : <ObjectSidebar diagramId={diagramId} draftId={diagram?.draft_id ?? null} />}
         </div>

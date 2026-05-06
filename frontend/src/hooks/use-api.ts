@@ -543,6 +543,31 @@ export function useFlipConnection() {
   })
 }
 
+// ─── Diagram export ──────────────────────────────────────
+
+export type DiagramExportFormat = 'mermaid' | 'plantuml' | 'structurizr' | 'json'
+
+// Imperative fetch — driven by user clicking Copy/Download, not by render.
+// Without responseType:'text' axios JSON-parses the text/plain payload and
+// you get "[object Object]" in the clipboard.
+export async function fetchDiagramExport(
+  diagramId: string,
+  format: DiagramExportFormat,
+): Promise<string> {
+  if (format === 'json') {
+    const { data } = await api.get<unknown>(`/diagrams/${diagramId}/export`, {
+      params: { format },
+    })
+    return JSON.stringify(data, null, 2)
+  }
+  const { data } = await api.get<string>(`/diagrams/${diagramId}/export`, {
+    params: { format },
+    responseType: 'text',
+    transformResponse: [(d) => d],
+  })
+  return data
+}
+
 // ─── Comments ────────────────────────────────────────────
 
 export function useComments(targetType: CommentTargetType, targetId: string | null) {

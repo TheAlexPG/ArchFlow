@@ -1,20 +1,8 @@
-"""Minimal Mermaid → ArchFlow importer.
+"""Mermaid bridge — both directions.
 
-Supports two flavors of the Mermaid syntax most commonly used for
-architecture sketches:
-
-1) C4 syntax:
-       C4Context
-         Person(u, "User")
-         System(s, "Foo System", "Description")
-         Container(c, "Web", "React")
-         Rel(u, s, "Uses")
-
-2) Flowchart syntax (TD/LR):
-       flowchart TD
-         A[User] --> B[Web API]
-         B --> C[(Database)]
-         B -->|HTTP| C
+Importer: parses Mermaid C4 and flowchart syntax into ArchFlow rows.
+Exporter: walks a diagram's placements + connections and emits Mermaid
+text (C4 syntax for C4 diagram types, flowchart for `custom`).
 """
 
 import re
@@ -22,8 +10,18 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.connection import Connection
+from app.models.connection import Connection, ConnectionDirection
+from app.models.diagram import Diagram, DiagramType
 from app.models.object import ModelObject, ObjectType
+from app.services.c4_common import (
+    alias as _alias,
+)
+from app.services.c4_common import (
+    build_c4_args,
+    c4_keyword,
+    esc_c4_arg,
+    is_boundary_kw,
+)
 
 # ── C4 flavour ──────────────────────────────────────────
 
@@ -218,3 +216,187 @@ async def import_mermaid(db: AsyncSession, src: str) -> dict:
         "connections_created": created_rels,
         "alias_map": {k: str(v) for k, v in alias_to_id.items()},
     }
+
+
+# ── Exporter ────────────────────────────────────────────
+
+
+_C4_HEADER = {
+    DiagramType.SYSTEM_LANDSCAPE: "C4Context",
+    DiagramType.SYSTEM_CONTEXT: "C4Context",
+    DiagramType.CONTAINER: "C4Container",
+    DiagramType.COMPONENT: "C4Component",
+}
+
+
+def _esc_flow_label(s: str | None) -> str:
+    """Sanitize a Mermaid flowchart label.
+
+    Labels appear inside `["..."]` node decls and `|...|` edge labels. We
+    swap the chars that terminate or unbalance those wrappers (`]`, `[`,
+    `|`), drop newlines, and swap backslashes to dodge any escape
+    interpretation.
+    """
+    if not s:
+        return ""
+    return (
+        s.replace("\\", "/")
+        .replace('"', "'")
+        .replace("[", "(")
+        .replace("]", ")")
+        .replace("|", "/")
+        .replace("\n", " ")
+        .replace("\r", " ")
+        .strip()
+    )
+
+
+def _tech_label(ids, tech_names: dict[uuid.UUID, str]) -> str | None:
+    if not ids:
+        return None
+    names = [tech_names[i] for i in ids if i in tech_names]
+    return ", ".join(names) if names else None
+
+
+async def export_mermaid(db: AsyncSession, diagram: Diagram) -> str:
+    from app.services import diagram_service  # local import to avoid cycle
+
+    payload = await diagram_service.get_diagram_payload(db, diagram)
+    if diagram.type == DiagramType.CUSTOM:
+        return _export_flowchart(diagram, payload)
+    return _export_c4(diagram, payload)
+
+
+def _header_comments(diagram: Diagram, payload: dict) -> list[str]:
+    return [
+        "%% Exported from ArchFlow",
+        f"%% diagram_id: {diagram.id}",
+        f"%% diagram_type: {diagram.type.value}",
+        f"%% diagram_name: {esc_c4_arg(diagram.name)}",
+        f"%% objects: {len(payload['placements'])}; "
+        f"connections: {len(payload['connections'])}",
+    ]
+
+
+def _build_parent_index(placements: list) -> tuple[dict, list]:
+    """Return (children_by_parent_id, top_level_placements).
+
+    A placement is "top-level" when its object has no parent, or its parent
+    isn't placed on this diagram.
+    """
+    placed_ids = {p.object_id for p in placements}
+    children_by_parent: dict = {}
+    top_level: list = []
+    for p in placements:
+        parent_id = p.object.parent_id
+        if parent_id and parent_id in placed_ids:
+            children_by_parent.setdefault(parent_id, []).append(p)
+        else:
+            top_level.append(p)
+    return children_by_parent, top_level
+
+
+def _export_c4(diagram: Diagram, payload: dict) -> str:
+    placements = payload["placements"]
+    connections = payload["connections"]
+    tech_names = payload["tech_names"]
+    header_kw = _C4_HEADER[diagram.type]
+
+    lines: list[str] = list(_header_comments(diagram, payload))
+    lines.append("")
+    lines.append(header_kw)
+    lines.append(f"  title {esc_c4_arg(diagram.name)}")
+
+    children_by_parent, top_level = _build_parent_index(placements)
+
+    for p in top_level:
+        _emit_c4_placement(
+            p, diagram.type, tech_names, children_by_parent, lines, indent=2
+        )
+
+    for c in connections:
+        src = _alias(c.source_id)
+        tgt = _alias(c.target_id)
+        label = esc_c4_arg(c.label)
+        tech = _tech_label(c.protocol_ids, tech_names)
+        rel_kw = "BiRel" if c.direction == ConnectionDirection.BIDIRECTIONAL else "Rel"
+        if tech:
+            lines.append(f'  {rel_kw}({src}, {tgt}, "{label}", "{esc_c4_arg(tech)}")')
+        else:
+            lines.append(f'  {rel_kw}({src}, {tgt}, "{label}")')
+
+    return "\n".join(lines) + "\n"
+
+
+def _emit_c4_placement(
+    placement,
+    diagram_type: DiagramType,
+    tech_names: dict,
+    children_by_parent: dict,
+    lines: list[str],
+    indent: int,
+) -> None:
+    obj = placement.object
+    pad = " " * indent
+    a = _alias(obj.id)
+    kw = c4_keyword(obj.type, diagram_type)
+    name = esc_c4_arg(obj.name)
+    desc = esc_c4_arg(obj.description)
+    tech = _tech_label(obj.technology_ids, tech_names)
+    tech_arg = esc_c4_arg(tech) if tech else None
+
+    lines.append(
+        f"{pad}%% {a} = {obj.id} (type={obj.type.value}, status={obj.status.value})"
+    )
+
+    if is_boundary_kw(kw):
+        lines.append(f'{pad}{kw}({a}, "{name}") {{')
+        for child in children_by_parent.get(obj.id, []):
+            _emit_c4_placement(
+                child, diagram_type, tech_names, children_by_parent, lines, indent + 2
+            )
+        lines.append(f"{pad}}}")
+        return
+
+    args = build_c4_args(kw, a, name, tech_arg, desc)
+    lines.append(f"{pad}{kw}({args})")
+
+
+def _export_flowchart(diagram: Diagram, payload: dict) -> str:
+    """Custom diagram → Mermaid flowchart.
+
+    The output is restricted to `[label]` node declarations and `-->` arrows so
+    it round-trips through `mermaid_service.parse()`. The richer shapes
+    (`((actor))`, `[(db)]`, `{{ext}}`) the parser doesn't accept yet are dropped
+    in favour of comments that record the original ObjectType for any AI
+    consumer that needs to recover it.
+    """
+    placements = payload["placements"]
+    connections = payload["connections"]
+
+    lines: list[str] = list(_header_comments(diagram, payload))
+    lines.append("")
+    lines.append("flowchart TD")
+
+    for p in placements:
+        obj = p.object
+        alias = _alias(obj.id)
+        name = _esc_flow_label(obj.name)
+        lines.append(
+            f"  %% {alias} = {obj.id} (type={obj.type.value}, status={obj.status.value})"
+        )
+        lines.append(f'  {alias}["{name}"]')
+
+    for c in connections:
+        src = _alias(c.source_id)
+        tgt = _alias(c.target_id)
+        label = _esc_flow_label(c.label)
+        edge = f"  {src} -->|{label}| {tgt}" if label else f"  {src} --> {tgt}"
+        lines.append(edge)
+        if c.direction == ConnectionDirection.BIDIRECTIONAL:
+            back = (
+                f"  {tgt} -->|{label}| {src}" if label else f"  {tgt} --> {src}"
+            )
+            lines.append(back)
+
+    return "\n".join(lines) + "\n"
