@@ -111,7 +111,9 @@ export function ExportToolbar({ diagramId }: ExportToolbarProps) {
   if (!diagramId) return null
 
   return (
-    <div style={{ position: 'absolute', right: 12, top: 12, zIndex: 10 }}>
+    // Position is owned by the parent flex row in DiagramPage; we only need
+    // `relative` here so the dropdown can anchor to this button.
+    <div style={{ position: 'relative' }}>
       <button
         onClick={() => setOpen((v) => !v)}
         title="Export diagram"

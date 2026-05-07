@@ -486,10 +486,15 @@ export function DiagramPage() {
                 Draft
               </div>
             )}
-            {diagramId && <FlowsPanel diagramId={diagramId} />}
+            {/* Top-right canvas button cluster. Children flow left-to-right
+                via flex; each one only owns its own width, so adding or
+                removing a button here doesn't require recalculating offsets. */}
+            <div className="absolute right-4 top-4 z-10 flex items-center gap-2">
+              <ExportToolbar diagramId={diagramId} />
+              {diagramId && <FlowsPanel diagramId={diagramId} />}
+            </div>
             {diagramId && <FlowPlaybackBar diagramId={diagramId} />}
             <FilterToolbar />
-            <ExportToolbar diagramId={diagramId} />
           </div>
           {selectedEdgeId ? <EdgeSidebar diagramId={diagramId} /> : <ObjectSidebar diagramId={diagramId} draftId={diagram?.draft_id ?? null} />}
         </div>
