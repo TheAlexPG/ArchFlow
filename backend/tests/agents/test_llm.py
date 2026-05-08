@@ -335,6 +335,13 @@ def test_langfuse_metadata_off_returns_none(client: LLMClient):
     assert client._build_langfuse_metadata(meta) is None
 
 
+def test_langfuse_metadata_none_returns_none(client: LLMClient):
+    # Auto-title and other ad-hoc LLM calls pass metadata=None because they
+    # don't belong to an agent invocation. Must not blow up with
+    # AttributeError on call_meta.analytics_consent.
+    assert client._build_langfuse_metadata(None) is None
+
+
 def test_langfuse_metadata_full_with_env_returns_dict(
     client: LLMClient, monkeypatch: pytest.MonkeyPatch
 ):
