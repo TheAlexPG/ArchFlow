@@ -33,7 +33,9 @@ export function FlowsPanel({ diagramId }: FlowsPanelProps) {
   }
 
   return (
-    <div style={{ position: 'absolute', right: 16, top: 16, zIndex: 10 }}>
+    // Position is owned by the parent flex row in DiagramPage; we only need
+    // `relative` here so the panel can anchor to this button.
+    <div style={{ position: 'relative' }}>
       <button
         onClick={() => setOpen((v) => !v)}
         style={{

@@ -111,7 +111,7 @@ export function ExportToolbar({ diagramId }: ExportToolbarProps) {
   if (!diagramId) return null
 
   return (
-    <div style={{ position: 'absolute', right: 12, top: 12, zIndex: 10 }}>
+    <div style={{ position: 'relative' }}>
       <button
         onClick={() => setOpen((v) => !v)}
         title="Export diagram"
