@@ -2,6 +2,7 @@ import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import { useEffect } from 'react'
+import { cn } from '../../utils/cn'
 
 interface RichTextEditorProps {
   content: string
@@ -21,8 +22,7 @@ export function RichTextEditor({ content, onChange, placeholder }: RichTextEdito
     },
     editorProps: {
       attributes: {
-        style:
-          'min-height: 60px; outline: none; font-size: 13px; color: #e5e5e5; line-height: 1.5;',
+        class: 'rich-text-editor__content',
       },
     },
   })
@@ -37,11 +37,9 @@ export function RichTextEditor({ content, onChange, placeholder }: RichTextEdito
   if (!editor) return null
 
   return (
-    <div style={{ border: '1px solid #333', borderRadius: 6, background: '#171717' }}>
+    <div className="rich-text-editor">
       {/* Toolbar */}
-      <div style={{
-        display: 'flex', gap: 2, padding: '4px 6px', borderBottom: '1px solid #262626',
-      }}>
+      <div className="rich-text-editor__toolbar">
         <ToolBtn
           active={editor.isActive('bold')}
           onClick={() => editor.chain().focus().toggleBold().run()}
@@ -67,7 +65,7 @@ export function RichTextEditor({ content, onChange, placeholder }: RichTextEdito
       </div>
 
       {/* Editor */}
-      <div style={{ padding: '8px 10px' }}>
+      <div className="rich-text-editor__body">
         <EditorContent editor={editor} />
       </div>
     </div>
@@ -88,17 +86,9 @@ function ToolBtn({
   return (
     <button
       onClick={onClick}
-      style={{
-        background: active ? '#333' : 'transparent',
-        border: 'none',
-        borderRadius: 4,
-        color: active ? '#f5f5f5' : '#737373',
-        cursor: 'pointer',
-        fontSize: 12,
-        padding: '2px 6px',
-        minWidth: 24,
-        ...style,
-      }}
+      className={cn('rich-text-editor__tool-button', active && 'rich-text-editor__tool-button--active')}
+      style={style}
+      type="button"
     >
       {label}
     </button>

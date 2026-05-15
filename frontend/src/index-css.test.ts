@@ -7,6 +7,7 @@ const flowsPanel = readFileSync('src/components/toolbar/FlowsPanel.tsx', 'utf8')
 const filterToolbar = readFileSync('src/components/toolbar/FilterToolbar.tsx', 'utf8')
 const addObjectToolbar = readFileSync('src/components/toolbar/AddObjectToolbar.tsx', 'utf8')
 const addObjectFab = readFileSync('src/components/canvas/AddObjectFAB.tsx', 'utf8')
+const richTextEditor = readFileSync('src/components/common/RichTextEditor.tsx', 'utf8')
 
 describe('light theme legacy control compatibility CSS', () => {
   it('keeps legacy dark button/control utilities scoped to light theme tokens', () => {
@@ -52,5 +53,16 @@ describe('light theme legacy control compatibility CSS', () => {
     expect(addObjectFab).toContain('bottom = 12')
     expect(addObjectFab).not.toContain('top: 72,')
     expect(addObjectFab).not.toContain('bottom: 72,')
+  })
+
+  it('keeps the rich text editor on theme classes instead of dark inline colors', () => {
+    expect(css).toContain('.rich-text-editor')
+    expect(css).toContain('color: var(--color-text-base)')
+    expect(css).toContain('background: var(--color-panel)')
+    expect(richTextEditor).toContain("className=\"rich-text-editor\"")
+    expect(richTextEditor).toContain("class: 'rich-text-editor__content'")
+    expect(richTextEditor).not.toContain('#171717')
+    expect(richTextEditor).not.toContain('#e5e5e5')
+    expect(richTextEditor).not.toContain('#333')
   })
 })

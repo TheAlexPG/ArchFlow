@@ -302,7 +302,10 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
                   ? 'external'
                   : 'c4',
           position: { x: dObj.position_x, y: dObj.position_y },
-          data: { object: obj } satisfies C4NodeData,
+          data: {
+            object: obj,
+            diagramType: diagram?.type as C4NodeData['diagramType'],
+          } satisfies C4NodeData,
           zIndex: obj.type === 'group' ? 0 : 1,
         }
         // Restore persisted node size from the diagram_objects row so the
@@ -369,6 +372,7 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     diagramId,
     allObjects,
     diagramObjects,
+    diagram?.type,
     setNodes,
     getNodes,
     dependencyChain,

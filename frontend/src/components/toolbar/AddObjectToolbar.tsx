@@ -8,20 +8,12 @@ import {
 } from '../../hooks/use-api'
 import { useDiagram } from '../../hooks/use-diagrams'
 import { useCanvasStore } from '../../stores/canvas-store'
-import type { CommentType, DiagramType, ObjectType } from '../../types/model'
+import { C4_DIAGRAM_LEVEL_LABELS, type CommentType, type DiagramType, type ObjectType } from '../../types/model'
 import { detectParentGroup, nodeToRect } from '../canvas/group-utils'
-import { TYPE_ICONS, TYPE_LABELS } from '../canvas/node-utils'
+import { getObjectTypeLabel, TYPE_ICONS } from '../canvas/node-utils'
 import { ObjectContextMenu } from '../common/ObjectContextMenu'
 
 const ALL_QUICK_TYPES: ObjectType[] = ['system', 'actor', 'external_system', 'app', 'store', 'group']
-
-const DIAGRAM_LEVEL_LABEL: Record<DiagramType, string> = {
-  system_landscape: 'L1 · System Landscape',
-  system_context: 'L1 · System Context',
-  container: 'L2 · Container',
-  component: 'L3 · Component',
-  custom: 'Custom',
-}
 
 function getQuickTypesForDiagram(diagramType: DiagramType | undefined): ObjectType[] {
   if (!diagramType) return ALL_QUICK_TYPES
@@ -37,6 +29,9 @@ function getQuickTypesForDiagram(diagramType: DiagramType | undefined): ObjectTy
     case 'component':
       return ['component', 'system', 'external_system', 'actor', 'group']
     case 'custom':
+      // C4 L4 is the Code diagram. The backend reuses the `component` object
+      // type for code-level elements, so label it as Code in this context.
+      return ['component', 'group']
     default:
       return ALL_QUICK_TYPES
   }
@@ -62,8 +57,9 @@ export function AddObjectToolbar({ diagramId }: AddObjectToolbarProps) {
   // draft so they don't leak into the live model.
   const { data: diagram } = useDiagram(diagramId)
   const draftId = diagram?.draft_id ?? null
-  const quickTypes = getQuickTypesForDiagram(diagram?.type as DiagramType | undefined)
-  const levelLabel = diagram?.type ? DIAGRAM_LEVEL_LABEL[diagram.type as DiagramType] : null
+  const diagramType = diagram?.type as DiagramType | undefined
+  const quickTypes = getQuickTypesForDiagram(diagramType)
+  const levelLabel = diagramType ? C4_DIAGRAM_LEVEL_LABELS[diagramType] : null
   const { data: objects = [] } = useObjects(draftId)
   const { data: diagramObjects = [] } = useDiagramObjects(diagramId)
   const createObject = useCreateObject(draftId)
@@ -108,7 +104,7 @@ export function AddObjectToolbar({ diagramId }: AddObjectToolbarProps) {
   }
 
   const handleCreateNew = (type: ObjectType) => {
-    const name = prompt(`New ${TYPE_LABELS[type]} name:`)
+    const name = prompt(`New ${getObjectTypeLabel(type, diagramType)} name:`)
     if (!name?.trim()) return
     const placementX = 200 + Math.random() * 300
     const placementY = 150 + Math.random() * 250
@@ -196,7 +192,7 @@ export function AddObjectToolbar({ diagramId }: AddObjectToolbarProps) {
                         title={
                           inDiagram
                             ? 'Already in this diagram'
-                            : `${TYPE_LABELS[obj.type]}${obj.technology_ids ? ` — ${obj.technology_ids.join(', ')}` : ''}`
+                            : `${getObjectTypeLabel(obj.type, diagramType)}${obj.technology_ids ? ` — ${obj.technology_ids.join(', ')}` : ''}`
                         }
                       >
                         <span style={{ opacity: 0.5 }}>{TYPE_ICONS[obj.type]}</span>
@@ -212,7 +208,7 @@ export function AddObjectToolbar({ diagramId }: AddObjectToolbarProps) {
                           </span>
                         ) : (
                           <span className="add-object-toolbar__type-label">
-                            {TYPE_LABELS[obj.type]}
+                            {getObjectTypeLabel(obj.type, diagramType)}
                           </span>
                         )}
                       </button>
@@ -236,7 +232,7 @@ export function AddObjectToolbar({ diagramId }: AddObjectToolbarProps) {
                     className="add-object-toolbar__pill"
                   >
                     <span style={{ opacity: 0.7 }}>{TYPE_ICONS[type]}</span>
-                    {TYPE_LABELS[type]}
+                    {getObjectTypeLabel(type, diagramType)}
                   </button>
                 ))}
               </div>

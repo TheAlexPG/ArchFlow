@@ -84,6 +84,9 @@ vi.mock('../../components/tree/ObjectTree', () => ({
 vi.mock('../../components/nav/SearchModal', () => ({
   SearchModal: () => null,
 }))
+vi.mock('../../components/theme/ThemeToggle', () => ({
+  ThemeToggle: () => <button type="button">Theme Toggle</button>,
+}))
 
 // ─── Stub stores ─────────────────────────────────────────────────────────────
 
@@ -155,5 +158,19 @@ describe('DiagramPage back button', () => {
     fireEvent.click(screen.getByRole('button', { name: /back to workspace/i }))
 
     expect(h.navigate).toHaveBeenCalledWith('/')
+  })
+})
+
+describe('DiagramPage canvas tools', () => {
+  beforeEach(() => {
+    h.navigate.mockReset()
+    h.diagram = { id: 'd-current', name: 'Components', type: 'component', draft_id: null }
+    h.breadcrumbs = []
+  })
+
+  it('renders the theme toggle in the canvas tool cluster', () => {
+    render(wrap(<DiagramPage />))
+
+    expect(screen.getByRole('button', { name: /theme toggle/i })).toBeInTheDocument()
   })
 })

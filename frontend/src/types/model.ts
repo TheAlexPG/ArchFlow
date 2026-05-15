@@ -22,6 +22,22 @@ export type DiagramType =
   | 'component'
   | 'custom'
 
+export const C4_DIAGRAM_LABELS: Record<DiagramType, string> = {
+  system_landscape: 'System Landscape',
+  system_context: 'System Context',
+  container: 'Container',
+  component: 'Component',
+  custom: 'Code',
+}
+
+export const C4_DIAGRAM_LEVEL_LABELS: Record<DiagramType, string> = {
+  system_landscape: 'Landscape',
+  system_context: 'L1 · System Context',
+  container: 'L2 · Container',
+  component: 'L3 · Component',
+  custom: 'L4 · Code',
+}
+
 export interface ModelObject {
   id: string
   name: string

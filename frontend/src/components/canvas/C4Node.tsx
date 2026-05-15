@@ -1,7 +1,7 @@
 import { Handle, NodeResizer, Position, useNodeId, type NodeProps } from '@xyflow/react'
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import type { ModelObject } from '../../types/model'
+import type { DiagramType, ModelObject } from '../../types/model'
 import { useSaveDiagramSize, useTechnologies } from '../../hooks/use-api'
 import { useDiagrams } from '../../hooks/use-diagrams'
 import { useCanvasStore } from '../../stores/canvas-store'
@@ -13,10 +13,11 @@ import {
   DRILLABLE_TYPES,
   defaultChildDiagramName,
 } from '../drafts/CreateChildDiagramModal'
-import { STATUS_COLORS, TYPE_ICONS, stripHtml } from './node-utils'
+import { getObjectTypeLabel, STATUS_COLORS, TYPE_ICONS, stripHtml } from './node-utils'
 
 export type C4NodeData = {
   object: ModelObject
+  diagramType?: DiagramType
 }
 
 function drillTooltip(objectName: string, objectType: string): string {
@@ -58,18 +59,9 @@ const TYPE_DOT_COLOR: Record<string, string> = {
   external_system: 'var(--color-text-3)',
 }
 
-const TYPE_PILL_LABEL: Record<string, string> = {
-  system: 'SYSTEM',
-  app: 'CONTAINER',
-  store: 'CONTAINER',
-  component: 'COMPONENT',
-  group: 'GROUP',
-  actor: 'ACTOR',
-  external_system: 'EXTERNAL',
-}
-
 export function C4Node({ data, selected }: NodeProps) {
   const obj = (data as C4NodeData).object
+  const diagramType = (data as C4NodeData).diagramType
   const statusColor = STATUS_COLORS[obj.status]
   const navigate = useNavigate()
   const params = useParams<{ diagramId?: string }>()
@@ -84,7 +76,7 @@ export function C4Node({ data, selected }: NodeProps) {
     (s) => (nodeId ? s.remoteNodeEditors[nodeId] : undefined),
   )
 
-  const canHaveChildren = DRILLABLE_TYPES.has(obj.type)
+  const canHaveChildren = DRILLABLE_TYPES.has(obj.type) && diagramType !== 'custom'
 
   const handleDrillDown = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -110,7 +102,7 @@ export function C4Node({ data, selected }: NodeProps) {
       : `Zoom into (${childDiagrams.length} diagram${childDiagrams.length > 1 ? 's' : ''})`
 
   const typeDotColor = TYPE_DOT_COLOR[obj.type] ?? 'var(--color-text-3)'
-  const typeLabel = TYPE_PILL_LABEL[obj.type] ?? obj.type.toUpperCase()
+  const typeLabel = getObjectTypeLabel(obj.type, diagramType).toUpperCase()
   const workspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
   // React Query dedupes across every node, so rendering N nodes triggers a
   // single network round-trip for the catalog; staleTime keeps it in cache.

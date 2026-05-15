@@ -12,25 +12,17 @@ import {
 import { useDiagram } from '../../hooks/use-diagrams'
 import { useCanvasStore } from '../../stores/canvas-store'
 import { useWorkspaceStore } from '../../stores/workspace-store'
-import type { CommentType, DiagramType, ObjectType } from '../../types/model'
+import { C4_DIAGRAM_LEVEL_LABELS, type CommentType, type DiagramType, type ObjectType } from '../../types/model'
 import { cn } from '../../utils/cn'
 import { SectionLabel } from '../ui'
 import { TechIcon } from '../tech'
 import { detectParentGroup, nodeToRect } from './group-utils'
-import { TYPE_BORDER_COLORS, TYPE_LABELS } from './node-utils'
+import { getObjectTypeLabel, TYPE_BORDER_COLORS } from './node-utils'
 import { NewObjectModal } from './NewObjectModal'
 
 // ─── Type helpers (match AddObjectToolbar's logic exactly) ────────────────────
 
 const ALL_QUICK_TYPES: ObjectType[] = ['system', 'actor', 'external_system', 'app', 'store', 'component', 'group']
-
-const DIAGRAM_LEVEL_LABEL: Record<DiagramType, string> = {
-  system_landscape: 'L1 · System Landscape',
-  system_context: 'L1 · System Context',
-  container: 'L2 · Container',
-  component: 'L3 · Component',
-  custom: 'L4 · Code',
-}
 
 function getQuickTypesForDiagram(diagramType: DiagramType | undefined): ObjectType[] {
   if (!diagramType) return ALL_QUICK_TYPES
@@ -43,6 +35,9 @@ function getQuickTypesForDiagram(diagramType: DiagramType | undefined): ObjectTy
     case 'component':
       return ['component', 'system', 'external_system', 'actor', 'group']
     case 'custom':
+      // C4 L4 is the Code diagram. The backend reuses the `component` object
+      // type for code-level elements, so label it as Code in this context.
+      return ['component', 'group']
     default:
       return ALL_QUICK_TYPES
   }
@@ -262,7 +257,7 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
   const draftId = diagram?.draft_id ?? null
   const diagramType = diagram?.type as DiagramType | undefined
   const quickTypes = getQuickTypesForDiagram(diagramType)
-  const levelLabel = diagramType ? DIAGRAM_LEVEL_LABEL[diagramType] : null
+  const levelLabel = diagramType ? C4_DIAGRAM_LEVEL_LABELS[diagramType] : null
 
   const { data: objects = [] } = useObjects(draftId)
   const { data: diagramObjects = [] } = useDiagramObjects(diagramId)
@@ -563,7 +558,7 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
                         title={
                           inDiagram
                             ? 'Already in this diagram'
-                            : `Add ${TYPE_LABELS[obj.type]} to diagram`
+                            : `Add ${getObjectTypeLabel(obj.type, diagramType)} to diagram`
                         }
                         className={cn(
                           'obj-row popup-item w-full text-left group/row',
@@ -588,7 +583,7 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
                             {obj.name}
                           </div>
                           <div className="font-mono text-[10.5px] text-text-3 flex items-center gap-1 min-w-0">
-                            <span className="truncate">{TYPE_LABELS[obj.type].toLowerCase()}</span>
+                            <span className="truncate">{getObjectTypeLabel(obj.type, diagramType).toLowerCase()}</span>
                             {(() => {
                               const techs = (obj.technology_ids ?? [])
                                 .map((id) => catalog.find((t) => t.id === id))
@@ -669,7 +664,7 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
                     <button
                       key={type}
                       onClick={() => handleCreateNew(type)}
-                      title={TYPE_LABELS[type]}
+                      title={getObjectTypeLabel(type, diagramType)}
                       className="create-type-btn popup-item"
                       style={{ animationDelay: `${170 + idx * 30}ms` }}
                     >
@@ -677,7 +672,7 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
                         <ObjTypeIcon type={type} />
                       </div>
                       <div className="font-mono text-[10px] text-text-2">
-                        {TYPE_LABELS[type]}
+                        {getObjectTypeLabel(type, diagramType)}
                       </div>
                     </button>
                   ))}

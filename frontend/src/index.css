@@ -535,6 +535,66 @@ select {
   padding-left: 16px;
 }
 
+/* Theme-aware TipTap description editor. */
+.rich-text-editor {
+  border: 1px solid var(--color-border-base);
+  border-radius: 6px;
+  background: var(--color-panel);
+  overflow: hidden;
+}
+
+.rich-text-editor__toolbar {
+  display: flex;
+  gap: 2px;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--color-border-base);
+}
+
+.rich-text-editor__body {
+  padding: 8px 10px;
+}
+
+.rich-text-editor__content {
+  min-height: 60px;
+  outline: none;
+  font-size: 13px;
+  color: var(--color-text-base);
+  line-height: 1.5;
+}
+
+.rich-text-editor__content p {
+  margin: 0;
+}
+
+.rich-text-editor__content p + p {
+  margin-top: 0.5em;
+}
+
+.rich-text-editor__content .is-empty::before {
+  color: var(--color-text-4);
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+.rich-text-editor__tool-button {
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--color-text-3);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 6px;
+  min-width: 24px;
+}
+
+.rich-text-editor__tool-button:hover,
+.rich-text-editor__tool-button--active {
+  background: var(--color-surface-hi);
+  color: var(--color-text-base);
+}
+
 /*
  * Kill default React Flow selection styles — we handle selection with
  * border-color inside each node. Removing this default box-shadow avoids a
