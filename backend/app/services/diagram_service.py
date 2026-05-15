@@ -6,6 +6,7 @@ from sqlalchemy.orm import selectinload
 
 from app.models.connection import Connection
 from app.models.diagram import Diagram, DiagramObject
+from app.models.object import ModelObject
 from app.models.technology import Technology
 from app.schemas.diagram import (
     DiagramCreate,
@@ -140,6 +141,11 @@ async def delete_diagram(db: AsyncSession, diagram: Diagram) -> None:
 
 # ─── Diagram Objects (positions) ──────────────────────────
 
+
+class DiagramObjectTargetMissingError(ValueError):
+    """The object being placed on a diagram does not exist."""
+
+
 async def get_diagram_objects(
     db: AsyncSession, diagram_id: uuid.UUID
 ) -> list[DiagramObject]:
@@ -170,6 +176,10 @@ async def add_object_to_diagram(
     workspace_id: uuid.UUID | None = None,
     from_draft_id: uuid.UUID | None = None,
 ) -> DiagramObject:
+    target = await db.get(ModelObject, data.object_id)
+    if target is None:
+        raise DiagramObjectTargetMissingError(str(data.object_id))
+
     obj = DiagramObject(
         diagram_id=diagram_id,
         object_id=data.object_id,
@@ -199,7 +209,7 @@ async def add_object_to_diagram(
             target_type=UndoTargetType.DIAGRAM_OBJECT,
             target_id=obj.id,
             action=UndoAction.CREATE,
-            forward_summary=f"Added object to diagram"[:80],
+            forward_summary="Added object to diagram"[:80],
             inverse_payload={"target_id": str(obj.id)},
             after_state=activity_service.snapshot(obj, include_metadata=True),
             coalesce_key=f"diagram_object:{obj.id}:create",
@@ -263,7 +273,7 @@ async def update_diagram_object(
                     target_type=UndoTargetType.DIAGRAM_OBJECT,
                     target_id=obj.id,
                     action=UndoAction.UPDATE,
-                    forward_summary=f"Moved object in diagram"[:80],
+                    forward_summary="Moved object in diagram"[:80],
                     inverse_payload={"before": {k: v["before"] for k, v in pos_diff.items()}},
                     after_state={k: v["after"] for k, v in pos_diff.items()},
                     coalesce_key=f"diagram_object:{obj.id}:position",
@@ -280,7 +290,7 @@ async def update_diagram_object(
                     target_type=UndoTargetType.DIAGRAM_OBJECT,
                     target_id=obj.id,
                     action=UndoAction.UPDATE,
-                    forward_summary=f"Resized object in diagram"[:80],
+                    forward_summary="Resized object in diagram"[:80],
                     inverse_payload={"before": {k: v["before"] for k, v in size_diff.items()}},
                     after_state={k: v["after"] for k, v in size_diff.items()},
                     coalesce_key=f"diagram_object:{obj.id}:size",
@@ -298,7 +308,7 @@ async def update_diagram_object(
                     target_type=UndoTargetType.DIAGRAM_OBJECT,
                     target_id=obj.id,
                     action=UndoAction.UPDATE,
-                    forward_summary=f"Updated diagram object"[:80],
+                    forward_summary="Updated diagram object"[:80],
                     inverse_payload={"before": {k: v["before"] for k, v in other_diff.items()}},
                     after_state={k: v["after"] for k, v in other_diff.items()},
                     coalesce_key=f"diagram_object:{obj.id}:{','.join(sorted(other_diff.keys()))}",
@@ -351,7 +361,7 @@ async def remove_object_from_diagram(
             target_type=UndoTargetType.DIAGRAM_OBJECT,
             target_id=do_id,
             action=UndoAction.DELETE,
-            forward_summary=f"Removed object from diagram"[:80],
+            forward_summary="Removed object from diagram"[:80],
             inverse_payload={"snapshot": snapshot, "id": str(do_id)},
             after_state=None,
             coalesce_key=f"diagram_object:{do_id}:delete",

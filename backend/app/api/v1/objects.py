@@ -123,6 +123,7 @@ async def create_object(
             detail={"error": "invalid_repo_url", "message": str(exc)},
         ) from exc
     response = ObjectResponse.from_model(obj)
+    await db.commit()
     if draft_id is None:
         body = response.model_dump(mode="json")
         fire_and_forget_emit("object.created", body)
