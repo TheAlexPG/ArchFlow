@@ -1,5 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  clearConnectionDeleted,
+  clearDiagramObjectRemoved,
+  isConnectionDeleted,
+  isDiagramObjectRemoved,
+  markConnectionDeleted,
   markDiagramObjectRemoved,
   markObjectDeleted,
 } from './use-realtime'
@@ -273,7 +278,67 @@ export function useCreateConnection(draftId?: string | null) {
       })
       return data
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['connections'] }),
+    onMutate: async (conn) => {
+      await qc.cancelQueries({ queryKey: ['connections'] })
+      const tempId = `optimistic:${Date.now()}:${Math.random()}`
+      const now = new Date().toISOString()
+      const optimistic: Connection = {
+        id: tempId,
+        source_id: conn.source_id,
+        target_id: conn.target_id,
+        label: conn.label ?? null,
+        protocol_ids: conn.protocol_ids ?? null,
+        direction: conn.direction ?? 'unidirectional',
+        tags: conn.tags ?? null,
+        source_handle: conn.source_handle ?? null,
+        target_handle: conn.target_handle ?? null,
+        shape: conn.shape ?? 'smoothstep',
+        label_size: 11,
+        via_object_ids: null,
+        created_at: now,
+        updated_at: now,
+      }
+      qc.setQueriesData<Connection[] | undefined>(
+        { queryKey: ['connections'] },
+        (prev) => (Array.isArray(prev) ? [...prev, optimistic] : prev),
+      )
+      return { tempId }
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.tempId) {
+        qc.setQueriesData<Connection[] | undefined>(
+          { queryKey: ['connections'] },
+          (prev) => (Array.isArray(prev) ? prev.filter((c) => c.id !== context.tempId) : prev),
+        )
+      }
+    },
+    onSuccess: (created, _vars, context) => {
+      if (isConnectionDeleted(created.id)) {
+        if (context?.tempId) {
+          qc.setQueriesData<Connection[] | undefined>(
+            { queryKey: ['connections'] },
+            (prev) => (Array.isArray(prev) ? prev.filter((c) => c.id !== context.tempId) : prev),
+          )
+        }
+        return
+      }
+      clearConnectionDeleted(created.id)
+      qc.setQueryData(['connections', created.id], created)
+      qc.setQueriesData<Connection[] | undefined>(
+        { queryKey: ['connections'] },
+        (prev) => {
+          if (!Array.isArray(prev)) return prev
+          const withoutTemp = context?.tempId
+            ? prev.filter((c) => c.id !== context.tempId)
+            : prev
+          const idx = withoutTemp.findIndex((c) => c.id === created.id)
+          if (idx === -1) return [...withoutTemp, created]
+          const next = [...withoutTemp]
+          next[idx] = created
+          return next
+        },
+      )
+    },
   })
 }
 
@@ -319,8 +384,63 @@ export function useAddObjectToDiagram() {
       })
       return data
     },
-    onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ['diagram-objects', vars.diagramId] })
+    onMutate: async ({ diagramId, objectId, x, y }) => {
+      await qc.cancelQueries({ queryKey: ['diagram-objects', diagramId] })
+      clearDiagramObjectRemoved(diagramId, objectId)
+      const tempId = `optimistic:${diagramId}:${objectId}:${Date.now()}`
+      const optimistic: DiagramObjectData = {
+        id: tempId,
+        diagram_id: diagramId,
+        object_id: objectId,
+        position_x: x,
+        position_y: y,
+        width: null,
+        height: null,
+      }
+      qc.setQueriesData<DiagramObjectData[] | undefined>(
+        { queryKey: ['diagram-objects', diagramId] },
+        (prev) => {
+          if (!Array.isArray(prev)) return prev
+          if (prev.some((r) => r.object_id === objectId)) return prev
+          return [...prev, optimistic]
+        },
+      )
+      return { tempId }
+    },
+    onError: (_err, vars, context) => {
+      markDiagramObjectRemoved(vars.diagramId, vars.objectId)
+      if (context?.tempId) {
+        qc.setQueriesData<DiagramObjectData[] | undefined>(
+          { queryKey: ['diagram-objects', vars.diagramId] },
+          (prev) => (Array.isArray(prev) ? prev.filter((r) => r.id !== context.tempId) : prev),
+        )
+      }
+    },
+    onSuccess: (created: DiagramObjectData, vars, context) => {
+      if (isDiagramObjectRemoved(vars.diagramId, vars.objectId)) {
+        if (context?.tempId) {
+          qc.setQueriesData<DiagramObjectData[] | undefined>(
+            { queryKey: ['diagram-objects', vars.diagramId] },
+            (prev) => (Array.isArray(prev) ? prev.filter((r) => r.id !== context.tempId) : prev),
+          )
+        }
+        return
+      }
+      clearDiagramObjectRemoved(vars.diagramId, vars.objectId)
+      qc.setQueriesData<DiagramObjectData[] | undefined>(
+        { queryKey: ['diagram-objects', vars.diagramId] },
+        (prev) => {
+          if (!Array.isArray(prev)) return prev
+          const withoutTemp = context?.tempId
+            ? prev.filter((r) => r.id !== context.tempId)
+            : prev
+          const idx = withoutTemp.findIndex((r) => r.object_id === created.object_id)
+          if (idx === -1) return [...withoutTemp, created]
+          const next = [...withoutTemp]
+          next[idx] = created
+          return next
+        },
+      )
     },
   })
 }
@@ -403,16 +523,23 @@ export function useRemoveObjectFromDiagram() {
       // the same row is already queued in the microtask stack, it will
       // see the tombstone and decline to re-insert.
       markDiagramObjectRemoved(diagramId, objectId)
+      const prevRows = qc.getQueryData<DiagramObjectData[]>(['diagram-objects', diagramId])
       qc.setQueriesData<DiagramObjectData[] | undefined>(
         { queryKey: ['diagram-objects', diagramId] },
         (prev) => (prev ? prev.filter((r) => r.object_id !== objectId) : prev),
       )
+      return { prevRows }
+    },
+    onError: (_err, vars, context) => {
+      clearDiagramObjectRemoved(vars.diagramId, vars.objectId)
+      if (context?.prevRows) {
+        qc.setQueryData(['diagram-objects', vars.diagramId], context.prevRows)
+      }
     },
     onSuccess: (_, vars) => {
       // Refresh tombstone so it outlives the server round-trip + any
       // late-arriving WS echoes.
       markDiagramObjectRemoved(vars.diagramId, vars.objectId)
-      qc.invalidateQueries({ queryKey: ['diagram-objects', vars.diagramId] })
     },
   })
 }
@@ -429,7 +556,31 @@ export function useDeleteConnection() {
       }
       await api.delete(`/connections/${id}`, { params: Object.keys(params).length ? params : undefined })
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['connections'] }),
+    onMutate: async (vars) => {
+      const id = typeof vars === 'string' ? vars : vars.id
+      await qc.cancelQueries({ queryKey: ['connections'] })
+      markConnectionDeleted(id)
+      const prevItem = qc.getQueryData<Connection>(['connections', id])
+      const prevLists = qc.getQueriesData<Connection[]>({ queryKey: ['connections'] })
+      qc.setQueriesData<Connection[] | undefined>(
+        { queryKey: ['connections'] },
+        (prev) => (Array.isArray(prev) ? prev.filter((c) => c.id !== id) : prev),
+      )
+      qc.removeQueries({ queryKey: ['connections', id] })
+      return { id, prevItem, prevLists }
+    },
+    onError: (_err, _vars, context) => {
+      if (!context) return
+      clearConnectionDeleted(context.id)
+      if (context.prevItem) qc.setQueryData(['connections', context.id], context.prevItem)
+      for (const [key, data] of context.prevLists) {
+        qc.setQueryData(key, data)
+      }
+    },
+    onSuccess: (_data, vars) => {
+      const id = typeof vars === 'string' ? vars : vars.id
+      markConnectionDeleted(id)
+    },
   })
 }
 
@@ -482,6 +633,7 @@ export function useUpdateConnection() {
       qc.invalidateQueries({ queryKey: ['connections'] })
     },
     onSuccess: (updated) => {
+      if (isConnectionDeleted(updated.id)) return
       // Write the updated connection into the individual-item cache so the
       // sidebar reflects changes (direction, shape, etc.) without a refetch.
       qc.setQueryData(['connections', updated.id], updated)
@@ -525,6 +677,7 @@ export function useFlipConnection() {
       return result
     },
     onSuccess: (updated) => {
+      if (isConnectionDeleted(updated.id)) return
       qc.setQueryData(['connections', updated.id], updated)
       qc.setQueriesData<Connection[] | undefined>(
         { queryKey: ['connections'] },

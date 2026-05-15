@@ -67,6 +67,7 @@ const TOMBSTONE_TTL_MS = 5_000
 
 const diagramObjectTombstones = new Map<string, number>() // `${diagramId}:${objectId}` → expiresAt
 const objectTombstones = new Map<string, number>() // objectId → expiresAt
+const connectionTombstones = new Map<string, number>() // connectionId → expiresAt
 
 function isTombstoned(map: Map<string, number>, key: string): boolean {
   const exp = map.get(key)
@@ -88,11 +89,33 @@ export function markDiagramObjectRemoved(diagramId: string, objectId: string): v
   )
 }
 
+export function clearDiagramObjectRemoved(diagramId: string, objectId: string): void {
+  diagramObjectTombstones.delete(`${diagramId}:${objectId}`)
+}
+
+export function isDiagramObjectRemoved(diagramId: string, objectId: string): boolean {
+  return isTombstoned(diagramObjectTombstones, `${diagramId}:${objectId}`)
+}
+
 /** Mark an object as just-deleted; subsequent WS `object.updated` or
  *  `diagram_object.added|updated` payloads for the same object id are
  *  ignored inside the TTL window. */
 export function markObjectDeleted(objectId: string): void {
   objectTombstones.set(objectId, Date.now() + TOMBSTONE_TTL_MS)
+}
+
+/** Mark a connection as just-deleted; subsequent WS create/update payloads
+ *  for the same id are ignored inside the TTL window. */
+export function markConnectionDeleted(connectionId: string): void {
+  connectionTombstones.set(connectionId, Date.now() + TOMBSTONE_TTL_MS)
+}
+
+export function clearConnectionDeleted(connectionId: string): void {
+  connectionTombstones.delete(connectionId)
+}
+
+export function isConnectionDeleted(connectionId: string): boolean {
+  return isTombstoned(connectionTombstones, connectionId)
 }
 
 /** Merge or insert an entity into a (possibly undefined) id-keyed list.
@@ -312,22 +335,27 @@ export function useDiagramSocket(diagramId: string | null): DiagramSocketResult 
           type === 'connection.updated'
         ) {
           const conn = msg.connection as { id: string } | undefined
-          if (conn) {
+          if (conn && isTombstoned(connectionTombstones, conn.id)) {
+            // swallow stale create/update for a just-deleted connection
+          } else if (conn) {
             queryClient.setQueriesData(
               { queryKey: ['connections'] },
               (prev: unknown) => mergeEntity(prev as never, conn),
             )
+            queryClient.setQueryData(['connections', conn.id], conn as never)
           } else {
             void queryClient.invalidateQueries({ queryKey: ['connections'] })
           }
         } else if (type === 'connection.deleted') {
           const id = msg.id as string | undefined
           if (id) {
+            markConnectionDeleted(id)
             queryClient.setQueriesData(
               { queryKey: ['connections'] },
               (prev: unknown) =>
                 filterList<{ id: string }>(prev, (c) => c.id !== id),
             )
+            queryClient.removeQueries({ queryKey: ['connections', id] })
           } else {
             void queryClient.invalidateQueries({ queryKey: ['connections'] })
           }
@@ -615,22 +643,27 @@ export function useWorkspaceSocket(): void {
           }
         } else if (type === 'connection.created' || type === 'connection.updated') {
           const conn = msg.connection as { id: string } | undefined
-          if (conn) {
+          if (conn && isTombstoned(connectionTombstones, conn.id)) {
+            // swallow stale create/update for a just-deleted connection
+          } else if (conn) {
             queryClient.setQueriesData(
               { queryKey: ['connections'] },
               (prev: unknown) => mergeEntity(prev as never, conn),
             )
+            queryClient.setQueryData(['connections', conn.id], conn as never)
           } else {
             void queryClient.invalidateQueries({ queryKey: ['connections'] })
           }
         } else if (type === 'connection.deleted') {
           const id = msg.id as string | undefined
           if (id) {
+            markConnectionDeleted(id)
             queryClient.setQueriesData(
               { queryKey: ['connections'] },
               (prev: unknown) =>
                 filterList<{ id: string }>(prev, (c) => c.id !== id),
             )
+            queryClient.removeQueries({ queryKey: ['connections', id] })
           } else {
             void queryClient.invalidateQueries({ queryKey: ['connections'] })
           }
