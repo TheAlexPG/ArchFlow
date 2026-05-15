@@ -34,11 +34,11 @@ export function ModelPricingTable({ pricing, onChange }: Props) {
   return (
     <div
       data-testid="model-pricing-table"
-      className="bg-neutral-900 border border-neutral-800 rounded-lg overflow-hidden"
+      className="bg-panel border border-border-base rounded-lg overflow-hidden"
     >
       <table className="w-full text-sm">
         <thead>
-          <tr className="text-xs text-neutral-500 border-b border-neutral-800">
+          <tr className="text-xs text-text-3 border-b border-border-base">
             <th className="text-left px-4 py-2 font-medium">Model</th>
             <th className="text-left px-4 py-2 font-medium">Input ($/1M tokens)</th>
             <th className="text-left px-4 py-2 font-medium">Output ($/1M tokens)</th>
@@ -50,7 +50,7 @@ export function ModelPricingTable({ pricing, onChange }: Props) {
             <tr>
               <td
                 colSpan={4}
-                className="px-4 py-3 text-xs text-neutral-500 italic"
+                className="px-4 py-3 text-xs text-text-3 italic"
               >
                 No pricing overrides — falling back to LiteLLM defaults.
               </td>
@@ -60,9 +60,9 @@ export function ModelPricingTable({ pricing, onChange }: Props) {
             <tr
               key={modelId}
               data-testid={`pricing-row-${modelId}`}
-              className="border-b border-neutral-800 last:border-0"
+              className="border-b border-border-base last:border-0"
             >
-              <td className="px-4 py-2 text-xs font-mono text-neutral-300">
+              <td className="px-4 py-2 text-xs font-mono text-text-2">
                 {modelId}
               </td>
               <td className="px-4 py-2">
@@ -77,7 +77,7 @@ export function ModelPricingTable({ pricing, onChange }: Props) {
                     })
                   }
                   data-testid={`pricing-${modelId}-input`}
-                  className="w-28 bg-neutral-800 border border-neutral-700 rounded px-2 py-1 text-xs outline-none focus:border-neutral-500"
+                  className="w-28 bg-surface border border-border-base rounded px-2 py-1 text-xs text-text-base outline-none focus:border-border-hi"
                 />
               </td>
               <td className="px-4 py-2">
@@ -92,7 +92,7 @@ export function ModelPricingTable({ pricing, onChange }: Props) {
                     })
                   }
                   data-testid={`pricing-${modelId}-output`}
-                  className="w-28 bg-neutral-800 border border-neutral-700 rounded px-2 py-1 text-xs outline-none focus:border-neutral-500"
+                  className="w-28 bg-surface border border-border-base rounded px-2 py-1 text-xs text-text-base outline-none focus:border-border-hi"
                 />
               </td>
               <td className="px-4 py-2 text-right">
@@ -108,7 +108,7 @@ export function ModelPricingTable({ pricing, onChange }: Props) {
             </tr>
           ))}
           {/* Add row */}
-          <tr className="bg-neutral-950">
+          <tr className="bg-surface">
             <td className="px-4 py-2">
               <input
                 type="text"
@@ -116,7 +116,7 @@ export function ModelPricingTable({ pricing, onChange }: Props) {
                 onChange={(e) => setNewId(e.target.value)}
                 placeholder="claude-haiku-3-5"
                 data-testid="pricing-new-id"
-                className="w-full bg-neutral-800 border border-neutral-700 rounded px-2 py-1 text-xs outline-none focus:border-neutral-500"
+                className="w-full bg-panel border border-border-base rounded px-2 py-1 text-xs text-text-base placeholder:text-text-4 outline-none focus:border-border-hi"
               />
             </td>
             <td className="px-4 py-2">
@@ -127,7 +127,7 @@ export function ModelPricingTable({ pricing, onChange }: Props) {
                 onChange={(e) => setNewInput(e.target.value)}
                 placeholder="0.80"
                 data-testid="pricing-new-input"
-                className="w-28 bg-neutral-800 border border-neutral-700 rounded px-2 py-1 text-xs outline-none focus:border-neutral-500"
+                className="w-28 bg-panel border border-border-base rounded px-2 py-1 text-xs text-text-base placeholder:text-text-4 outline-none focus:border-border-hi"
               />
             </td>
             <td className="px-4 py-2">
@@ -138,7 +138,7 @@ export function ModelPricingTable({ pricing, onChange }: Props) {
                 onChange={(e) => setNewOutput(e.target.value)}
                 placeholder="4.00"
                 data-testid="pricing-new-output"
-                className="w-28 bg-neutral-800 border border-neutral-700 rounded px-2 py-1 text-xs outline-none focus:border-neutral-500"
+                className="w-28 bg-panel border border-border-base rounded px-2 py-1 text-xs text-text-base placeholder:text-text-4 outline-none focus:border-border-hi"
               />
             </td>
             <td className="px-4 py-2 text-right">
@@ -147,7 +147,7 @@ export function ModelPricingTable({ pricing, onChange }: Props) {
                 onClick={addRow}
                 disabled={!newId.trim()}
                 data-testid="pricing-add"
-                className="text-xs text-blue-400 hover:text-blue-300 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="text-xs text-coral hover:text-coral-2 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 + Add row
               </button>

@@ -24,7 +24,6 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
 
   useEffect(() => {
     if (open) {
-      setQuery('')
       setTimeout(() => inputRef.current?.focus(), 50)
     }
   }, [open])
@@ -70,92 +69,75 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
 
   return (
     <div
-      style={{
-        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 100,
-        display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: 120,
-      }}
+      className="fixed inset-0 z-[100] flex items-start justify-center bg-black/50 px-4 pt-[120px] backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        style={{
-          background: '#171717', border: '1px solid #333', borderRadius: 12,
-          width: 500, maxHeight: 400, overflow: 'hidden',
-        }}
+        className="w-[500px] max-w-full max-h-[400px] overflow-hidden rounded-xl border border-border-base bg-panel text-text-base shadow-popup"
         onClick={(e) => e.stopPropagation()}
       >
-        <div style={{ padding: 12, borderBottom: '1px solid #262626' }}>
+        <div className="border-b border-border-base p-3">
           <input
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search objects, diagrams..."
-            style={{
-              width: '100%', background: 'transparent', border: 'none', outline: 'none',
-              color: '#f5f5f5', fontSize: 14, boxSizing: 'border-box',
-            }}
+            className="w-full bg-transparent text-sm text-text-base placeholder:text-text-4 outline-none"
           />
         </div>
-        <div style={{ maxHeight: 320, overflow: 'auto' }}>
+        <div className="max-h-[320px] overflow-auto">
           {filteredDiagrams.length > 0 && (
-            <div style={{ padding: '8px 0' }}>
-              <div style={{ fontSize: 10, color: '#525252', padding: '4px 16px', textTransform: 'uppercase' }}>
+            <div className="py-2">
+              <div className="px-4 py-1 text-[10px] uppercase tracking-[0.08em] text-text-3">
                 Diagrams
               </div>
               {filteredDiagrams.map((d) => (
-                <div
+                <button
                   key={d.id}
+                  type="button"
                   onClick={() => { navigate(`/diagram/${d.id}`); onClose() }}
-                  style={{
-                    padding: '8px 16px', cursor: 'pointer', fontSize: 13,
-                    display: 'flex', alignItems: 'center', gap: 8,
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = '#262626')}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                  className="flex w-full cursor-pointer items-center gap-2 px-4 py-2 text-left text-[13px] text-text-base transition-colors hover:bg-surface-hi focus-visible:bg-surface-hi focus-visible:outline-none"
                 >
-                  <span style={{ opacity: 0.5 }}>▦</span>
-                  {d.name}
-                </div>
+                  <span className="text-text-3">▦</span>
+                  <span className="truncate">{d.name}</span>
+                </button>
               ))}
             </div>
           )}
           {filteredObjects.length > 0 && (
-            <div style={{ padding: '8px 0' }}>
-              <div style={{ fontSize: 10, color: '#525252', padding: '4px 16px', textTransform: 'uppercase' }}>
+            <div className="py-2">
+              <div className="px-4 py-1 text-[10px] uppercase tracking-[0.08em] text-text-3">
                 Objects
               </div>
               {filteredObjects.slice(0, 10).map((o) => (
-                <div
+                <button
                   key={o.id}
+                  type="button"
                   onClick={() => { onClose() }}
-                  style={{
-                    padding: '8px 16px', cursor: 'pointer', fontSize: 13,
-                    display: 'flex', alignItems: 'center', gap: 8,
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = '#262626')}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                  className="flex w-full cursor-pointer items-center gap-2 px-4 py-2 text-left text-[13px] text-text-base transition-colors hover:bg-surface-hi focus-visible:bg-surface-hi focus-visible:outline-none"
                 >
-                  <span style={{ opacity: 0.5 }}>{TYPE_ICONS[o.type as ObjectType]}</span>
-                  {o.name}
+                  <span className="text-text-3">{TYPE_ICONS[o.type as ObjectType]}</span>
+                  <span className="truncate">{o.name}</span>
                   {(() => {
                     const techs = (o.technology_ids ?? [])
                       .map((id) => catalogMap.get(id))
                       .filter((t): t is NonNullable<typeof t> => Boolean(t))
                     if (techs.length === 0) return null
                     return (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: 4 }}>
+                      <span className="ml-1 inline-flex items-center gap-1">
                         {techs.slice(0, 3).map((t) => (
                           <TechIcon key={t.id} technology={t} size={12} />
                         ))}
                       </span>
                     )
                   })()}
-                </div>
+                </button>
               ))}
             </div>
           )}
           {query && filteredObjects.length === 0 && filteredDiagrams.length === 0 && (
-            <div style={{ padding: 24, textAlign: 'center', color: '#525252', fontSize: 13 }}>
-              No results for "{query}"
+            <div className="px-6 py-7 text-center text-[13px] text-text-3">
+              No results for &quot;{query}&quot;
             </div>
           )}
         </div>

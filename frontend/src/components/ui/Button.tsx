@@ -20,8 +20,9 @@ const variantClasses: Record<ButtonVariant, string> = {
     'bg-surface border-border-base text-text-2 ' +
     'hover:text-text-base hover:border-border-hi hover:bg-surface-hi',
   primary:
-    'bg-coral border-coral text-bg font-medium ' +
-    'hover:bg-coral-2 hover:border-coral-2',
+    'bg-coral border-coral text-on-accent font-medium ' +
+    'hover:bg-coral-2 hover:border-coral-2 ' +
+    'disabled:opacity-100 disabled:bg-surface-hi disabled:border-border-base disabled:text-text-3',
   ghost:
     'bg-transparent border-transparent text-text-2 ' +
     'hover:bg-surface hover:border-border-base',

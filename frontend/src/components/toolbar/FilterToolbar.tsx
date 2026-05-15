@@ -32,11 +32,11 @@ export function FilterToolbar() {
       {/* Legend — values with their color swatches for the active dimension */}
       {activeFilter !== 'none' && (
         <div style={{
-          background: '#171717', border: '1px solid #333', borderRadius: 8,
+          background: 'var(--color-panel)', border: '1px solid var(--color-border-base)', borderRadius: 8,
           padding: '6px 10px', display: 'flex', gap: 6, flexWrap: 'wrap', maxWidth: 560,
         }}>
           {legend.length === 0 ? (
-            <span style={{ fontSize: 11, color: '#525252' }}>
+            <span style={{ fontSize: 11, color: 'var(--color-text-4)' }}>
               No data for this dimension
             </span>
           ) : (
@@ -59,7 +59,7 @@ export function FilterToolbar() {
 
       {/* Tab bar */}
       <div style={{
-        background: '#171717', border: '1px solid #333', borderRadius: 8,
+        background: 'var(--color-panel)', border: '1px solid var(--color-border-base)', borderRadius: 8,
         padding: '4px 6px', display: 'flex', gap: 2,
       }}>
         {TABS.map((tab) => {
@@ -69,9 +69,9 @@ export function FilterToolbar() {
               key={tab.id}
               onClick={() => setActiveFilter(active ? 'none' : tab.id)}
               style={{
-                background: active ? '#262626' : 'transparent',
+                background: active ? 'var(--color-surface-hi)' : 'transparent',
                 border: 'none', borderRadius: 6, padding: '4px 10px',
-                color: active ? '#f5f5f5' : '#737373',
+                color: active ? 'var(--color-text-base)' : 'var(--color-text-3)',
                 cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4,
               }}
             >

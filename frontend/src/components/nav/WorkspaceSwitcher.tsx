@@ -128,7 +128,7 @@ export function WorkspaceSwitcher() {
         className="w-full flex items-center justify-between px-3 py-2 rounded-md border border-border-base bg-surface hover:bg-surface-hi transition-all duration-[120ms]"
       >
         <div className="flex items-center gap-2 min-w-0">
-          <div className="w-5 h-5 flex-shrink-0 rounded bg-gradient-to-br from-coral to-accent-purple flex items-center justify-center text-[10px] font-bold text-bg select-none">
+          <div className="w-5 h-5 flex-shrink-0 rounded bg-gradient-to-br from-coral to-accent-purple flex items-center justify-center text-[10px] font-bold text-on-accent select-none">
             {wsInitials.slice(0, 1)}
           </div>
           <span className="text-[12.5px] text-text-base truncate">

@@ -46,20 +46,20 @@ function ModalBody({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-[520px] max-h-[85vh] overflow-y-auto rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-100 shadow-2xl"
+        className="w-[520px] max-h-[85vh] overflow-y-auto rounded-lg border border-border-base bg-panel text-text-base shadow-popup"
       >
-        <div className="px-5 py-4 border-b border-neutral-800">
+        <div className="px-5 py-4 border-b border-border-base">
           <h3 className="text-sm font-semibold">Включити аналітику агентів?</h3>
         </div>
 
-        <div className="px-5 py-4 space-y-4 text-[12.5px] leading-relaxed text-neutral-300">
+        <div className="px-5 py-4 space-y-4 text-[12.5px] leading-relaxed text-text-2">
           <p>
             Це допомагає нам зробити агентів кращими: ми бачимо які запити погано
             спрацьовують і покращуємо логіку.
           </p>
 
           <div>
-            <h4 className="text-[11px] uppercase tracking-wider text-neutral-500 mb-1">
+            <h4 className="text-[11px] uppercase tracking-wider text-text-3 mb-1">
               Що збирається
             </h4>
             <ul className="list-disc list-inside space-y-0.5">
@@ -70,7 +70,7 @@ function ModalBody({
           </div>
 
           <div>
-            <h4 className="text-[11px] uppercase tracking-wider text-neutral-500 mb-1">
+            <h4 className="text-[11px] uppercase tracking-wider text-text-3 mb-1">
               Що НЕ збирається
             </h4>
             <ul className="list-disc list-inside space-y-0.5">
@@ -81,7 +81,7 @@ function ModalBody({
           </div>
 
           <div>
-            <h4 className="text-[11px] uppercase tracking-wider text-neutral-500 mb-1">
+            <h4 className="text-[11px] uppercase tracking-wider text-text-3 mb-1">
               Куди йде
             </h4>
             <ul className="list-disc list-inside space-y-0.5">
@@ -92,7 +92,7 @@ function ModalBody({
           </div>
 
           <div className="pt-1">
-            <h4 className="text-[11px] uppercase tracking-wider text-neutral-500 mb-2">
+            <h4 className="text-[11px] uppercase tracking-wider text-text-3 mb-2">
               Виберіть рівень
             </h4>
             <div className="space-y-1.5">
@@ -121,18 +121,18 @@ function ModalBody({
           </div>
         </div>
 
-        <div className="px-5 py-3 border-t border-neutral-800 flex justify-end gap-2">
+        <div className="px-5 py-3 border-t border-border-base flex justify-end gap-2">
           <button
             onClick={onCancel}
             data-testid="consent-cancel"
-            className="text-xs text-neutral-400 hover:text-neutral-200 px-3 py-1.5"
+            className="text-xs text-text-2 hover:text-text-base px-3 py-1.5"
           >
             Скасувати
           </button>
           <button
             onClick={() => onConfirm(value)}
             data-testid="consent-confirm"
-            className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded px-3 py-1.5"
+            className="bg-coral hover:bg-coral-2 text-on-accent text-xs font-medium rounded px-3 py-1.5"
           >
             Підтвердити
           </button>
@@ -165,8 +165,8 @@ function ConsentOption({
         className="mt-0.5"
       />
       <span>
-        <span className="text-neutral-100">{label}</span>
-        <span className="text-neutral-500"> — {hint}</span>
+        <span className="text-text-base">{label}</span>
+        <span className="text-text-3"> — {hint}</span>
       </span>
     </label>
   )

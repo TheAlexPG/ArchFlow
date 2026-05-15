@@ -119,9 +119,9 @@ export function ExportToolbar({ diagramId }: ExportToolbarProps) {
           height: 32,
           padding: '0 12px',
           borderRadius: 8,
-          background: open ? '#262626' : '#171717',
-          border: `1px solid ${open ? '#525252' : '#333'}`,
-          color: '#d4d4d4',
+          background: open ? 'var(--control-button-hover)' : 'var(--control-button-bg)',
+          border: `1px solid ${open ? 'var(--color-border-hi)' : 'var(--control-border)'}`,
+          color: 'var(--color-text-base)',
           cursor: 'pointer',
           fontSize: 12,
           display: 'flex',
@@ -145,8 +145,8 @@ export function ExportToolbar({ diagramId }: ExportToolbarProps) {
               right: 0,
               top: 38,
               width: 280,
-              background: '#171717',
-              border: '1px solid #333',
+              background: 'var(--color-panel)',
+              border: '1px solid var(--color-border-base)',
               borderRadius: 8,
               zIndex: 10,
               overflow: 'hidden',
@@ -155,9 +155,9 @@ export function ExportToolbar({ diagramId }: ExportToolbarProps) {
             <div
               style={{
                 padding: '8px 12px',
-                borderBottom: '1px solid #262626',
+                borderBottom: '1px solid var(--color-border-base)',
                 fontSize: 11,
-                color: '#737373',
+                color: 'var(--color-text-3)',
                 textTransform: 'uppercase',
                 letterSpacing: '0.05em',
               }}
@@ -176,14 +176,14 @@ export function ExportToolbar({ diagramId }: ExportToolbarProps) {
                       alignItems: 'center',
                       gap: 8,
                       padding: '8px 12px',
-                      borderBottom: '1px solid #1f1f1f',
+                      borderBottom: '1px solid var(--color-border-base)',
                     }}
                   >
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, color: '#e5e5e5' }}>
+                      <div style={{ fontSize: 12, color: 'var(--color-text-base)' }}>
                         {f.label}
                       </div>
-                      <div style={{ fontSize: 10, color: '#525252' }}>
+                      <div style={{ fontSize: 10, color: 'var(--color-text-4)' }}>
                         {flashed
                           ? flashed.text
                           : `${f.hint} · .${f.ext}`}
@@ -227,9 +227,9 @@ function FormatActionButton({
   active?: boolean
   error?: boolean
 }) {
-  let bg = '#262626'
-  let border = '#333'
-  let color = '#d4d4d4'
+  let bg = 'var(--control-button-hover)'
+  let border = 'var(--control-border)'
+  let color = 'var(--color-text-base)'
   if (active) {
     bg = '#1f3a23'
     border = '#2f6b3a'

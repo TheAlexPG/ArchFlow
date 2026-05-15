@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Button } from '../ui/Button'
 import { Kbd } from '../ui/Kbd'
+import { ThemeToggle } from '../theme/ThemeToggle'
 import { SearchModal } from './SearchModal'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -112,12 +113,11 @@ export function PageToolbar({
         )}
       </div>
 
-      {/* Right: actions slot */}
-      {actions && (
-        <div className="flex items-center gap-2 flex-shrink-0 self-center">
-          {actions}
-        </div>
-      )}
+      {/* Right: global toolbar controls + page actions */}
+      <div className="flex items-center gap-2 flex-shrink-0 self-center">
+        <ThemeToggle />
+        {actions}
+      </div>
     </div>
   )
 }

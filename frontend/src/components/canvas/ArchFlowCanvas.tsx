@@ -755,15 +755,15 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
             transform: 'translateX(-50%)',
             zIndex: 25,
             padding: '6px 12px',
-            background: '#171717',
-            border: '1px solid #3b82f6',
+            background: 'var(--color-panel)',
+            border: '1px solid var(--color-accent-blue)',
             borderRadius: 8,
             fontSize: 12,
-            color: '#e5e5e5',
+            color: 'var(--color-text-base)',
             display: 'flex',
             alignItems: 'center',
             gap: 10,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+            boxShadow: 'var(--shadow-popup)',
           }}
         >
           <span>Click on the canvas to place a {commentComposeType} pin</span>
@@ -771,8 +771,8 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
             onClick={() => setCommentComposeType(null)}
             style={{
               background: 'transparent',
-              border: '1px solid #404040',
-              color: '#a3a3a3',
+              border: '1px solid var(--color-border-base)',
+              color: 'var(--color-text-2)',
               borderRadius: 4,
               padding: '2px 8px',
               cursor: 'pointer',
@@ -796,25 +796,25 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
             alignItems: 'center',
             gap: 12,
             padding: '8px 14px',
-            background: '#171717',
-            border: '1px solid #3b82f6',
+            background: 'var(--color-panel)',
+            border: '1px solid var(--color-accent-blue)',
             borderRadius: 8,
-            color: '#e5e5e5',
+            color: 'var(--color-text-base)',
             fontSize: 12,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+            boxShadow: 'var(--shadow-popup)',
           }}
         >
-          <span style={{ color: '#60a5fa' }}>🔗</span>
+          <span style={{ color: 'var(--color-accent-blue)' }}>🔗</span>
           <span>
             Dependencies of{' '}
-            <span style={{ fontWeight: 600, color: '#f5f5f5' }}>{focusObject.name}</span>
+            <span style={{ fontWeight: 600, color: 'var(--color-text-base)' }}>{focusObject.name}</span>
           </span>
           <button
             onClick={() => setDependenciesFocus(null)}
             style={{
               background: 'transparent',
-              border: '1px solid #404040',
-              color: '#a3a3a3',
+              border: '1px solid var(--color-border-base)',
+              color: 'var(--color-text-2)',
               borderRadius: 4,
               padding: '2px 8px',
               cursor: 'pointer',
@@ -871,11 +871,11 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
         markerEnd: { type: MarkerType.ArrowClosed, color: '#525252' },
       }}
       style={{
-        background: '#0a0a0a',
+        background: 'var(--color-bg)',
         cursor: commentComposeType ? 'crosshair' : undefined,
       }}
     >
-      <Background color="#333" gap={10} size={1} />
+      <Background color="var(--canvas-grid)" gap={10} size={1} />
       <Controls />
       {/* Minimap — wrapped so we can absolutely-position the MINIMAP label */}
       <div className="relative">
@@ -899,7 +899,7 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
             }
           }}
           nodeBorderRadius={3}
-          maskColor="rgba(10, 10, 11, 0.7)"
+          maskColor="var(--minimap-mask)"
           maskStrokeColor="var(--color-coral)"
           maskStrokeWidth={1.5}
           style={{ width: 200, height: 120 }}

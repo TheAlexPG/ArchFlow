@@ -60,7 +60,7 @@ export function ObjectsPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search objects…"
-            className="w-72 bg-neutral-900 border border-neutral-800 rounded px-3 py-1.5 text-sm outline-none focus:border-neutral-600"
+            className="w-72 bg-surface border border-border-base rounded px-3 py-1.5 text-sm text-text-base placeholder:text-text-4 outline-none focus:border-border-hi"
           />
         </div>
 
@@ -71,10 +71,10 @@ export function ObjectsPage() {
           </div>
         )}
 
-        <div className="bg-neutral-900 border border-neutral-800 rounded-lg overflow-hidden">
+        <div className="bg-panel border border-border-base rounded-lg overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-xs text-neutral-500 border-b border-neutral-800">
+              <tr className="text-xs text-text-3 border-b border-border-base">
                 <th className="text-left px-4 py-2 font-medium">Name</th>
                 <th className="text-left px-4 py-2 font-medium">Type</th>
                 <th className="text-left px-4 py-2 font-medium">Status</th>
@@ -124,12 +124,12 @@ function ObjectRow({
     .filter((t): t is Technology => Boolean(t))
 
   return (
-    <tr className="border-b border-neutral-800 last:border-0 hover:bg-neutral-800/40">
+    <tr className="border-b border-border-base last:border-0 hover:bg-surface">
       <td className="px-4 py-2">
         <span className="mr-2 opacity-60">{TYPE_ICONS[obj.type]}</span>
-        <span className="text-neutral-200">{obj.name}</span>
+        <span className="text-text-base">{obj.name}</span>
       </td>
-      <td className="px-4 py-2 text-neutral-400">{TYPE_LABELS[obj.type]}</td>
+      <td className="px-4 py-2 text-text-2">{TYPE_LABELS[obj.type]}</td>
       <td className="px-4 py-2">
         <span
           className="inline-flex items-center gap-1.5 text-xs"
@@ -144,22 +144,22 @@ function ObjectRow({
       </td>
       <td className="px-4 py-2 text-xs">
         {technologies.length === 0 ? (
-          <span className="text-neutral-600">—</span>
+          <span className="text-text-3">—</span>
         ) : (
           <div className="flex flex-wrap gap-1">
             {technologies.slice(0, 4).map((t) => (
               <TechBadge key={t.id} technology={t} />
             ))}
             {technologies.length > 4 && (
-              <span className="text-neutral-600">+{technologies.length - 4}</span>
+              <span className="text-text-3">+{technologies.length - 4}</span>
             )}
           </div>
         )}
       </td>
-      <td className="px-4 py-2 text-neutral-400 text-xs">{obj.owner_team || '—'}</td>
+      <td className="px-4 py-2 text-text-2 text-xs">{obj.owner_team || '—'}</td>
       <td className="px-4 py-2 text-xs">
         {diagrams.length === 0 ? (
-          <span className="text-neutral-600">—</span>
+          <span className="text-text-3">—</span>
         ) : (
           <div className="flex flex-wrap gap-1">
             {diagrams.slice(0, 2).map((d) => (
@@ -172,7 +172,7 @@ function ObjectRow({
               </button>
             ))}
             {diagrams.length > 2 && (
-              <span className="text-neutral-600">+{diagrams.length - 2}</span>
+              <span className="text-text-3">+{diagrams.length - 2}</span>
             )}
           </div>
         )}
@@ -183,7 +183,7 @@ function ObjectRow({
             e.stopPropagation()
             onEdit(obj.id)
           }}
-          className="px-2 py-1 text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800 rounded text-base leading-none"
+          className="px-2 py-1 text-text-3 hover:text-text-base hover:bg-surface-hi rounded text-base leading-none"
           title="Edit object"
         >
           ⋯

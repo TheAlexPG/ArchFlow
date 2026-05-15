@@ -144,7 +144,7 @@ export function ObjectContextMenu({ object, diagramId, draftId }: ObjectContextM
         style={{
           background: 'transparent',
           border: 'none',
-          color: '#737373',
+          color: 'var(--context-menu-trigger)',
           cursor: 'pointer',
           fontSize: 14,
           padding: '0 4px',
@@ -164,10 +164,10 @@ export function ObjectContextMenu({ object, diagramId, draftId }: ObjectContextM
             top: coords.top,
             left: coords.left,
             minWidth: 200,
-            background: '#1a1a1a',
-            border: '1px solid #333',
+            background: 'var(--context-menu-bg)',
+            border: '1px solid var(--context-menu-border)',
             borderRadius: 6,
-            boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+            boxShadow: 'var(--context-menu-shadow)',
             zIndex: 10000,
             padding: 4,
           }}
@@ -192,7 +192,7 @@ export function ObjectContextMenu({ object, diagramId, draftId }: ObjectContextM
           />
           {showAiItems && (
             <>
-              <div style={{ height: 1, background: '#333', margin: '4px 0' }} />
+              <div style={{ height: 1, background: 'var(--context-menu-divider)', margin: '4px 0' }} />
               <MenuItem
                 icon="🤖"
                 label="AI explain"
@@ -211,7 +211,7 @@ export function ObjectContextMenu({ object, diagramId, draftId }: ObjectContextM
               />
             </>
           )}
-          <div style={{ height: 1, background: '#333', margin: '4px 0' }} />
+          <div style={{ height: 1, background: 'var(--context-menu-divider)', margin: '4px 0' }} />
           <MenuItem
             icon="🗑"
             label="Delete object"
@@ -248,12 +248,12 @@ function MenuItem({
         background: 'transparent',
         border: 'none',
         borderRadius: 4,
-        color: danger ? '#f87171' : '#d4d4d4',
+        color: danger ? 'var(--context-menu-danger)' : 'var(--context-menu-text)',
         cursor: 'pointer',
         fontSize: 12,
         textAlign: 'left',
       }}
-      onMouseEnter={(e) => (e.currentTarget.style.background = danger ? 'rgba(239,68,68,0.1)' : '#262626')}
+      onMouseEnter={(e) => (e.currentTarget.style.background = danger ? 'rgba(239,68,68,0.1)' : 'var(--context-menu-hover-bg)')}
       onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
     >
       <span style={{ width: 16, textAlign: 'center', opacity: 0.8 }}>{icon}</span>

@@ -140,7 +140,7 @@ export function EdgeSidebar({ diagramId }: EdgeSidebarProps) {
                 className={cn(
                   'flex-1 flex flex-col items-center px-2 py-1 rounded text-[11px] transition-colors',
                   conn.direction === d.value
-                    ? 'bg-coral text-bg font-medium'
+                    ? 'bg-coral text-on-accent font-medium'
                     : 'text-text-3 hover:text-text-2',
                 )}
               >
@@ -173,7 +173,7 @@ export function EdgeSidebar({ diagramId }: EdgeSidebarProps) {
                 className={cn(
                   'flex-1 flex flex-col items-center px-2 py-1 rounded text-[11px] transition-colors',
                   conn.shape === s.value
-                    ? 'bg-coral text-bg font-medium'
+                    ? 'bg-coral text-on-accent font-medium'
                     : 'text-text-3 hover:text-text-2',
                 )}
               >

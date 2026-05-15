@@ -330,7 +330,7 @@ export function OverviewPage() {
               <SearchButton onClick={toggleSearch} />
               <button
                 onClick={() => setCreateOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-coral border border-coral text-bg text-[12.5px] font-medium hover:bg-coral-2 hover:border-coral-2 transition-colors"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-coral border border-coral text-on-accent text-[12.5px] font-medium hover:bg-coral-2 hover:border-coral-2 transition-colors"
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                   <path d="M12 5v14M5 12h14" />

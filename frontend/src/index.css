@@ -33,6 +33,7 @@
   /* Colors — brand / accent */
   --color-coral:   #FF6B35;
   --color-coral-2: #FF8552;
+  --color-on-accent: #0a0a0b;
 
   /* Colors — semantic accents (namespaced to avoid clashing with
      Tailwind's built-in green-500 / purple-500 / etc. families) */
@@ -72,14 +73,87 @@
   --animate-fade:         fade 0.3s ease;
 }
 
+:root {
+  color-scheme: dark;
+  --canvas-grid: #26262c;
+  --control-bg: #171717;
+  --control-border: #333333;
+  --control-button-bg: #171717;
+  --control-button-hover: #262626;
+  --control-divider: #262626;
+  --control-text: #a3a3a3;
+  --control-text-hover: #f5f5f5;
+  --context-menu-bg: #1a1a1a;
+  --context-menu-border: #333333;
+  --context-menu-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  --context-menu-trigger: #737373;
+  --context-menu-text: #d4d4d4;
+  --context-menu-hover-bg: #262626;
+  --context-menu-divider: #333333;
+  --context-menu-danger: #f87171;
+  --minimap-mask: rgba(0, 0, 0, 0.3);
+  --rich-text-strong: #e5e5e5;
+  --rich-text-code-bg: #262626;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --color-bg:         #f7f4ef;
+  --color-panel:      #fffaf2;
+  --color-surface:    #f0ebe2;
+  --color-surface-hi: #e8dfd2;
+
+  --color-border-base: #d9cfc0;
+  --color-border-hi:   #c3b5a3;
+
+  --color-text-base: #1c1713;
+  --color-text-2:    #5f544b;
+  --color-text-3:    #81746a;
+  --color-text-4:    #a19389;
+
+  --color-coral-glow:        rgba(255, 107, 53, 0.18);
+  --color-accent-green-glow:  rgba(22, 163, 74, 0.12);
+  --color-accent-purple-glow: rgba(147, 51, 234, 0.12);
+  --color-accent-blue-glow:   rgba(37, 99, 235, 0.12);
+  --color-accent-amber-glow:  rgba(217, 119, 6, 0.14);
+  --color-accent-pink-glow:   rgba(219, 39, 119, 0.12);
+
+  --shadow-window:       0 40px 80px -24px rgba(63, 43, 24, 0.22), 0 20px 40px -24px rgba(63, 43, 24, 0.18);
+  --shadow-card-hover:   0 12px 30px -12px rgba(63, 43, 24, 0.18);
+  --shadow-ai-bar:       0 0 0 3px rgba(244,114,182,0.07), 0 10px 40px -12px rgba(161, 93, 53, 0.18);
+  --shadow-popup:        0 20px 40px -12px rgba(63, 43, 24, 0.22), 0 4px 16px -6px rgba(63, 43, 24, 0.18);
+  --shadow-coral-glow:   0 0 40px rgba(255,107,53,0.18);
+  --shadow-node-selected: 0 0 0 3px rgba(255,107,53,0.18), 0 0 34px rgba(255,107,53,0.18);
+
+  --canvas-grid: #d9cfc0;
+  --control-bg: #fffaf2;
+  --control-border: #d9cfc0;
+  --control-button-bg: #fffaf2;
+  --control-button-hover: #f0ebe2;
+  --control-divider: #d9cfc0;
+  --control-text: #5f544b;
+  --control-text-hover: #1c1713;
+  --context-menu-bg: var(--color-panel);
+  --context-menu-border: var(--color-border-base);
+  --context-menu-shadow: var(--shadow-popup);
+  --context-menu-trigger: var(--color-text-3);
+  --context-menu-text: var(--color-text-base);
+  --context-menu-hover-bg: var(--color-surface-hi);
+  --context-menu-divider: var(--color-border-base);
+  --context-menu-danger: #dc2626;
+  --minimap-mask: rgba(120, 99, 77, 0.18);
+  --rich-text-strong: #2b211a;
+  --rich-text-code-bg: #e8dfd2;
+}
+
 /* ─── Base / reset ────────────────────────────────────────────────────────── */
 html, body, #root {
   height: 100%;
   margin: 0;
   padding: 0;
-  /* Updated to new token value — one digit change from #0a0a0a → #0a0a0b */
-  background-color: #0a0a0b;
-  color: #f5f5f5;
+  background-color: var(--color-bg);
+  color: var(--color-text-base);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   font-feature-settings: "ss01", "ss02", "cv11";
@@ -92,8 +166,8 @@ html, body, #root {
  * :-internal-is-dark-theme selectors that beat Tailwind utility classes.
  * Safari ignores these, which is why it looked correct.
  */
-:root {
-  color-scheme: dark;
+html {
+  scrollbar-color: var(--color-border-base) transparent;
 }
 
 /*
@@ -124,18 +198,18 @@ select {
 
 /* ─── Task 003: Global utilities ──────────────────────────────────────────── */
 @layer utilities {
-  /* Page background — coral + pink radial gradients over #0a0a0b */
+  /* Page background — coral + pink radial gradients over the themed bg */
   .page-bg {
     background:
       radial-gradient(900px 500px at 20% -10%, rgba(255, 107, 53, 0.08), transparent 60%),
       radial-gradient(700px 400px at 90% 10%,  rgba(244, 114, 182, 0.05), transparent 60%),
-      #0a0a0b;
+      var(--color-bg);
   }
 
   /* Canvas background — 24px dotted grid */
   .canvas-bg {
-    background-color: #0a0a0b;
-    background-image: radial-gradient(circle, #26262c 1px, transparent 1px);
+    background-color: var(--color-bg);
+    background-image: radial-gradient(circle, var(--canvas-grid) 1px, transparent 1px);
     background-size: 24px 24px;
   }
 
@@ -165,24 +239,24 @@ select {
 
 /* ─── React Flow dark theme overrides (load-bearing — do not remove) ──────── */
 .react-flow__controls {
-  background: #171717 !important;
-  border: 1px solid #333 !important;
+  background: var(--control-bg) !important;
+  border: 1px solid var(--control-border) !important;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
   border-radius: 6px !important;
   overflow: hidden;
 }
 
 .react-flow__controls-button {
-  background: #171717 !important;
-  border-bottom: 1px solid #262626 !important;
-  color: #a3a3a3 !important;
+  background: var(--control-button-bg) !important;
+  border-bottom: 1px solid var(--control-divider) !important;
+  color: var(--control-text) !important;
   width: 28px !important;
   height: 28px !important;
 }
 
 .react-flow__controls-button:hover {
-  background: #262626 !important;
-  color: #f5f5f5 !important;
+  background: var(--control-button-hover) !important;
+  color: var(--control-text-hover) !important;
 }
 
 .react-flow__controls-button svg {
@@ -203,7 +277,7 @@ select {
 
 /* Darken the area outside the viewport rect */
 .react-flow__minimap-mask {
-  fill: rgba(0, 0, 0, 0.3);
+  fill: var(--minimap-mask);
 }
 
 /* Minimap node default fill — overridden per-type via nodeColor prop */
@@ -230,7 +304,7 @@ select {
 }
 .node-desc-html strong {
   font-weight: 600;
-  color: #e5e5e5;
+  color: var(--rich-text-strong);
 }
 .node-desc-html em {
   font-style: italic;
@@ -238,7 +312,7 @@ select {
 .node-desc-html code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.9em;
-  background: #262626;
+  background: var(--rich-text-code-bg);
   padding: 0 3px;
   border-radius: 3px;
 }
@@ -248,7 +322,7 @@ select {
   font-size: inherit;
   font-weight: 600;
   margin: 0;
-  color: #e5e5e5;
+  color: var(--rich-text-strong);
 }
 .node-desc-html ul,
 .node-desc-html ol {
@@ -594,4 +668,138 @@ select {
 .create-type-icon {
   transition: all 0.2s ease;
   color: var(--color-text-2);
+}
+
+/* ─── Light-theme compatibility for legacy dark utility classes ─────────────
+ * Several older app pages were built directly with neutral-800/900 Tailwind
+ * utilities. In light mode those utilities leave black cards, tables and form
+ * controls on an otherwise light canvas. Keep dark mode untouched, but remap
+ * the common legacy neutral ramp to semantic theme tokens when light is active.
+ */
+:root[data-theme='light'] .bg-neutral-950,
+:root[data-theme='light'] .bg-neutral-900,
+:root[data-theme='light'] .bg-neutral-800 {
+  background-color: var(--color-panel) !important;
+}
+
+:root[data-theme='light'] .bg-neutral-600,
+:root[data-theme='light'] .bg-neutral-700 {
+  background-color: var(--color-surface-hi) !important;
+}
+
+:root[data-theme='light'] .bg-neutral-800\/40,
+:root[data-theme='light'] .bg-neutral-800\/50,
+:root[data-theme='light'] .bg-neutral-900\/10 {
+  background-color: color-mix(in srgb, var(--color-surface) 65%, transparent) !important;
+}
+
+:root[data-theme='light'] .bg-blue-600,
+:root[data-theme='light'] .bg-blue-500 {
+  background-color: var(--color-coral) !important;
+}
+
+:root[data-theme='light'] .hover\:bg-blue-500:hover,
+:root[data-theme='light'] .hover\:bg-blue-600:hover {
+  background-color: var(--color-coral-2) !important;
+}
+
+:root[data-theme='light'] .bg-amber-600,
+:root[data-theme='light'] .bg-amber-500,
+:root[data-theme='light'] .hover\:bg-amber-500:hover,
+:root[data-theme='light'] .hover\:bg-amber-600:hover {
+  background-color: var(--color-accent-amber) !important;
+}
+
+:root[data-theme='light'] .bg-green-600,
+:root[data-theme='light'] .bg-green-500,
+:root[data-theme='light'] .hover\:bg-green-500:hover,
+:root[data-theme='light'] .hover\:bg-green-600:hover {
+  background-color: var(--color-accent-green) !important;
+}
+
+:root[data-theme='light'] .bg-black\/40,
+:root[data-theme='light'] .bg-black\/50,
+:root[data-theme='light'] .bg-black\/60,
+:root[data-theme='light'] .bg-black\/65,
+:root[data-theme='light'] .bg-black\/70 {
+  background-color: rgba(28, 23, 19, 0.36) !important;
+}
+
+:root[data-theme='light'] .hover\:bg-neutral-800:hover,
+:root[data-theme='light'] .hover\:bg-neutral-800\/40:hover,
+:root[data-theme='light'] .hover\:bg-neutral-800\/50:hover,
+:root[data-theme='light'] .hover\:bg-neutral-700:hover,
+:root[data-theme='light'] .hover\:bg-neutral-600:hover {
+  background-color: var(--color-surface-hi) !important;
+}
+
+:root[data-theme='light'] .border-neutral-900,
+:root[data-theme='light'] .border-neutral-800,
+:root[data-theme='light'] .border-neutral-700,
+:root[data-theme='light'] .border-neutral-600,
+:root[data-theme='light'] .border-neutral-500 {
+  border-color: var(--color-border-base) !important;
+}
+
+:root[data-theme='light'] .hover\:border-neutral-700:hover,
+:root[data-theme='light'] .hover\:border-neutral-600:hover,
+:root[data-theme='light'] .hover\:border-neutral-500:hover,
+:root[data-theme='light'] .focus\:border-neutral-600:focus,
+:root[data-theme='light'] .focus\:border-neutral-500:focus {
+  border-color: var(--color-border-hi) !important;
+}
+
+:root[data-theme='light'] .text-neutral-100,
+:root[data-theme='light'] .text-neutral-200,
+:root[data-theme='light'] .text-neutral-300 {
+  color: var(--color-text-base) !important;
+}
+
+:root[data-theme='light'] .text-neutral-400,
+:root[data-theme='light'] .text-neutral-500 {
+  color: var(--color-text-2) !important;
+}
+
+:root[data-theme='light'] .text-neutral-600,
+:root[data-theme='light'] .text-neutral-700 {
+  color: var(--color-text-3) !important;
+}
+
+:root[data-theme='light'] .hover\:text-neutral-100:hover,
+:root[data-theme='light'] .hover\:text-neutral-200:hover,
+:root[data-theme='light'] .hover\:text-neutral-300:hover,
+:root[data-theme='light'] .hover\:text-white:hover {
+  color: var(--color-text-base) !important;
+}
+
+:root[data-theme='light'] .bg-coral.text-white,
+:root[data-theme='light'] .bg-blue-600.text-white,
+:root[data-theme='light'] .bg-blue-500.text-white,
+:root[data-theme='light'] .bg-amber-600.text-white,
+:root[data-theme='light'] .bg-amber-500.text-white,
+:root[data-theme='light'] .bg-green-600.text-white,
+:root[data-theme='light'] .bg-green-500.text-white,
+:root[data-theme='light'] .bg-neutral-600.text-white,
+:root[data-theme='light'] .bg-neutral-700.text-white,
+:root[data-theme='light'] .bg-neutral-800.text-white,
+:root[data-theme='light'] .bg-neutral-900.text-white {
+  color: var(--color-text-base) !important;
+}
+
+:root[data-theme='light'] .bg-blue-600.text-white,
+:root[data-theme='light'] .bg-blue-500.text-white,
+:root[data-theme='light'] .bg-amber-600.text-white,
+:root[data-theme='light'] .bg-amber-500.text-white,
+:root[data-theme='light'] .bg-green-600.text-white,
+:root[data-theme='light'] .bg-green-500.text-white {
+  color: var(--color-on-accent) !important;
+}
+
+:root[data-theme='light'] .disabled\:opacity-40:disabled,
+:root[data-theme='light'] .disabled\:opacity-50:disabled {
+  opacity: 0.62 !important;
+}
+
+:root[data-theme='light'] .ring-offset-\[\#171717\] {
+  --tw-ring-offset-color: var(--color-panel) !important;
 }

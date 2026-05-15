@@ -27,6 +27,7 @@ import { useAuthStore } from './stores/auth-store'
 import { useWorkspaceStore } from './stores/workspace-store'
 import { useWorkspaceSocket } from './hooks/use-realtime'
 import { ChatBubble } from './components/agent-chat/ChatBubble'
+import { ThemeProvider } from './components/theme/ThemeProvider'
 import './index.css'
 
 const queryClient = new QueryClient({
@@ -74,10 +75,11 @@ function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {isAuthenticated && <WorkspaceCacheReset />}
-      {isAuthenticated && workspaceId && <WorkspaceSocketGate />}
-      <BrowserRouter>
-        <Routes>
+      <ThemeProvider>
+        {isAuthenticated && <WorkspaceCacheReset />}
+        {isAuthenticated && workspaceId && <WorkspaceSocketGate />}
+        <BrowserRouter>
+          <Routes>
           <Route
             path="/login"
             element={isAuthenticated ? <Navigate to="/" replace /> : <AuthPage />}
@@ -213,11 +215,12 @@ function App() {
                 : <Navigate to="/" replace />
             }
           />
-        </Routes>
-        {/* Agent chat bubble — floats over all workspace pages, outside route
-            layout but inside the Router so useNavigate() (in useViewChange) works. */}
-        {isAuthenticated && <ChatBubble />}
-      </BrowserRouter>
+          </Routes>
+          {/* Agent chat bubble — floats over all workspace pages, outside route
+              layout but inside the Router so useNavigate() (in useViewChange) works. */}
+          {isAuthenticated && <ChatBubble />}
+        </BrowserRouter>
+      </ThemeProvider>
     </QueryClientProvider>
   )
 }
