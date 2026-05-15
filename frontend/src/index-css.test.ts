@@ -5,6 +5,8 @@ const css = readFileSync('src/index.css', 'utf8')
 const exportToolbar = readFileSync('src/components/toolbar/ExportToolbar.tsx', 'utf8')
 const flowsPanel = readFileSync('src/components/toolbar/FlowsPanel.tsx', 'utf8')
 const filterToolbar = readFileSync('src/components/toolbar/FilterToolbar.tsx', 'utf8')
+const addObjectToolbar = readFileSync('src/components/toolbar/AddObjectToolbar.tsx', 'utf8')
+const addObjectFab = readFileSync('src/components/canvas/AddObjectFAB.tsx', 'utf8')
 
 describe('light theme legacy control compatibility CSS', () => {
   it('keeps legacy dark button/control utilities scoped to light theme tokens', () => {
@@ -31,5 +33,24 @@ describe('light theme legacy control compatibility CSS', () => {
     expect(filterToolbar).toContain("background: 'var(--color-panel)'")
     expect(filterToolbar).not.toContain("background: '#171717'")
     expect(flowsPanel).not.toContain("background: open ? '#333' : '#262626'")
+  })
+
+  it('keeps the add-object popover viewport constrained and theme-tokened', () => {
+    expect(css).toContain('.add-object-toolbar__popover')
+    expect(css).toContain('position: fixed')
+    expect(css).toContain('top: clamp(12px, calc(50vh - 220px), calc(100vh - 452px))')
+    expect(css).toContain('max-height: calc(100vh - 24px)')
+    expect(css).toContain('min-height: 0')
+    expect(css).toContain('overflow-y: auto')
+    expect(css).toContain('background: var(--color-panel)')
+    expect(addObjectToolbar).toContain('className="add-object-toolbar__popover"')
+    expect(addObjectToolbar).not.toContain("background: '#171717'")
+    expect(addObjectToolbar).not.toContain("background: '#262626'")
+    expect(addObjectFab).toContain('popupMetrics')
+    expect(addObjectFab).toContain('window.innerHeight')
+    expect(addObjectFab).toContain('window.innerWidth')
+    expect(addObjectFab).toContain('bottom = 12')
+    expect(addObjectFab).not.toContain('top: 72,')
+    expect(addObjectFab).not.toContain('bottom: 72,')
   })
 })

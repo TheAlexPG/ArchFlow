@@ -8,6 +8,12 @@ const h = vi.hoisted(() => ({
   commentComposeType: null as null | string,
   dependenciesFocusId: null as null | string,
   allObjects: [] as Array<{ id: string; name: string; type: string }>,
+  diagramObjects: [] as Array<Record<string, unknown>>,
+  connections: [] as Array<Record<string, unknown>>,
+  currentNodes: [] as Array<{ id: string; data?: unknown }>,
+  currentEdges: [] as Array<{ id: string; source?: string; target?: string; data?: unknown }>,
+  setNodes: vi.fn(),
+  setEdges: vi.fn(),
 }))
 
 vi.mock('@xyflow/react', () => ({
@@ -27,21 +33,21 @@ vi.mock('@xyflow/react', () => ({
   ConnectionMode: { Loose: 'Loose' },
   MarkerType: { ArrowClosed: 'ArrowClosed' },
   useReactFlow: () => ({
-    setNodes: vi.fn(),
-    setEdges: vi.fn(),
-    getNodes: () => [],
-    getEdges: () => [],
+    setNodes: h.setNodes,
+    setEdges: h.setEdges,
+    getNodes: () => h.currentNodes,
+    getEdges: () => h.currentEdges,
     screenToFlowPosition: ({ x, y }: { x: number; y: number }) => ({ x, y }),
     fitView: vi.fn(),
   }),
 }))
 
 vi.mock('../../hooks/use-api', () => ({
-  useConnections: () => ({ data: [] }),
+  useConnections: () => ({ data: h.connections }),
   useCreateComment: () => ({ mutate: vi.fn() }),
   useCreateConnection: () => ({ mutate: vi.fn() }),
   useDeleteConnection: () => ({ mutate: vi.fn() }),
-  useDiagramObjects: () => ({ data: [] }),
+  useDiagramObjects: () => ({ data: h.diagramObjects }),
   useFlows: () => ({ data: [] }),
   useObjects: () => ({ data: h.allObjects }),
   useRemoveObjectFromDiagram: () => ({ mutate: vi.fn() }),
@@ -115,6 +121,12 @@ describe('ArchFlowCanvas theming', () => {
     h.commentComposeType = null
     h.dependenciesFocusId = null
     h.allObjects = []
+    h.diagramObjects = []
+    h.connections = []
+    h.currentNodes = []
+    h.currentEdges = []
+    h.setNodes.mockClear()
+    h.setEdges.mockClear()
   })
 
   it('uses semantic theme variables for the canvas, grid, and minimap mask', () => {
@@ -141,5 +153,25 @@ describe('ArchFlowCanvas theming', () => {
     expect(dependencyNotice?.getAttribute('style')).toContain('background: var(--color-panel)')
     expect(dependencyNotice?.getAttribute('style')).toContain('border: 1px solid var(--color-accent-blue)')
     expect(dependencyNotice?.getAttribute('style')).toContain('color: var(--color-text-base)')
+  })
+
+  it('prunes stale ReactFlow nodes when objects or placements disappear', () => {
+    h.currentNodes = [
+      { id: 'deleted-object', data: { object: { id: 'deleted-object', name: 'Deleted', type: 'system' } } },
+    ]
+
+    render(<ArchFlowCanvas diagramId="d1" />)
+
+    expect(h.setNodes).toHaveBeenCalledWith([])
+  })
+
+  it('prunes stale ReactFlow edges when endpoint placements disappear', () => {
+    h.currentEdges = [
+      { id: 'stale:directed:a:b', source: 'a', target: 'b', data: { connId: 'stale' } },
+    ]
+
+    render(<ArchFlowCanvas diagramId="d1" />)
+
+    expect(h.setEdges).toHaveBeenCalledWith([])
   })
 })
