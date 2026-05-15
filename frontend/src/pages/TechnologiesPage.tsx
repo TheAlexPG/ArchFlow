@@ -108,7 +108,7 @@ export function TechnologiesPage() {
                   className={cn(
                     'px-3 py-1 font-mono text-[11px] rounded',
                     scope === t.value
-                      ? 'bg-coral text-bg'
+                      ? 'bg-coral text-on-accent'
                       : 'text-text-3 hover:text-text-base',
                   )}
                 >

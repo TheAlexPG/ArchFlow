@@ -54,7 +54,7 @@ export function Avatar({
       className={cn(
         'inline-flex items-center justify-center rounded-full',
         'bg-gradient-to-br',
-        'text-bg font-bold select-none flex-shrink-0',
+        'text-on-accent font-bold select-none flex-shrink-0',
         container,
         text,
         gradientCls,
