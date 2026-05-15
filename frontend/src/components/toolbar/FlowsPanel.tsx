@@ -40,9 +40,9 @@ export function FlowsPanel({ diagramId }: FlowsPanelProps) {
         onClick={() => setOpen((v) => !v)}
         style={{
           width: 40, height: 40, borderRadius: 8,
-          background: open ? '#333' : '#262626',
-          border: '1px solid #404040',
-          color: '#d4d4d4', cursor: 'pointer', fontSize: 16,
+          background: open ? 'var(--control-button-hover)' : 'var(--control-button-bg)',
+          border: '1px solid var(--control-border)',
+          color: 'var(--color-text-base)', cursor: 'pointer', fontSize: 16,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
         }}
@@ -64,8 +64,8 @@ export function FlowsPanel({ diagramId }: FlowsPanelProps) {
             onClick={(e) => e.stopPropagation()}
             style={{
               position: 'absolute', right: 52, top: 0, width: 320,
-              background: '#171717', border: '1px solid #333', borderRadius: 8,
-              boxShadow: '0 8px 24px rgba(0,0,0,0.5)', zIndex: 10,
+              background: 'var(--color-panel)', border: '1px solid var(--color-border-base)', borderRadius: 8,
+              boxShadow: 'var(--shadow-popup)', zIndex: 10,
               display: 'flex', flexDirection: 'column', overflow: 'hidden',
               maxHeight: '70vh',
             }}
@@ -78,15 +78,15 @@ export function FlowsPanel({ diagramId }: FlowsPanelProps) {
               />
             ) : (
               <>
-                <div style={{ padding: '10px 12px', borderBottom: '1px solid #262626', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ fontSize: 11, color: '#737373', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--color-border-base)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ fontSize: 11, color: 'var(--color-text-3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                     Flows
                   </div>
                   <button
                     onClick={handleCreate}
                     style={{
                       fontSize: 11, padding: '2px 8px', borderRadius: 4,
-                      background: '#3b82f6', color: 'white', border: 'none', cursor: 'pointer',
+                      background: 'var(--color-coral)', color: 'var(--color-on-accent)', border: 'none', cursor: 'pointer',
                     }}
                   >
                     + New
@@ -94,7 +94,7 @@ export function FlowsPanel({ diagramId }: FlowsPanelProps) {
                 </div>
                 <div style={{ overflowY: 'auto' }}>
                   {flows.length === 0 ? (
-                    <div style={{ padding: 16, fontSize: 12, color: '#525252', textAlign: 'center' }}>
+                    <div style={{ padding: 16, fontSize: 12, color: 'var(--color-text-4)', textAlign: 'center' }}>
                       No flows yet. Create one to document user journeys.
                     </div>
                   ) : (
@@ -146,14 +146,14 @@ function FlowRow({
   }, [flow.steps])
 
   return (
-    <div style={{ padding: '8px 12px', borderBottom: '1px solid #262626' }}>
+    <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--color-border-base)' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13, color: '#e5e5e5', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <div style={{ fontSize: 13, color: 'var(--color-text-base)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {isPlaying && <span style={{ color: '#22c55e', marginRight: 4 }}>●</span>}
             {flow.name}
           </div>
-          <div style={{ fontSize: 10, color: '#737373' }}>
+          <div style={{ fontSize: 10, color: 'var(--color-text-3)' }}>
             {flow.steps.length} step{flow.steps.length === 1 ? '' : 's'}
             {branches.length > 0 && ` · ${branches.length + 1} branches`}
           </div>
@@ -176,10 +176,10 @@ function IconButton({ children, title, onClick, danger }: { children: React.Reac
       style={{
         width: 24, height: 24, padding: 0, fontSize: 11,
         background: 'transparent', border: 'none', borderRadius: 4,
-        color: danger ? '#f87171' : '#a3a3a3',
+        color: danger ? 'var(--context-menu-danger)' : 'var(--color-text-2)',
         cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}
-      onMouseEnter={(e) => (e.currentTarget.style.background = '#262626')}
+      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-surface-hi)')}
       onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
     >
       {children}
@@ -256,29 +256,29 @@ function FlowEditor({
 
   return (
     <>
-      <div style={{ padding: '10px 12px', borderBottom: '1px solid #262626', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+      <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--color-border-base)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
           style={{
             flex: 1, background: 'transparent', border: 'none',
-            color: '#f5f5f5', fontSize: 13, fontWeight: 600, outline: 'none',
+            color: 'var(--color-text-base)', fontSize: 13, fontWeight: 600, outline: 'none',
           }}
         />
         <button
           onClick={onClose}
-          style={{ background: 'transparent', border: 'none', color: '#737373', cursor: 'pointer', fontSize: 16 }}
+          style={{ background: 'transparent', border: 'none', color: 'var(--color-text-3)', cursor: 'pointer', fontSize: 16 }}
         >
           ×
         </button>
       </div>
 
       <div style={{ padding: '10px 12px', flex: 1, overflowY: 'auto' }}>
-        <div style={{ fontSize: 10, color: '#737373', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+        <div style={{ fontSize: 10, color: 'var(--color-text-3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
           Steps ({steps.length})
         </div>
         {steps.length === 0 ? (
-          <div style={{ fontSize: 11, color: '#525252', marginBottom: 12 }}>
+          <div style={{ fontSize: 11, color: 'var(--color-text-4)', marginBottom: 12 }}>
             No steps yet. Pick connections below to add.
           </div>
         ) : (
@@ -292,13 +292,13 @@ function FlowEditor({
                   key={s.id}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 6,
-                    padding: '4px 6px', fontSize: 11, color: '#d4d4d4',
-                    borderLeft: '2px solid #3b82f6', marginBottom: 4,
+                    padding: '4px 6px', fontSize: 11, color: 'var(--color-text-base)',
+                    borderLeft: '2px solid var(--color-accent-blue)', marginBottom: 4,
                   }}
                 >
                   <span style={{
                     width: 18, height: 18, borderRadius: '50%',
-                    background: '#3b82f6', color: 'white', fontSize: 10, fontWeight: 700,
+                    background: 'var(--color-coral)', color: 'var(--color-on-accent)', fontSize: 10, fontWeight: 700,
                     display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                   }}>
                     {idx + 1}
@@ -311,8 +311,8 @@ function FlowEditor({
                     onChange={(e) => setStepBranch(s.id, e.target.value || null)}
                     placeholder="branch"
                     style={{
-                      width: 60, background: '#262626', border: '1px solid #333',
-                      borderRadius: 3, padding: '1px 4px', color: '#a3a3a3', fontSize: 10,
+                      width: 60, background: 'var(--color-surface)', border: '1px solid var(--color-border-base)',
+                      borderRadius: 3, padding: '1px 4px', color: 'var(--color-text-2)', fontSize: 10,
                     }}
                   />
                   <IconButton title="Up" onClick={() => moveStep(s.id, -1)}>▲</IconButton>
@@ -324,11 +324,11 @@ function FlowEditor({
           </div>
         )}
 
-        <div style={{ fontSize: 10, color: '#737373', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+        <div style={{ fontSize: 10, color: 'var(--color-text-3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
           Connections in diagram
         </div>
         {connections.length === 0 ? (
-          <div style={{ fontSize: 11, color: '#525252' }}>No connections yet.</div>
+          <div style={{ fontSize: 11, color: 'var(--color-text-4)' }}>No connections yet.</div>
         ) : (
           connections.map((c) => {
             const source = objectMap.get(c.source_id)
@@ -341,30 +341,30 @@ function FlowEditor({
                   display: 'flex', alignItems: 'center', gap: 6,
                   width: '100%', padding: '4px 6px', marginBottom: 2,
                   background: 'transparent', border: 'none', borderRadius: 4,
-                  color: stepConnectionIds.has(c.id) ? '#525252' : '#d4d4d4',
+                  color: stepConnectionIds.has(c.id) ? 'var(--color-text-4)' : 'var(--color-text-base)',
                   fontSize: 11, cursor: 'pointer', textAlign: 'left',
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = '#262626')}
+                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-surface-hi)')}
                 onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
               >
-                <span style={{ color: '#3b82f6' }}>+</span>
+                <span style={{ color: 'var(--color-accent-blue)' }}>+</span>
                 <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {source?.name || '?'} → {target?.name || '?'}
                 </span>
-                {c.label && <span style={{ fontSize: 10, color: '#737373' }}>{c.label}</span>}
+                {c.label && <span style={{ fontSize: 10, color: 'var(--color-text-3)' }}>{c.label}</span>}
               </button>
             )
           })
         )}
       </div>
 
-      <div style={{ padding: '8px 12px', borderTop: '1px solid #262626', display: 'flex', gap: 6 }}>
+      <div style={{ padding: '8px 12px', borderTop: '1px solid var(--color-border-base)', display: 'flex', gap: 6 }}>
         <button
           onClick={handleSave}
           disabled={updateFlow.isPending}
           style={{
             flex: 1, padding: '6px', fontSize: 12, borderRadius: 4,
-            background: '#3b82f6', color: 'white', border: 'none', cursor: 'pointer',
+            background: 'var(--color-coral)', color: 'var(--color-on-accent)', border: 'none', cursor: 'pointer',
           }}
         >
           Save
@@ -373,7 +373,7 @@ function FlowEditor({
           onClick={onClose}
           style={{
             padding: '6px 12px', fontSize: 12, borderRadius: 4,
-            background: 'transparent', color: '#a3a3a3', border: '1px solid #333', cursor: 'pointer',
+            background: 'transparent', color: 'var(--color-text-2)', border: '1px solid var(--color-border-base)', cursor: 'pointer',
           }}
         >
           Cancel
