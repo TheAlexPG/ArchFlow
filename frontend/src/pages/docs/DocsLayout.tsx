@@ -57,7 +57,7 @@ export function DocsLayout({
   }, [activeId])
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-neutral-200 relative">
+    <div className="min-h-screen bg-bg text-text-base relative">
       {/* Decorative gradient blob — clipped by its own container so the page
           wrapper doesn't need overflow:hidden, which can interfere with
           anchor-jump scroll on some mobile browsers. */}
@@ -68,24 +68,24 @@ export function DocsLayout({
         />
       </div>
 
-      <header className="sticky top-0 z-30 border-b border-white/5 bg-[#0a0a0f]/85 backdrop-blur">
+      <header className="sticky top-0 z-30 border-b border-border-base bg-panel/85 backdrop-blur">
         <div className="max-w-6xl mx-auto flex items-center justify-between px-4 lg:px-6 py-3">
           <Link to="/" className="flex items-center gap-2">
             <img src="/logo.png" alt="" className="w-7 h-7 rounded-lg" />
-            <span className="font-semibold text-neutral-100">ArchFlow</span>
+            <span className="font-semibold text-text-base">ArchFlow</span>
           </Link>
           <div className="flex items-center gap-3 sm:gap-4 text-sm">
             <a
               href="https://github.com/TheAlexPG/ArchFlow"
               target="_blank"
               rel="noreferrer"
-              className="text-neutral-400 hover:text-neutral-100 transition"
+              className="text-text-2 hover:text-text-base transition"
             >
               GitHub
             </a>
             <Link
               to="/"
-              className="text-neutral-400 hover:text-neutral-100 transition"
+              className="text-text-2 hover:text-text-base transition"
               aria-label="Back home"
             >
               <span className="hidden sm:inline">← Back home</span>
@@ -99,7 +99,7 @@ export function DocsLayout({
             lg+ where the sidebar takes over. */}
         <nav
           aria-label="Sections"
-          className="lg:hidden border-t border-white/5 bg-[#0a0a0f]/85"
+          className="lg:hidden border-t border-border-base bg-panel/85"
         >
           <ul className="max-w-6xl mx-auto flex gap-2 overflow-x-auto px-4 py-2 text-xs [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {toc.map((entry) => {
@@ -116,7 +116,7 @@ export function DocsLayout({
                       'inline-block px-3 py-1.5 rounded-full border transition whitespace-nowrap ' +
                       (active
                         ? 'border-orange-400/60 bg-orange-400/10 text-orange-200'
-                        : 'border-white/10 bg-white/[0.03] text-neutral-300 hover:text-orange-300 hover:border-orange-400/40')
+                        : 'border-border-base bg-surface/60 text-text-2 hover:text-orange-400 hover:border-orange-400/40')
                     }
                   >
                     {entry.label}
@@ -131,7 +131,7 @@ export function DocsLayout({
       <main className="relative z-10 max-w-6xl mx-auto px-4 lg:px-6 py-8 lg:py-12 lg:grid lg:grid-cols-[220px_1fr] lg:gap-10">
         <aside className="hidden lg:block">
           <nav className="sticky top-20 text-sm" aria-label="On this page">
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500 mb-3">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-3">
               On this page
             </div>
             <ul className="space-y-1.5">
@@ -146,7 +146,7 @@ export function DocsLayout({
                         'block py-1 pl-3 -ml-[2px] border-l-2 transition ' +
                         (active
                           ? 'border-orange-400 text-orange-300'
-                          : 'border-transparent text-neutral-400 hover:text-orange-400 hover:border-white/20')
+                          : 'border-transparent text-text-2 hover:text-orange-400 hover:border-border-hi')
                       }
                     >
                       {entry.label}
@@ -159,18 +159,18 @@ export function DocsLayout({
         </aside>
         <article
           className="
-            min-w-0 space-y-16 text-neutral-300 leading-relaxed
-            [&_h1]:text-3xl [&_h1]:md:text-4xl [&_h1]:font-bold [&_h1]:text-neutral-100 [&_h1]:tracking-tight [&_h1]:mb-3
-            [&_h2]:text-2xl [&_h2]:font-semibold [&_h2]:text-neutral-100 [&_h2]:tracking-tight [&_h2]:mt-2 [&_h2]:mb-3 [&_h2]:scroll-mt-32 [&_h2]:lg:scroll-mt-24
-            [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:text-neutral-100 [&_h3]:mt-6 [&_h3]:mb-2
+            min-w-0 space-y-16 text-text-2 leading-relaxed
+            [&_h1]:text-3xl [&_h1]:md:text-4xl [&_h1]:font-bold [&_h1]:text-text-base [&_h1]:tracking-tight [&_h1]:mb-3
+            [&_h2]:text-2xl [&_h2]:font-semibold [&_h2]:text-text-base [&_h2]:tracking-tight [&_h2]:mt-2 [&_h2]:mb-3 [&_h2]:scroll-mt-32 [&_h2]:lg:scroll-mt-24
+            [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:text-text-base [&_h3]:mt-6 [&_h3]:mb-2
             [&_section]:scroll-mt-32 [&_section]:lg:scroll-mt-24
             [&_p]:my-3
             [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:my-3 [&_ul]:space-y-1
             [&_code]:bg-white/5 [&_code]:border [&_code]:border-white/10 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-[0.85em] [&_code]:text-orange-300 [&_code]:font-mono
             [&_a]:text-orange-400 [&_a:hover]:text-orange-300 [&_a]:transition
-            [&_strong]:text-neutral-100
+            [&_strong]:text-text-base
             [&_table]:w-full [&_table]:text-sm [&_table]:my-4
-            [&_th]:text-left [&_th]:py-2 [&_th]:px-3 [&_th]:font-semibold [&_th]:text-neutral-200 [&_th]:border-b [&_th]:border-white/10
+            [&_th]:text-left [&_th]:py-2 [&_th]:px-3 [&_th]:font-semibold [&_th]:text-text-base [&_th]:border-b [&_th]:border-border-base
             [&_td]:py-2 [&_td]:px-3 [&_td]:border-b [&_td]:border-white/5 [&_td]:align-top
           "
         >
@@ -178,16 +178,16 @@ export function DocsLayout({
         </article>
       </main>
 
-      <footer className="relative z-10 border-t border-white/5 bg-black/40 py-6 text-xs text-neutral-500 mt-16">
+      <footer className="relative z-10 border-t border-border-base bg-panel/80 py-6 text-xs text-text-3 mt-16">
         <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 px-4">
-          <Link to="/" className="hover:text-neutral-300 transition">Home</Link>
-          <Link to="/terms" className="hover:text-neutral-300 transition">Terms</Link>
-          <Link to="/privacy" className="hover:text-neutral-300 transition">Privacy</Link>
+          <Link to="/" className="hover:text-text-base transition">Home</Link>
+          <Link to="/terms" className="hover:text-text-base transition">Terms</Link>
+          <Link to="/privacy" className="hover:text-text-base transition">Privacy</Link>
           <a
             href="https://github.com/TheAlexPG/ArchFlow"
             target="_blank"
             rel="noreferrer"
-            className="hover:text-neutral-300 transition"
+            className="hover:text-text-base transition"
           >
             GitHub
           </a>

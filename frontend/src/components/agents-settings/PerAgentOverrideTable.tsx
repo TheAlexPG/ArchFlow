@@ -32,11 +32,11 @@ export function PerAgentOverrideTable({ agents, defaultModel, onChange }: Props)
   return (
     <div
       data-testid="per-agent-table"
-      className="bg-neutral-900 border border-neutral-800 rounded-lg overflow-hidden"
+      className="bg-panel border border-border-base rounded-lg overflow-hidden"
     >
       <table className="w-full text-sm">
         <thead>
-          <tr className="text-xs text-neutral-500 border-b border-neutral-800">
+          <tr className="text-xs text-text-3 border-b border-border-base">
             <th className="text-left px-4 py-2 font-medium">Agent</th>
             <th className="text-left px-4 py-2 font-medium">Model</th>
             <th className="text-left px-4 py-2 font-medium">Turn limit</th>
@@ -51,9 +51,9 @@ export function PerAgentOverrideTable({ agents, defaultModel, onChange }: Props)
               <tr
                 key={agentId}
                 data-testid={`agent-row-${agentId}`}
-                className="border-b border-neutral-800 last:border-0"
+                className="border-b border-border-base last:border-0"
               >
-                <td className="px-4 py-2 text-xs text-neutral-300 font-mono">
+                <td className="px-4 py-2 text-xs text-text-2 font-mono">
                   {agentId}
                 </td>
                 <td className="px-4 py-2">
@@ -69,7 +69,7 @@ export function PerAgentOverrideTable({ agents, defaultModel, onChange }: Props)
                       )
                     }
                     data-testid={`agent-${agentId}-model`}
-                    className="w-full bg-neutral-800 border border-neutral-700 rounded px-2 py-1 text-xs outline-none focus:border-neutral-500"
+                    className="w-full bg-surface border border-border-base rounded px-2 py-1 text-xs text-text-base placeholder:text-text-4 outline-none focus:border-border-hi"
                   />
                 </td>
                 <td className="px-4 py-2">
@@ -86,7 +86,7 @@ export function PerAgentOverrideTable({ agents, defaultModel, onChange }: Props)
                       )
                     }
                     data-testid={`agent-${agentId}-turn_limit`}
-                    className="w-20 bg-neutral-800 border border-neutral-700 rounded px-2 py-1 text-xs outline-none focus:border-neutral-500"
+                    className="w-20 bg-surface border border-border-base rounded px-2 py-1 text-xs text-text-base placeholder:text-text-4 outline-none focus:border-border-hi"
                   />
                 </td>
                 <td className="px-4 py-2">
@@ -103,7 +103,7 @@ export function PerAgentOverrideTable({ agents, defaultModel, onChange }: Props)
                       )
                     }
                     data-testid={`agent-${agentId}-budget_usd`}
-                    className="w-24 bg-neutral-800 border border-neutral-700 rounded px-2 py-1 text-xs outline-none focus:border-neutral-500"
+                    className="w-24 bg-surface border border-border-base rounded px-2 py-1 text-xs text-text-base placeholder:text-text-4 outline-none focus:border-border-hi"
                   />
                 </td>
                 <td className="px-4 py-2">
@@ -117,7 +117,7 @@ export function PerAgentOverrideTable({ agents, defaultModel, onChange }: Props)
                       )
                     }
                     data-testid={`agent-${agentId}-budget_scope`}
-                    className="bg-neutral-800 border border-neutral-700 rounded px-2 py-1 text-xs outline-none focus:border-neutral-500"
+                    className="bg-surface border border-border-base rounded px-2 py-1 text-xs text-text-base outline-none focus:border-border-hi"
                   >
                     <option value="">—</option>
                     <option value="per_session">per_session</option>

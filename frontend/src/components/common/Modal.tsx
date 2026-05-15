@@ -43,11 +43,11 @@ export function Modal({ open, onClose, title, children, footer, width = 440 }: M
         onClick={(e) => e.stopPropagation()}
         style={{
           width,
-          background: '#171717',
-          border: '1px solid #333',
+          background: 'var(--color-panel)',
+          border: '1px solid var(--color-border-base)',
           borderRadius: 10,
-          boxShadow: '0 16px 48px rgba(0,0,0,0.6)',
-          color: '#e5e5e5',
+          boxShadow: 'var(--shadow-popup)',
+          color: 'var(--color-text-base)',
           display: 'flex',
           flexDirection: 'column',
           maxHeight: '85vh',
@@ -56,7 +56,7 @@ export function Modal({ open, onClose, title, children, footer, width = 440 }: M
         <div
           style={{
             padding: '14px 18px',
-            borderBottom: '1px solid #262626',
+            borderBottom: '1px solid var(--color-border-base)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -68,7 +68,7 @@ export function Modal({ open, onClose, title, children, footer, width = 440 }: M
             style={{
               background: 'none',
               border: 'none',
-              color: '#737373',
+              color: 'var(--color-text-3)',
               cursor: 'pointer',
               fontSize: 18,
               lineHeight: 1,
@@ -83,7 +83,7 @@ export function Modal({ open, onClose, title, children, footer, width = 440 }: M
           <div
             style={{
               padding: '12px 18px',
-              borderTop: '1px solid #262626',
+              borderTop: '1px solid var(--color-border-base)',
               display: 'flex',
               justifyContent: 'flex-end',
               gap: 8,

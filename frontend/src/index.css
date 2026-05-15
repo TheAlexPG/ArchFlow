@@ -653,3 +653,83 @@ select {
   transition: all 0.2s ease;
   color: var(--color-text-2);
 }
+
+/* ─── Light-theme compatibility for legacy dark utility classes ─────────────
+ * Several older app pages were built directly with neutral-800/900 Tailwind
+ * utilities. In light mode those utilities leave black cards, tables and form
+ * controls on an otherwise light canvas. Keep dark mode untouched, but remap
+ * the common legacy neutral ramp to semantic theme tokens when light is active.
+ */
+:root[data-theme='light'] .bg-neutral-950,
+:root[data-theme='light'] .bg-neutral-900,
+:root[data-theme='light'] .bg-neutral-800 {
+  background-color: var(--color-panel) !important;
+}
+
+:root[data-theme='light'] .bg-neutral-800\/40,
+:root[data-theme='light'] .bg-neutral-800\/50,
+:root[data-theme='light'] .bg-neutral-900\/10 {
+  background-color: color-mix(in srgb, var(--color-surface) 65%, transparent) !important;
+}
+
+:root[data-theme='light'] .bg-neutral-700 {
+  background-color: var(--color-surface-hi) !important;
+}
+
+:root[data-theme='light'] .hover\:bg-neutral-800:hover,
+:root[data-theme='light'] .hover\:bg-neutral-800\/40:hover,
+:root[data-theme='light'] .hover\:bg-neutral-800\/50:hover,
+:root[data-theme='light'] .hover\:bg-neutral-700:hover,
+:root[data-theme='light'] .hover\:bg-neutral-600:hover {
+  background-color: var(--color-surface-hi) !important;
+}
+
+:root[data-theme='light'] .border-neutral-900,
+:root[data-theme='light'] .border-neutral-800,
+:root[data-theme='light'] .border-neutral-700,
+:root[data-theme='light'] .border-neutral-600,
+:root[data-theme='light'] .border-neutral-500 {
+  border-color: var(--color-border-base) !important;
+}
+
+:root[data-theme='light'] .hover\:border-neutral-700:hover,
+:root[data-theme='light'] .hover\:border-neutral-600:hover,
+:root[data-theme='light'] .hover\:border-neutral-500:hover,
+:root[data-theme='light'] .focus\:border-neutral-600:focus,
+:root[data-theme='light'] .focus\:border-neutral-500:focus {
+  border-color: var(--color-border-hi) !important;
+}
+
+:root[data-theme='light'] .text-neutral-100,
+:root[data-theme='light'] .text-neutral-200,
+:root[data-theme='light'] .text-neutral-300 {
+  color: var(--color-text-base) !important;
+}
+
+:root[data-theme='light'] .text-neutral-400,
+:root[data-theme='light'] .text-neutral-500 {
+  color: var(--color-text-2) !important;
+}
+
+:root[data-theme='light'] .text-neutral-600,
+:root[data-theme='light'] .text-neutral-700 {
+  color: var(--color-text-3) !important;
+}
+
+:root[data-theme='light'] .hover\:text-neutral-100:hover,
+:root[data-theme='light'] .hover\:text-neutral-200:hover,
+:root[data-theme='light'] .hover\:text-neutral-300:hover,
+:root[data-theme='light'] .hover\:text-white:hover {
+  color: var(--color-text-base) !important;
+}
+
+:root[data-theme='light'] .bg-coral.text-white,
+:root[data-theme='light'] .bg-neutral-700.text-white,
+:root[data-theme='light'] .bg-neutral-800.text-white,
+:root[data-theme='light'] .bg-neutral-900.text-white {
+  color: var(--color-text-base) !important;
+}
+
+:root[data-theme='light'] .ring-offset-\[\#171717\] {
+  --tw-ring-offset-color: var(--color-panel) !important;
+}

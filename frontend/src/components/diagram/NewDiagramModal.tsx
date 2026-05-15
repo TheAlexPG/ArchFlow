@@ -208,7 +208,7 @@ function NewDiagramForm({
                       className="font-mono text-[9.5px] px-1 py-px rounded"
                       style={
                         isSelected
-                          ? { color: meta.color, background: 'rgba(0,0,0,0.3)' }
+                          ? { color: meta.color, background: 'var(--color-surface)' }
                           : { color: 'var(--color-text-3)', background: 'var(--color-surface-hi)' }
                       }
                     >

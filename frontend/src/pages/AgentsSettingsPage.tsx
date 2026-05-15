@@ -248,7 +248,7 @@ export function AgentsSettingsPage() {
           <div className="flex-1 flex items-center justify-center p-8">
             <div
               data-testid="permission-gate"
-              className="text-sm text-neutral-400 max-w-md text-center"
+              className="text-sm text-text-2 max-w-md text-center"
             >
               You need admin permissions to view agent settings.
             </div>
@@ -267,7 +267,7 @@ export function AgentsSettingsPage() {
           <PageToolbar breadcrumb={['Workspace', 'Agent settings']} />
           <div
             data-testid="agents-settings-loading"
-            className="flex-1 flex items-center justify-center text-sm text-neutral-500"
+            className="flex-1 flex items-center justify-center text-sm text-text-3"
           >
             Loading…
           </div>
@@ -396,7 +396,7 @@ export function AgentsSettingsPage() {
         <PageToolbar breadcrumb={['Workspace', 'Agent settings']} />
         <div className="flex-1 overflow-y-auto p-8 pb-32">
           <h1 className="text-xl font-semibold mb-1">Agent settings</h1>
-          <p className="text-xs text-neutral-500 mb-8 max-w-2xl">
+          <p className="text-xs text-text-3 mb-8 max-w-2xl">
             Configure your workspace&apos;s AI agents — pick an LLM provider,
             plug in your API key, set privacy preferences, and tune per-agent
             overrides. Changes apply to all members of this workspace.
@@ -433,7 +433,7 @@ export function AgentsSettingsPage() {
                   placeholder="https://my-proxy.example.com/v1"
                   className={inputCls}
                 />
-                <p className="text-[11px] text-neutral-500 mt-1">
+                <p className="text-[11px] text-text-3 mt-1">
                   Must speak the OpenAI Chat Completions protocol.
                 </p>
               </Field>
@@ -443,7 +443,7 @@ export function AgentsSettingsPage() {
                   data-testid="llm-base-url"
                   value={draft.litellm.base_url}
                   readOnly
-                  className={`${inputCls} text-neutral-400 cursor-not-allowed`}
+                  className={`${inputCls} text-text-3 cursor-not-allowed`}
                 />
               </Field>
             )}
@@ -478,7 +478,7 @@ export function AgentsSettingsPage() {
                       <option key={m} value={m} />
                     ))}
                   </datalist>
-                  <p className="text-[11px] text-neutral-500 mt-1">
+                  <p className="text-[11px] text-text-3 mt-1">
                     Suggestions for {draft.litellm.provider}; you can also type
                     a fully-custom model name.
                   </p>
@@ -498,7 +498,7 @@ export function AgentsSettingsPage() {
                 placeholder="auto-detect"
                 className={inputCls}
               />
-              <p className="text-[11px] text-neutral-500 mt-1">
+              <p className="text-[11px] text-text-3 mt-1">
                 Leave blank to let LiteLLM auto-detect. Set a value (e.g.{' '}
                 <code className="font-mono">32768</code>) when running a local
                 model LiteLLM doesn&apos;t recognise.
@@ -553,7 +553,7 @@ export function AgentsSettingsPage() {
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-neutral-500 mt-1">
+              <p className="text-[11px] text-text-3 mt-1">
                 {original.litellm.has_key
                   ? 'A key is already saved. Type a new value to replace it.'
                   : 'No key saved yet — agents will fall back to the bundled key (if any).'}
@@ -566,11 +566,11 @@ export function AgentsSettingsPage() {
             title="Privacy / Analytics"
             hint="Controls whether agent traces are sent to the self-hosted Langfuse instance."
           >
-            <p className="text-[11px] text-neutral-500 mb-2">
+            <p className="text-[11px] text-text-3 mb-2">
               Current mode:{' '}
               <span
                 data-testid="analytics-current-mode"
-                className="font-mono text-neutral-300"
+                className="font-mono text-text-2"
               >
                 {original.analytics_consent}
               </span>
@@ -650,7 +650,7 @@ export function AgentsSettingsPage() {
             onClick={onDiscard}
             disabled={!dirty || update.isPending}
             data-testid="discard-btn"
-            className="text-xs text-neutral-400 hover:text-neutral-200 px-3 py-1.5 disabled:opacity-40"
+            className="text-xs text-text-2 hover:text-text-base px-3 py-1.5 disabled:opacity-40"
           >
             Discard
           </button>
@@ -659,7 +659,7 @@ export function AgentsSettingsPage() {
             onClick={onSave}
             disabled={!dirty || update.isPending}
             data-testid="save-btn"
-            className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded px-4 py-1.5 disabled:opacity-40"
+            className="bg-coral hover:bg-coral-2 text-on-accent text-xs font-medium rounded px-4 py-1.5 disabled:bg-surface-hi disabled:text-text-3 disabled:border disabled:border-border-base disabled:opacity-100 disabled:cursor-not-allowed"
           >
             {update.isPending ? 'Saving…' : 'Save'}
           </button>
@@ -713,7 +713,7 @@ const EDITS_POLICY_OPTIONS: {
 // ─── Layout primitives ──────────────────────────────────────────────────────
 
 const inputCls =
-  'w-full bg-neutral-800 border border-neutral-700 rounded px-2 py-1.5 text-sm outline-none focus:border-neutral-500'
+  'w-full bg-surface border border-border-base rounded px-2 py-1.5 text-sm text-text-base placeholder:text-text-4 outline-none focus:border-border-hi'
 
 function Section({
   title,
@@ -727,7 +727,7 @@ function Section({
   return (
     <section className="max-w-3xl mb-10">
       <h2 className="text-sm font-semibold mb-1">{title}</h2>
-      {hint && <p className="text-xs text-neutral-500 mb-3">{hint}</p>}
+      {hint && <p className="text-xs text-text-3 mb-3">{hint}</p>}
       <div className="space-y-3">{children}</div>
     </section>
   )
@@ -742,7 +742,7 @@ function Field({
 }) {
   return (
     <div>
-      <label className="block text-xs text-neutral-400 mb-1">{label}</label>
+      <label className="block text-xs text-text-2 mb-1">{label}</label>
       {children}
     </div>
   )
@@ -769,8 +769,8 @@ function CardRadio({
     <label
       className={`flex items-start gap-3 cursor-pointer rounded-md border px-3 py-2 transition-colors ${
         checked
-          ? 'border-blue-600/60 bg-blue-600/10'
-          : 'border-neutral-700 bg-neutral-800/40 hover:border-neutral-600'
+          ? 'border-coral/60 bg-coral-glow'
+          : 'border-border-base bg-surface/60 hover:border-border-hi'
       }`}
     >
       <input
@@ -783,8 +783,8 @@ function CardRadio({
         className="mt-0.5"
       />
       <span className="flex flex-col">
-        <span className="text-xs font-medium text-neutral-100">{label}</span>
-        <span className="text-[11px] text-neutral-400 mt-0.5">{hint}</span>
+        <span className="text-xs font-medium text-text-base">{label}</span>
+        <span className="text-[11px] text-text-2 mt-0.5">{hint}</span>
       </span>
     </label>
   )

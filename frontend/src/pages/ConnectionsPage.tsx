@@ -56,7 +56,7 @@ export function ConnectionsPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search connections…"
-            className="w-72 bg-neutral-900 border border-neutral-800 rounded px-3 py-1.5 text-sm outline-none focus:border-neutral-600"
+            className="w-72 bg-surface border border-border-base rounded px-3 py-1.5 text-sm text-text-base placeholder:text-text-4 outline-none focus:border-border-hi"
           />
         </div>
 
@@ -67,10 +67,10 @@ export function ConnectionsPage() {
           </div>
         )}
 
-        <div className="bg-neutral-900 border border-neutral-800 rounded-lg overflow-hidden">
+        <div className="bg-panel border border-border-base rounded-lg overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-xs text-neutral-500 border-b border-neutral-800">
+              <tr className="text-xs text-text-3 border-b border-border-base">
                 <th className="text-left px-4 py-2 font-medium">Source</th>
                 <th className="text-left px-4 py-2 font-medium">Target</th>
                 <th className="text-left px-4 py-2 font-medium">Direction</th>
@@ -80,23 +80,23 @@ export function ConnectionsPage() {
             </thead>
             <tbody>
               {filtered.map((r) => (
-                <tr key={r.id} className="border-b border-neutral-800 last:border-0 hover:bg-neutral-800/40">
-                  <td className="px-4 py-2 text-neutral-200">{r.source}</td>
-                  <td className="px-4 py-2 text-neutral-200">{r.target}</td>
-                  <td className="px-4 py-2 text-xs text-neutral-400">
+                <tr key={r.id} className="border-b border-border-base last:border-0 hover:bg-surface">
+                  <td className="px-4 py-2 text-text-base">{r.source}</td>
+                  <td className="px-4 py-2 text-text-base">{r.target}</td>
+                  <td className="px-4 py-2 text-xs text-text-2">
                     {r.direction === 'bidirectional' ? '⇄ bidirectional' : '→ outgoing'}
                   </td>
-                  <td className="px-4 py-2 text-neutral-400 text-xs">{r.label || '—'}</td>
+                  <td className="px-4 py-2 text-text-2 text-xs">{r.label || '—'}</td>
                   <td className="px-4 py-2 text-xs">
                     {r.protocols.length === 0 ? (
-                      <span className="text-neutral-600">—</span>
+                      <span className="text-text-3">—</span>
                     ) : (
                       <div className="flex flex-wrap gap-1">
                         {r.protocols.slice(0, 4).map((p) => (
                           <TechBadge key={p.id} technology={p} />
                         ))}
                         {r.protocols.length > 4 && (
-                          <span className="text-neutral-600">
+                          <span className="text-text-3">
                             +{r.protocols.length - 4}
                           </span>
                         )}
