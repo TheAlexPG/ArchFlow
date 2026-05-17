@@ -87,22 +87,27 @@ def oidc_disabled(monkeypatch):
     monkeypatch.setattr(settings, "oidc_client_secret", None)
 
 
-def _mock_provider(*, token_status: int = 200, userinfo: dict | None = None):
-    """Register the three OIDC endpoints on the active respx router. Caller
-    must already be inside a ``with respx.mock(base_url=ISSUER)`` block."""
-    respx.get(DISCOVERY_PATH).mock(
+def _mock_provider(router, *, token_status: int = 200, userinfo: dict | None = None):
+    """Register the three OIDC endpoints on the passed respx router.
+
+    Routes must be added to the scoped router instance returned by
+    ``respx.mock(base_url=...)`` — the module-level ``respx.get(...)`` adds
+    to the global default router, which is a different object and won't
+    intercept the scoped requests.
+    """
+    router.get(DISCOVERY_PATH).mock(
         return_value=Response(200, json=_discovery_doc())
     )
     if token_status == 200:
-        respx.post(TOKEN_URL).mock(
+        router.post(TOKEN_URL).mock(
             return_value=Response(200, json={"access_token": "provider-access"})
         )
     else:
-        respx.post(TOKEN_URL).mock(
+        router.post(TOKEN_URL).mock(
             return_value=Response(token_status, json={"error": "invalid_grant"})
         )
     if userinfo is not None:
-        respx.get(USERINFO_URL).mock(return_value=Response(200, json=userinfo))
+        router.get(USERINFO_URL).mock(return_value=Response(200, json=userinfo))
 
 
 async def _fetch_user_by_email(email: str) -> User | None:
@@ -157,8 +162,8 @@ async def test_oidc_login_redirects_to_authorization_endpoint(
 ):
     """Login fetches discovery and 302s to the provider's authorize URL with
     the expected OAuth2/OIDC query params."""
-    with respx.mock(base_url=ISSUER, assert_all_called=False):
-        respx.get(DISCOVERY_PATH).mock(
+    with respx.mock(base_url=ISSUER, assert_all_called=False) as router:
+        router.get(DISCOVERY_PATH).mock(
             return_value=Response(200, json=_discovery_doc())
         )
 
@@ -202,13 +207,14 @@ async def test_oidc_callback_creates_new_user_and_returns_tokens(
     # Unique email per test run so we don't depend on table-truncation order.
     new_email = f"oidc-new-{uuid.uuid4().hex[:10]}@example.com"
 
-    with respx.mock(base_url=ISSUER, assert_all_called=False):
+    with respx.mock(base_url=ISSUER, assert_all_called=False) as router:
         _mock_provider(
+            router,
             userinfo={
                 "sub": "auth0|abc123",
                 "email": new_email,
                 "name": "New OIDC User",
-            }
+            },
         )
 
         resp = await client.get(
@@ -251,9 +257,10 @@ async def test_oidc_callback_reuses_existing_user_by_email(
         await session.commit()
         existing_id = u.id
 
-    with respx.mock(base_url=ISSUER, assert_all_called=False):
+    with respx.mock(base_url=ISSUER, assert_all_called=False) as router:
         _mock_provider(
-            userinfo={"sub": "x", "email": existing_email, "name": "Existing User"}
+            router,
+            userinfo={"sub": "x", "email": existing_email, "name": "Existing User"},
         )
 
         resp = await client.get(
@@ -277,8 +284,8 @@ async def test_oidc_callback_rejects_userinfo_without_email(
 ):
     """Provider must return an email claim — anything else is rejected with
     400 rather than creating a userless row."""
-    with respx.mock(base_url=ISSUER, assert_all_called=False):
-        _mock_provider(userinfo={"sub": "x"})  # no email
+    with respx.mock(base_url=ISSUER, assert_all_called=False) as router:
+        _mock_provider(router, userinfo={"sub": "x"})  # no email
 
         resp = await client.get(
             "/api/v1/auth/oauth/oidc/callback?code=test-code",
@@ -293,8 +300,8 @@ async def test_oidc_callback_propagates_token_endpoint_failure(
 ):
     """If the token exchange fails the user sees a 400 rather than a 500 —
     callback must surface provider errors instead of crashing."""
-    with respx.mock(base_url=ISSUER, assert_all_called=False):
-        _mock_provider(token_status=400)
+    with respx.mock(base_url=ISSUER, assert_all_called=False) as router:
+        _mock_provider(router, token_status=400)
 
         resp = await client.get(
             "/api/v1/auth/oauth/oidc/callback?code=bad-code",
