@@ -35,6 +35,19 @@ class Settings(BaseSettings):
     google_redirect_uri: str = "http://localhost:8000/api/v1/auth/oauth/google/callback"
     frontend_url: str = "http://localhost:5173"
 
+    # Generic OIDC SSO (opt-in — works with Authelia, Keycloak, Authentik,
+    # Okta, etc.). Endpoints are discovered from
+    # {OIDC_ISSUER_URL}/.well-known/openid-configuration at request time.
+    # Leave issuer/client_id/secret blank to hide the SSO button.
+    oidc_issuer_url: str | None = None
+    oidc_client_id: str | None = None
+    oidc_client_secret: str | None = None
+    oidc_redirect_uri: str = "http://localhost:8000/api/v1/auth/oauth/oidc/callback"
+    oidc_scopes: str = "openid email profile"
+    # Display name shown on the "Continue with …" button. Defaults to a
+    # generic label; set to "Authelia", "Keycloak", "Okta", etc. to brand it.
+    oidc_provider_name: str = "SSO"
+
     # Agent platform — Fernet key for encrypting workspace LLM provider keys + Langfuse keys.
     # Must be a 32-byte url-safe base64-encoded string (44 chars).
     # Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"  # noqa: E501

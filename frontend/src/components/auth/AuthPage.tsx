@@ -1,6 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import axios from 'axios'
 import { useAuthStore } from '../../stores/auth-store'
+
+type AuthConfig = {
+  google_enabled: boolean
+  oidc_enabled: boolean
+  oidc_provider_name: string
+}
 
 export function AuthPage() {
   const [isLogin, setIsLogin] = useState(true)
@@ -9,7 +15,17 @@ export function AuthPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [config, setConfig] = useState<AuthConfig | null>(null)
   const { setTokens } = useAuthStore()
+
+  useEffect(() => {
+    // Fire-and-forget — if the call fails (offline, backend down) the SSO
+    // buttons just stay hidden. Email/password login still works.
+    axios
+      .get<AuthConfig>('/api/v1/auth/config')
+      .then((r) => setConfig(r.data))
+      .catch(() => setConfig({ google_enabled: false, oidc_enabled: false, oidc_provider_name: 'SSO' }))
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -38,6 +54,12 @@ export function AuthPage() {
     // /auth/callback with tokens in the URL fragment.
     window.location.href = '/api/v1/auth/oauth/google/login'
   }
+
+  const handleOidcLogin = () => {
+    window.location.href = '/api/v1/auth/oauth/oidc/login'
+  }
+
+  const showDivider = config?.google_enabled || config?.oidc_enabled
 
   return (
     <div className="flex h-full items-center justify-center bg-neutral-950">
@@ -87,20 +109,37 @@ export function AuthPage() {
           </button>
         </form>
 
-        <div className="flex items-center gap-3 my-4">
-          <div className="flex-1 h-px bg-neutral-800" />
-          <span className="text-xs text-neutral-600">or</span>
-          <div className="flex-1 h-px bg-neutral-800" />
-        </div>
+        {showDivider && (
+          <div className="flex items-center gap-3 my-4">
+            <div className="flex-1 h-px bg-neutral-800" />
+            <span className="text-xs text-neutral-600">or</span>
+            <div className="flex-1 h-px bg-neutral-800" />
+          </div>
+        )}
 
-        <button
-          type="button"
-          onClick={handleGoogleLogin}
-          disabled={loading}
-          className="w-full py-2 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 disabled:opacity-50 text-neutral-100 rounded-lg text-sm font-medium"
-        >
-          Continue with Google
-        </button>
+        {config?.google_enabled && (
+          <button
+            type="button"
+            onClick={handleGoogleLogin}
+            disabled={loading}
+            className="w-full py-2 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 disabled:opacity-50 text-neutral-100 rounded-lg text-sm font-medium"
+          >
+            Continue with Google
+          </button>
+        )}
+
+        {config?.oidc_enabled && (
+          <button
+            type="button"
+            onClick={handleOidcLogin}
+            disabled={loading}
+            className={`w-full py-2 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 disabled:opacity-50 text-neutral-100 rounded-lg text-sm font-medium ${
+              config.google_enabled ? 'mt-2' : ''
+            }`}
+          >
+            Continue with {config.oidc_provider_name}
+          </button>
+        )}
 
         <p className="text-sm text-neutral-500 text-center mt-4">
           {isLogin ? "Don't have an account?" : 'Already have an account?'}{' '}

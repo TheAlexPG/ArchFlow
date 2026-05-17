@@ -329,10 +329,11 @@ make dev-infra && make db-upgrade
 - [x] API keys + webhooks
 - [x] Packs, pinned, search
 - [x] Per-user undo & redo (Phase 1)
+- [x] AI agents (supervisor + GitHub repo researcher, Langfuse tracing)
+- [x] Per-diagram export — Mermaid / PlantUML / Structurizr DSL / JSON
+- [x] SSO (OIDC — Authelia, Keycloak, Authentik, Okta, …)
 - [ ] Per-user undo — stale-detection (Phase 2)
 - [ ] Import from Structurizr DSL
-- [ ] Export to Mermaid / PlantUML
-- [ ] SSO (OIDC)
 - [ ] Deployment diagrams (C4 L4)
 
 See [`docs/architecture/`](docs/architecture/) for ADRs and ongoing design.

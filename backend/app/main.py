@@ -23,6 +23,7 @@ from app.api.v1.my_invites import router as my_invites_router
 from app.api.v1.notifications import router as notifications_router
 from app.api.v1.oauth_stub import router as oauth_router
 from app.api.v1.objects import router as objects_router
+from app.api.v1.oidc import router as oidc_router
 from app.api.v1.packs import router as packs_router
 from app.api.v1.repos import router as repos_router
 from app.api.v1.teams import router as teams_router
@@ -96,6 +97,7 @@ def create_app() -> FastAPI:
     app.include_router(technologies_router, prefix="/api/v1")
     app.include_router(diagram_access_router, prefix="/api/v1")
     app.include_router(oauth_router, prefix="/api/v1")
+    app.include_router(oidc_router, prefix="/api/v1")
     app.include_router(invites_router, prefix="/api/v1")
     app.include_router(my_invites_router, prefix="/api/v1")
     app.include_router(versions_router, prefix="/api/v1")

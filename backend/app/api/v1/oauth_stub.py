@@ -10,6 +10,7 @@ Client creds live in /srv/archflow/.env (GOOGLE_CLIENT_ID,
 GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI, FRONTEND_URL). When any is
 missing both endpoints return 503 so the SPA can fall back to email/password.
 """
+import logging
 from urllib.parse import urlencode
 
 import httpx
@@ -23,6 +24,8 @@ from app.core.database import get_db
 from app.core.security import create_access_token, create_refresh_token, hash_password
 from app.models.user import User
 from app.services import workspace_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth/oauth", tags=["oauth"])
 
@@ -67,7 +70,15 @@ async def callback(
             "grant_type": "authorization_code",
         })
         if token_resp.status_code != 200:
-            raise HTTPException(400, f"Google token exchange failed: {token_resp.text}")
+            # Generic error to the client; full provider response logged
+            # server-side. Same hardening as the OIDC flow — don't leak
+            # client_id / scope details into the browser.
+            logger.warning(
+                "Google token exchange failed: status=%s body=%s",
+                token_resp.status_code,
+                token_resp.text,
+            )
+            raise HTTPException(400, "Google token exchange failed")
         google_access = token_resp.json().get("access_token")
 
         ui_resp = await client.get(
@@ -81,6 +92,13 @@ async def callback(
     email = info.get("email")
     if not email:
         raise HTTPException(400, "Google account returned no email")
+    # Google's userinfo always includes verified_email for Google-hosted
+    # accounts, but Workspace admins can let users add unverified addresses.
+    # Without this check, an attacker with an unverified Google-side email
+    # could claim an arbitrary address and take over an existing local
+    # account in the upsert below.
+    if not info.get("verified_email", False):
+        raise HTTPException(400, "Google email is not verified")
     name = info.get("name") or email.split("@")[0].title()
 
     existing = (
