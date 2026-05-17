@@ -19,6 +19,7 @@ Mirrors the Google OAuth pattern in oauth_stub.py (same user upsert, same
 fragment-based token delivery) — chose composition over abstraction to keep
 each provider's quirks contained.
 """
+import logging
 from urllib.parse import urlencode
 
 import httpx
@@ -33,12 +34,23 @@ from app.core.security import create_access_token, create_refresh_token, hash_pa
 from app.models.user import User
 from app.services import workspace_service
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/auth/oauth", tags=["oauth"])
 
 # Discovery doc cache keyed by issuer URL. OIDC discovery responses are stable
 # and the IdP signals rotation via the keys endpoint, not this doc — caching
 # for the process lifetime is the standard pattern. Cleared by tests.
 _discovery_cache: dict[str, dict] = {}
+
+# Endpoints we require from the discovery document. If any is missing the
+# provider isn't usable — fail at discovery time with 502 instead of throwing
+# KeyError later when we try to dereference it.
+_REQUIRED_DISCOVERY_KEYS = (
+    "authorization_endpoint",
+    "token_endpoint",
+    "userinfo_endpoint",
+)
 
 
 def _oidc_enabled() -> bool:
@@ -59,6 +71,11 @@ async def _get_discovery(client: httpx.AsyncClient) -> dict:
     if resp.status_code != 200:
         raise HTTPException(502, f"OIDC discovery failed: {resp.status_code}")
     doc = resp.json()
+    missing = [k for k in _REQUIRED_DISCOVERY_KEYS if not doc.get(k)]
+    if missing:
+        raise HTTPException(
+            502, f"OIDC discovery doc missing required endpoint(s): {', '.join(missing)}"
+        )
     _discovery_cache[issuer] = doc
     return doc
 
@@ -100,7 +117,15 @@ async def oidc_callback(
             },
         )
         if token_resp.status_code != 200:
-            raise HTTPException(400, f"OIDC token exchange failed: {token_resp.text}")
+            # Log the provider's response server-side for operators; return a
+            # generic message to the user so we don't leak provider config
+            # (client_id, missing scopes, etc.) into a browser response.
+            logger.warning(
+                "OIDC token exchange failed: status=%s body=%s",
+                token_resp.status_code,
+                token_resp.text,
+            )
+            raise HTTPException(400, "OIDC token exchange failed")
         provider_access = token_resp.json().get("access_token")
         if not provider_access:
             raise HTTPException(400, "OIDC token response missing access_token")
@@ -110,12 +135,25 @@ async def oidc_callback(
             headers={"Authorization": f"Bearer {provider_access}"},
         )
         if ui_resp.status_code != 200:
+            logger.warning(
+                "OIDC userinfo fetch failed: status=%s body=%s",
+                ui_resp.status_code,
+                ui_resp.text,
+            )
             raise HTTPException(400, "OIDC userinfo fetch failed")
         info = ui_resp.json()
 
     email = info.get("email")
     if not email:
         raise HTTPException(400, "OIDC account returned no email claim")
+    # Reject if the IdP can't vouch that the user actually controls this
+    # address. Without this check, an attacker with control of any OIDC IdP
+    # (or a user with an unverified email on a public IdP) could claim an
+    # arbitrary email and take over an existing local account in the upsert
+    # below. Default-deny: if the provider doesn't send the claim at all,
+    # treat it as not-verified.
+    if not info.get("email_verified", False):
+        raise HTTPException(400, "OIDC email is not verified by the provider")
     name = info.get("name") or email.split("@")[0].title()
 
     existing = (

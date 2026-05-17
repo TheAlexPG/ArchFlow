@@ -213,6 +213,7 @@ async def test_oidc_callback_creates_new_user_and_returns_tokens(
             userinfo={
                 "sub": "auth0|abc123",
                 "email": new_email,
+                "email_verified": True,
                 "name": "New OIDC User",
             },
         )
@@ -260,7 +261,12 @@ async def test_oidc_callback_reuses_existing_user_by_email(
     with respx.mock(base_url=ISSUER, assert_all_called=False) as router:
         _mock_provider(
             router,
-            userinfo={"sub": "x", "email": existing_email, "name": "Existing User"},
+            userinfo={
+                "sub": "x",
+                "email": existing_email,
+                "email_verified": True,
+                "name": "Existing User",
+            },
         )
 
         resp = await client.get(
@@ -309,3 +315,47 @@ async def test_oidc_callback_propagates_token_endpoint_failure(
         )
 
     assert resp.status_code == 400
+
+
+async def test_oidc_callback_rejects_unverified_email(client, oidc_enabled):
+    """email_verified=false must be rejected — otherwise an attacker with
+    control of any IdP could claim someone else's email and take over a
+    pre-existing local account in the upsert path. Default-deny: missing
+    claim is treated the same as explicit false."""
+    with respx.mock(base_url=ISSUER, assert_all_called=False) as router:
+        _mock_provider(
+            router,
+            userinfo={
+                "sub": "x",
+                "email": "victim@example.com",
+                "email_verified": False,
+                "name": "Attacker",
+            },
+        )
+
+        resp = await client.get(
+            "/api/v1/auth/oauth/oidc/callback?code=test-code",
+            follow_redirects=False,
+        )
+
+    assert resp.status_code == 400
+    # Sanity: no user row created.
+    user = await _fetch_user_by_email("victim@example.com")
+    assert user is None
+
+
+async def test_oidc_discovery_doc_missing_endpoints_returns_502(
+    client, oidc_enabled
+):
+    """If the IdP's discovery doc is missing a required endpoint we must
+    fail at discovery (502) rather than throw KeyError downstream."""
+    bad_doc = {"issuer": ISSUER}  # no *_endpoint fields
+
+    with respx.mock(base_url=ISSUER, assert_all_called=False) as router:
+        router.get(DISCOVERY_PATH).mock(return_value=Response(200, json=bad_doc))
+
+        resp = await client.get(
+            "/api/v1/auth/oauth/oidc/login", follow_redirects=False
+        )
+
+    assert resp.status_code == 502
