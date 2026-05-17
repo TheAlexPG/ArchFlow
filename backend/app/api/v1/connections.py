@@ -5,11 +5,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_workspace_id, get_optional_user
 from app.core.database import get_db
-from app.schemas.connection import ConnectionCreate, ConnectionResponse, ConnectionUpdate
 from app.realtime.manager import (
     fire_and_forget_publish,
     fire_and_forget_publish_diagram,
 )
+from app.schemas.connection import ConnectionCreate, ConnectionResponse, ConnectionUpdate
 from app.services import connection_service, diagram_service, object_service
 from app.services.webhook_service import fire_and_forget_emit
 

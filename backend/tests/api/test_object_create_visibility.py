@@ -6,17 +6,17 @@ from sqlalchemy import delete, select
 
 from app.api.v1.connections import (
     create_connection as create_connection_endpoint,
+)
+from app.api.v1.connections import (
     delete_connection as delete_connection_endpoint,
 )
-from app.api.v1.diagrams import add_object_to_diagram
-from app.api.v1.diagrams import remove_object_from_diagram
+from app.api.v1.diagrams import add_object_to_diagram, remove_object_from_diagram
 from app.api.v1.objects import create_object as create_object_endpoint
 from app.core.database import async_session
 from app.models.activity_log import ActivityLog, ActivityTargetType
 from app.models.connection import Connection
 from app.models.diagram import DiagramObject
-from app.models.object import ModelObject
-from app.models.object import ObjectType
+from app.models.object import ModelObject, ObjectType
 from app.schemas.connection import ConnectionCreate
 from app.schemas.diagram import DiagramObjectCreate
 from app.schemas.object import ObjectCreate
@@ -162,7 +162,9 @@ async def test_create_connection_commits_before_return(db, workspace):
             assert conn.target_id == target.id
     finally:
         async with async_session() as cleanup:
-            await cleanup.execute(delete(ModelObject).where(ModelObject.id.in_([source.id, target.id])))
+            await cleanup.execute(
+                delete(ModelObject).where(ModelObject.id.in_([source.id, target.id]))
+            )
             await cleanup.commit()
 
 
@@ -197,5 +199,7 @@ async def test_delete_connection_commits_before_return(db, workspace):
             assert await other.get(Connection, conn.id) is None
     finally:
         async with async_session() as cleanup:
-            await cleanup.execute(delete(ModelObject).where(ModelObject.id.in_([source.id, target.id])))
+            await cleanup.execute(
+                delete(ModelObject).where(ModelObject.id.in_([source.id, target.id]))
+            )
             await cleanup.commit()
