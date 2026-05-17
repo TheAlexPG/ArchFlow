@@ -3,6 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import (
     create_access_token,
@@ -16,6 +17,24 @@ from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserR
 from app.services import workspace_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+@router.get("/config")
+async def auth_config():
+    """Public — tells the SPA which SSO buttons to render.
+
+    Read on the login page so we can hide buttons whose backend creds are
+    blank instead of showing buttons that 503.
+    """
+    return {
+        "google_enabled": bool(settings.google_client_id and settings.google_client_secret),
+        "oidc_enabled": bool(
+            settings.oidc_issuer_url
+            and settings.oidc_client_id
+            and settings.oidc_client_secret
+        ),
+        "oidc_provider_name": settings.oidc_provider_name,
+    }
 
 
 @router.post("/register", response_model=TokenResponse, status_code=201)

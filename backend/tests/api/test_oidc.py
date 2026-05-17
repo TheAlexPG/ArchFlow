@@ -24,7 +24,6 @@ from sqlalchemy import select
 from app.core.config import settings
 from app.models.user import User
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
