@@ -1,4 +1,6 @@
+import json
 import uuid
+from pathlib import Path
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -50,6 +52,65 @@ _SERVICE_TEST_TABLES = (
     "users",
 )
 
+_TECHNOLOGY_SEED_PATH = Path(__file__).resolve().parents[1] / "data" / "technologies.json"
+_EXTRA_BUILTIN_PROTOCOLS = (
+    {
+        "slug": "mcp",
+        "name": "MCP",
+        "iconify_name": "mdi:message-processing-outline",
+        "category": "protocol",
+        "color": "#D97757",
+        "aliases": ["model-context-protocol", "model context protocol"],
+    },
+    {
+        "slug": "a2a",
+        "name": "A2A",
+        "iconify_name": "mdi:account-switch-outline",
+        "category": "protocol",
+        "color": "#6366F1",
+        "aliases": ["agent-to-agent", "agent to agent"],
+    },
+)
+
+
+async def _restore_builtin_technologies(session):
+    """Restore built-in technology rows after workspace truncation.
+
+    TRUNCATE workspaces CASCADE removes workspace-scoped technologies and, in
+    PostgreSQL, also truncates the whole referencing technologies table. The
+    migration seed does not rerun between tests, so put the built-ins back.
+    """
+    rows = json.loads(_TECHNOLOGY_SEED_PATH.read_text()) + list(_EXTRA_BUILTIN_PROTOCOLS)
+    insert_sql = text(
+        """
+        INSERT INTO technologies
+            (id, workspace_id, slug, name, iconify_name, category, color, aliases)
+        VALUES
+            (gen_random_uuid(), NULL, :slug, :name, :iconify_name,
+             CAST(:category AS tech_category), :color, :aliases)
+        ON CONFLICT (slug) WHERE workspace_id IS NULL
+        DO UPDATE SET
+            name = EXCLUDED.name,
+            iconify_name = EXCLUDED.iconify_name,
+            category = EXCLUDED.category,
+            color = EXCLUDED.color,
+            aliases = EXCLUDED.aliases,
+            updated_at = now()
+        """
+    )
+    for row in rows:
+        await session.execute(
+            insert_sql,
+            {
+                "slug": row["slug"],
+                "name": row["name"],
+                "iconify_name": row["iconify_name"],
+                "category": row["category"].upper(),
+                "color": row.get("color"),
+                "aliases": row.get("aliases") or None,
+            },
+        )
+
 
 @pytest.fixture
 async def db():
@@ -63,6 +124,7 @@ async def db():
                 + " RESTART IDENTITY CASCADE"
             )
         )
+        await _restore_builtin_technologies(session)
         await session.commit()
         try:
             yield session

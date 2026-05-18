@@ -1,4 +1,4 @@
-import type { ObjectStatus, ObjectType } from '../../types/model'
+import type { DiagramType, ObjectStatus, ObjectType } from '../../types/model'
 
 export const TYPE_ICONS: Record<ObjectType, string> = {
   system: '■',
@@ -18,6 +18,11 @@ export const TYPE_LABELS: Record<ObjectType, string> = {
   app: 'App',
   store: 'Store',
   component: 'Component',
+}
+
+export function getObjectTypeLabel(type: ObjectType, diagramType?: DiagramType): string {
+  if (type === 'component' && diagramType === 'custom') return 'Code'
+  return TYPE_LABELS[type]
 }
 
 export const STATUS_COLORS: Record<ObjectStatus, string> = {

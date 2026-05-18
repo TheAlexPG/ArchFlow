@@ -31,11 +31,11 @@ import { cn } from '../utils/cn'
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const C4_LEVEL: Record<string, { label: string; order: number; level: 1 | 2 | 3 | 4 }> = {
-  system_landscape: { label: 'Level 1', order: 1, level: 1 },
+  system_landscape: { label: 'Landscape', order: 0, level: 1 },
   system_context:   { label: 'Level 1', order: 1, level: 1 },
   container:        { label: 'Level 2', order: 2, level: 2 },
   component:        { label: 'Level 3', order: 3, level: 3 },
-  custom:           { label: 'Custom',  order: 9, level: 4 },
+  custom:           { label: 'Level 4',  order: 4, level: 4 },
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -43,7 +43,7 @@ const TYPE_LABELS: Record<string, string> = {
   system_context:   'System Context',
   container:        'Container',
   component:        'Component',
-  custom:           'Custom',
+  custom:           'Code',
 }
 
 // Types in display order for grouped table
@@ -66,7 +66,7 @@ const TYPE_COLOR: Record<string, { folder: string; icon: string; well: string }>
 
 // Level → C4 filter sidebar
 const LEVEL_ROWS: { level: 1 | 2 | 3 | 4; label: string; types: string[] }[] = [
-  { level: 1, label: 'Level 1 · Landscape', types: ['system_landscape', 'system_context'] },
+  { level: 1, label: 'Level 1 · System Context', types: ['system_landscape', 'system_context'] },
   { level: 2, label: 'Level 2 · Container',  types: ['container'] },
   { level: 3, label: 'Level 3 · Component',  types: ['component'] },
   { level: 4, label: 'Level 4 · Code',       types: ['custom'] },

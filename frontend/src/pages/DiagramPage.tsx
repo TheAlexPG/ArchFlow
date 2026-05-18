@@ -13,6 +13,7 @@ import { EdgeSidebar } from '../components/sidebar/EdgeSidebar'
 import { ObjectSidebar } from '../components/sidebar/ObjectSidebar'
 import { ObjectTree } from '../components/tree/ObjectTree'
 import { SearchModal } from '../components/nav/SearchModal'
+import { ThemeToggle } from '../components/theme/ThemeToggle'
 import { Avatar, AvatarStack, Button, Kbd, StatusPill, type AvatarGradient } from '../components/ui'
 import { useDiagram, useDiagramBreadcrumbs } from '../hooks/use-diagrams'
 import {
@@ -490,6 +491,7 @@ export function DiagramPage() {
                 via flex; each one only owns its own width, so adding or
                 removing a button here doesn't require recalculating offsets. */}
             <div className="absolute right-4 top-4 z-10 flex items-center gap-2">
+              <ThemeToggle />
               <ExportToolbar diagramId={diagramId} />
               {diagramId && <FlowsPanel diagramId={diagramId} />}
             </div>

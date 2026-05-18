@@ -22,11 +22,11 @@ import { DiagramPreviewSvg } from '../components/common/DiagramPreviewSvg'
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const DIAGRAM_TYPE_LABELS: Record<string, string> = {
-  system_landscape: 'L1 · SYSTEM',
+  system_landscape: 'LANDSCAPE',
   system_context:   'L1 · CONTEXT',
   container:        'L2 · CONTAINER',
   component:        'L3 · COMPONENT',
-  custom:           'CUSTOM',
+  custom:           'L4 · CODE',
 }
 
 const DIAGRAM_TYPE_LEVEL: Record<string, number> = {
@@ -34,7 +34,7 @@ const DIAGRAM_TYPE_LEVEL: Record<string, number> = {
   system_context:   1,
   container:        2,
   component:        3,
-  custom:           0,
+  custom:           4,
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

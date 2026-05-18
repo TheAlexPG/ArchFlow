@@ -12,25 +12,17 @@ import {
 import { useDiagram } from '../../hooks/use-diagrams'
 import { useCanvasStore } from '../../stores/canvas-store'
 import { useWorkspaceStore } from '../../stores/workspace-store'
-import type { CommentType, DiagramType, ObjectType } from '../../types/model'
+import { C4_DIAGRAM_LEVEL_LABELS, type CommentType, type DiagramType, type ObjectType } from '../../types/model'
 import { cn } from '../../utils/cn'
 import { SectionLabel } from '../ui'
 import { TechIcon } from '../tech'
 import { detectParentGroup, nodeToRect } from './group-utils'
-import { TYPE_BORDER_COLORS, TYPE_LABELS } from './node-utils'
+import { getObjectTypeLabel, TYPE_BORDER_COLORS } from './node-utils'
 import { NewObjectModal } from './NewObjectModal'
 
 // ─── Type helpers (match AddObjectToolbar's logic exactly) ────────────────────
 
 const ALL_QUICK_TYPES: ObjectType[] = ['system', 'actor', 'external_system', 'app', 'store', 'component', 'group']
-
-const DIAGRAM_LEVEL_LABEL: Record<DiagramType, string> = {
-  system_landscape: 'L1 · System Landscape',
-  system_context: 'L1 · System Context',
-  container: 'L2 · Container',
-  component: 'L3 · Component',
-  custom: 'L4 · Code',
-}
 
 function getQuickTypesForDiagram(diagramType: DiagramType | undefined): ObjectType[] {
   if (!diagramType) return ALL_QUICK_TYPES
@@ -43,6 +35,9 @@ function getQuickTypesForDiagram(diagramType: DiagramType | undefined): ObjectTy
     case 'component':
       return ['component', 'system', 'external_system', 'actor', 'group']
     case 'custom':
+      // C4 L4 is the Code diagram. The backend reuses the `component` object
+      // type for code-level elements, so label it as Code in this context.
+      return ['component', 'group']
     default:
       return ALL_QUICK_TYPES
   }
@@ -262,7 +257,7 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
   const draftId = diagram?.draft_id ?? null
   const diagramType = diagram?.type as DiagramType | undefined
   const quickTypes = getQuickTypesForDiagram(diagramType)
-  const levelLabel = diagramType ? DIAGRAM_LEVEL_LABEL[diagramType] : null
+  const levelLabel = diagramType ? C4_DIAGRAM_LEVEL_LABELS[diagramType] : null
 
   const { data: objects = [] } = useObjects(draftId)
   const { data: diagramObjects = [] } = useDiagramObjects(diagramId)
@@ -372,19 +367,31 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
   const popupRef = useRef<HTMLDivElement>(null)
   const fabRef = useRef<HTMLButtonElement>(null)
 
-  // Popup anchors its horizontal edge to the FAB's right side but floats to
-  // the viewport's vertical centre — so it never clips off the screen
-  // regardless of where the FAB itself sits within the canvas.
-  const [popupLeft, setPopupLeft] = useState(72)
+  // Popup anchors to the FAB but is clamped into the visible viewport.
+  // DevTools/narrow split panes can leave far less room than the full app
+  // normally has, so both the horizontal edge and vertical bounds are
+  // computed from the current viewport instead of using fixed 72px insets.
+  const [popupMetrics, setPopupMetrics] = useState({ left: 72, top: 60, bottom: 12, width: 340 })
   useLayoutEffect(() => {
     if (!isOpen) return
     const recompute = () => {
       const rect = fabRef.current?.getBoundingClientRect()
-      if (rect) setPopupLeft(rect.right + 12)
+      const viewportWidth = window.innerWidth
+      const viewportHeight = window.innerHeight
+      const desiredWidth = Math.min(340, Math.max(260, viewportWidth - 24))
+      const preferredLeft = rect ? rect.right + 12 : 72
+      const left = Math.min(Math.max(12, preferredLeft), Math.max(12, viewportWidth - desiredWidth - 12))
+      const top = Math.min(60, Math.max(12, viewportHeight - 280))
+      const bottom = 12
+      setPopupMetrics({ left, top, bottom, width: desiredWidth })
     }
     recompute()
     window.addEventListener('resize', recompute)
-    return () => window.removeEventListener('resize', recompute)
+    window.visualViewport?.addEventListener('resize', recompute)
+    return () => {
+      window.removeEventListener('resize', recompute)
+      window.visualViewport?.removeEventListener('resize', recompute)
+    }
   }, [isOpen])
 
   useEffect(() => {
@@ -468,22 +475,22 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
           className="add-popup flex flex-col"
           style={{
             position: 'fixed',
-            left: popupLeft,
-            // Fill the canvas area vertically: top ~ just below the 48px
-            // top-bar + a little breathing room; bottom ~ just above the
-            // bottom tags-bar. Popup auto-stretches so the object pool gets
-            // maximum height while Create / Annotation sections stay pinned
-            // to the bottom of the popup via flex layout.
-            top: 72,
-            bottom: 72,
-            width: 340,
+            left: popupMetrics.left,
+            // Keep the portal inside the visible viewport even when DevTools
+            // leaves only a short canvas.  The lower inset is intentionally
+            // small so the object pool keeps usable scroll height instead of
+            // collapsing behind the create/comment sections.
+            top: popupMetrics.top,
+            bottom: popupMetrics.bottom,
+            width: popupMetrics.width,
             background: 'var(--color-panel)',
             border: '1px solid var(--color-border-base)',
             borderRadius: 12,
             boxShadow:
               '0 20px 60px -10px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.02)',
             zIndex: 60,
-            overflow: 'hidden',
+            overflowX: 'hidden',
+            overflowY: 'auto',
           }}
         >
           {/* ── Fixed header: search ── */}
@@ -524,7 +531,7 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
               Create + Annotation sections below stay pinned. ── */}
           <div
             className="flex-1 min-h-0 px-2 pt-2 pb-1"
-            style={{ overflowY: 'auto' }}
+            style={{ overflowY: 'auto', minHeight: 96 }}
           >
             <div
               className="popup-section px-1 pt-1 pb-2"
@@ -551,7 +558,7 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
                         title={
                           inDiagram
                             ? 'Already in this diagram'
-                            : `Add ${TYPE_LABELS[obj.type]} to diagram`
+                            : `Add ${getObjectTypeLabel(obj.type, diagramType)} to diagram`
                         }
                         className={cn(
                           'obj-row popup-item w-full text-left group/row',
@@ -576,7 +583,7 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
                             {obj.name}
                           </div>
                           <div className="font-mono text-[10.5px] text-text-3 flex items-center gap-1 min-w-0">
-                            <span className="truncate">{TYPE_LABELS[obj.type].toLowerCase()}</span>
+                            <span className="truncate">{getObjectTypeLabel(obj.type, diagramType).toLowerCase()}</span>
                             {(() => {
                               const techs = (obj.technology_ids ?? [])
                                 .map((id) => catalog.find((t) => t.id === id))
@@ -657,7 +664,7 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
                     <button
                       key={type}
                       onClick={() => handleCreateNew(type)}
-                      title={TYPE_LABELS[type]}
+                      title={getObjectTypeLabel(type, diagramType)}
                       className="create-type-btn popup-item"
                       style={{ animationDelay: `${170 + idx * 30}ms` }}
                     >
@@ -665,7 +672,7 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
                         <ObjTypeIcon type={type} />
                       </div>
                       <div className="font-mono text-[10px] text-text-2">
-                        {TYPE_LABELS[type]}
+                        {getObjectTypeLabel(type, diagramType)}
                       </div>
                     </button>
                   ))}
@@ -710,7 +717,7 @@ export function AddObjectFAB({ diagramId }: AddObjectFABProps) {
 
           {/* ── Fixed footer ── */}
           <div
-            className="flex-shrink-0 px-3 py-2 border-t border-border-base flex items-center justify-between font-mono text-[10px] text-text-3"
+            className="sticky bottom-0 z-10 bg-panel flex-shrink-0 px-3 py-2 border-t border-border-base flex items-center justify-between font-mono text-[10px] text-text-3"
           >
             <span>Click canvas to place</span>
             <span className="flex items-center gap-1">

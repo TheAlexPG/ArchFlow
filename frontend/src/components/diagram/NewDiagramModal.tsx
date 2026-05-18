@@ -5,7 +5,7 @@ import { useCreateDiagram, type Diagram } from '../../hooks/use-diagrams'
 import { usePacks } from '../../hooks/use-api'
 import { useWorkspaceStore } from '../../stores/workspace-store'
 import { cn } from '../../utils/cn'
-import type { DiagramType } from '../../types/model'
+import { C4_DIAGRAM_LABELS, type DiagramType } from '../../types/model'
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -35,7 +35,7 @@ const TYPE_META: TypeMeta[] = [
   {
     value: 'system_landscape',
     label: 'System Landscape',
-    levelTag: 'L1',
+    levelTag: 'LANDSCAPE',
     description: 'High-level system view',
     color: '#c084fc',
     bgGlow: 'rgba(192,132,252,0.12)',
@@ -94,9 +94,9 @@ const TYPE_META: TypeMeta[] = [
   },
   {
     value: 'custom',
-    label: 'Custom',
-    levelTag: '—',
-    description: 'Custom diagram',
+    label: C4_DIAGRAM_LABELS.custom,
+    levelTag: 'L4',
+    description: 'Code-level view inside a component',
     color: '#4ade80',
     bgGlow: 'rgba(74,222,128,0.12)',
     borderActive: '#4ade80',

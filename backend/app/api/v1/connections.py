@@ -5,11 +5,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_workspace_id, get_optional_user
 from app.core.database import get_db
-from app.schemas.connection import ConnectionCreate, ConnectionResponse, ConnectionUpdate
 from app.realtime.manager import (
     fire_and_forget_publish,
     fire_and_forget_publish_diagram,
 )
+from app.schemas.connection import ConnectionCreate, ConnectionResponse, ConnectionUpdate
 from app.services import connection_service, diagram_service, object_service
 from app.services.webhook_service import fire_and_forget_emit
 
@@ -84,8 +84,9 @@ async def create_connection(
         from_diagram_id=data.from_diagram_id,
         from_draft_id=data.from_draft_id,
     )
+    body = ConnectionResponse.model_validate(conn).model_dump(mode="json")
+    await db.commit()
     if draft_id is None:
-        body = ConnectionResponse.model_validate(conn).model_dump(mode="json")
         fire_and_forget_emit("connection.created", body)
         fire_and_forget_publish(
             getattr(source, "workspace_id", None),
@@ -115,8 +116,9 @@ async def update_connection(
         from_diagram_id=data.from_diagram_id,
         from_draft_id=data.from_draft_id,
     )
+    body = ConnectionResponse.model_validate(conn).model_dump(mode="json")
+    await db.commit()
     if conn.draft_id is None:
-        body = ConnectionResponse.model_validate(conn).model_dump(mode="json")
         fire_and_forget_emit("connection.updated", body)
         src = await object_service.get_object(db, conn.source_id)
         fire_and_forget_publish(
@@ -148,8 +150,9 @@ async def flip_connection(
         from_diagram_id=from_diagram_id,
         from_draft_id=from_draft_id,
     )
+    body = ConnectionResponse.model_validate(conn).model_dump(mode="json")
+    await db.commit()
     if conn.draft_id is None:
-        body = ConnectionResponse.model_validate(conn).model_dump(mode="json")
         fire_and_forget_emit("connection.updated", body)
         src = await object_service.get_object(db, conn.source_id)
         fire_and_forget_publish(
@@ -187,6 +190,7 @@ async def delete_connection(
         from_diagram_id=from_diagram_id,
         from_draft_id=from_draft_id,
     )
+    await db.commit()
     if not was_draft:
         fire_and_forget_emit("connection.deleted", {"id": conn_id_str})
         fire_and_forget_publish(src_ws_id, "connection.deleted", {"id": conn_id_str})

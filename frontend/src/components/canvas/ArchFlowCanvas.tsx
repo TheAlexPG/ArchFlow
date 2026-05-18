@@ -254,8 +254,8 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     [screenToFlowPosition, sendCursor],
   )
 
-  const prevKeyRef = useRef<string>('')
-  const prevConnsRef = useRef<string>('')
+  const prevKeyRef = useRef<string | null>(null)
+  const prevConnsRef = useRef<string | null>(null)
   // Stores {groupId -> {nodeId -> startPosition}} while a group drag is in progress.
   const groupDragStartRef = useRef<Map<string, { x: number; y: number }> | null>(null)
 
@@ -302,7 +302,10 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
                   ? 'external'
                   : 'c4',
           position: { x: dObj.position_x, y: dObj.position_y },
-          data: { object: obj } satisfies C4NodeData,
+          data: {
+            object: obj,
+            diagramType: diagram?.type as C4NodeData['diagramType'],
+          } satisfies C4NodeData,
           zIndex: obj.type === 'group' ? 0 : 1,
         }
         // Restore persisted node size from the diagram_objects row so the
@@ -329,9 +332,6 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
         return `${n.id}:${n.position.x}:${n.position.y}:${n.width ?? ''}:${n.height ?? ''}:${obj.updated_at}:${n.type}`
       })
       .join(',')
-    if (key === prevKeyRef.current) return
-    prevKeyRef.current = key
-
     // The diagram-objects cache is authoritative for position + size.
     // Carry over selection / overlay styling from the previous nodes, and
     // ONLY preserve local state while a drag or resize is in progress (so
@@ -339,6 +339,12 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     // user). Anything else — including another collaborator's drag — we
     // let through so two-browser edits actually propagate.
     const currentNodes = getNodes()
+    const nodeIds = new Set(nodes.map((n) => n.id))
+    const currentNodesMatch =
+      currentNodes.length === nodes.length && currentNodes.every((n) => nodeIds.has(n.id))
+    if (key === prevKeyRef.current && currentNodesMatch) return
+    prevKeyRef.current = key
+
     const merged = nodes.map((n) => {
       const existing = currentNodes.find((cn) => cn.id === n.id)
       const obj = (n.data as C4NodeData).object
@@ -366,6 +372,7 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     diagramId,
     allObjects,
     diagramObjects,
+    diagram?.type,
     setNodes,
     getNodes,
     dependencyChain,
@@ -411,14 +418,10 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
     const overlayKey = `${dependencyChain ? JSON.stringify([...dependencyChain.edges]) : ''}|${filterDim}|${flowPlayback?.currentConnId ?? ''}|${flowPlayback ? [...flowPlayback.stepNumbers.entries()].map(([k,v]) => k+':'+v).join(',') : ''}`
 
     const combinedKey = connKey + '||' + overlayKey
-    if (combinedKey === prevConnsRef.current) return
-    prevConnsRef.current = combinedKey
-
     // Preserve selection state across re-renders + apply overlay opacity +
     // flow playback step number/highlight.
     const currentEdges = getEdges()
-    setEdges(
-      filtered.map(connectionToEdge).map((e) => {
+    const nextEdges = filtered.map(connectionToEdge).map((e) => {
         const connId = (e.data as { connId: string }).connId
         // Match by connId, not edge id — when direction changes the fingerprinted
         // id differs but we still want to preserve the `selected` state.
@@ -443,8 +446,16 @@ function CanvasInner({ diagramId }: ArchFlowCanvasProps) {
             flowCurrent: isCurrent,
           },
         }
-        return existing?.selected ? { ...withStyle, selected: true } : withStyle
-      }),
+      return existing?.selected ? { ...withStyle, selected: true } : withStyle
+    })
+    const nextEdgeIds = new Set(nextEdges.map((e) => e.id))
+    const currentEdgesMatch =
+      currentEdges.length === nextEdges.length && currentEdges.every((e) => nextEdgeIds.has(e.id))
+    if (combinedKey === prevConnsRef.current && currentEdgesMatch) return
+    prevConnsRef.current = combinedKey
+
+    setEdges(
+      nextEdges,
     )
   }, [connections, diagramObjects, setEdges, getEdges, dependencyChain, flowPlayback, filterDim])
 

@@ -10,10 +10,10 @@ import {
   useUpdateObject,
   type ActivityLogEntry,
 } from '../../hooks/use-api'
-import { useDiagrams, useObjectDiagrams } from '../../hooks/use-diagrams'
+import { useDiagram, useDiagrams, useObjectDiagrams } from '../../hooks/use-diagrams'
 import { useCanvasStore } from '../../stores/canvas-store'
-import type { ModelObject, ObjectScope, ObjectStatus } from '../../types/model'
-import { STATUS_COLORS, TYPE_ICONS, TYPE_LABELS } from '../canvas/node-utils'
+import type { DiagramType, ModelObject, ObjectScope, ObjectStatus, ObjectType } from '../../types/model'
+import { getObjectTypeLabel, STATUS_COLORS, TYPE_ICONS, TYPE_LABELS } from '../canvas/node-utils'
 import { RichTextEditor } from '../common/RichTextEditor'
 import {
   CreateChildDiagramModal,
@@ -86,6 +86,7 @@ export function ObjectSidebar({
   }
   const isStandalone = context === 'standalone'
   const { data: obj } = useObject(effectiveObjectId)
+  const { data: diagram } = useDiagram(diagramId)
   const updateObject = useUpdateObject()
   const deleteObject = useDeleteObject()
 
@@ -123,8 +124,12 @@ export function ObjectSidebar({
     updateObject.mutate({ id: obj.id, [field]: value, from_diagram_id: diagramId, from_draft_id: draftId })
   }
 
-  const typeLabel = TYPE_LABELS[obj.type] ?? obj.type
-  const levelLabel = `L${obj.c4_level ?? '?'}`
+  const diagramType = diagram?.type as DiagramType | undefined
+  const typeLabel = getObjectTypeLabel(obj.type, diagramType) ?? obj.type
+  const levelLabel = diagramType === 'custom' && obj.type === 'component'
+    ? 'L4'
+    : `L${obj.c4_level ?? '?'}`
+  const canDrill = DRILLABLE_TYPES.has(obj.type) && diagramType !== 'custom'
 
   return (
     <div className="w-80 bg-panel border-l border-border-base flex flex-col h-full overflow-hidden">
@@ -189,8 +194,8 @@ export function ObjectSidebar({
                 onChange={(e) => handleFieldChange('type', e.target.value)}
                 className="bg-surface border border-border-base text-text-2 text-[12.5px] rounded-md px-2.5 py-1.5 w-full"
               >
-                {Object.entries(TYPE_LABELS).map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
+                {Object.entries(TYPE_LABELS).map(([value]) => (
+                  <option key={value} value={value}>{getObjectTypeLabel(value as ObjectType, diagramType)}</option>
                 ))}
               </select>
             </div>
@@ -296,7 +301,7 @@ export function ObjectSidebar({
             <OwnersSection ownerTeam={obj.owner_team} />
 
             {/* Drill into — only for drillable types, canvas context only */}
-            {!isStandalone && DRILLABLE_TYPES.has(obj.type) && (
+            {!isStandalone && canDrill && (
               <DrillIntoSection obj={obj} />
             )}
 

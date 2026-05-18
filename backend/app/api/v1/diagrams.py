@@ -4,7 +4,12 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_workspace_id, get_optional_user
 from app.core.database import get_db
+from app.realtime.manager import (
+    fire_and_forget_publish,
+    fire_and_forget_publish_diagram,
+)
 from app.schemas.diagram import (
     DiagramCreate,
     DiagramObjectCreate,
@@ -13,13 +18,13 @@ from app.schemas.diagram import (
     DiagramResponse,
     DiagramUpdate,
 )
-from app.api.deps import get_current_workspace_id, get_optional_user
-from app.realtime.manager import (
-    fire_and_forget_publish,
-    fire_and_forget_publish_diagram,
+from app.services import (
+    access_service,
+    diagram_service,
+    draft_service,
+    pack_service,
+    workspace_service,
 )
-from app.services import access_service, diagram_service, draft_service, workspace_service
-from app.services import pack_service
 from app.services.webhook_service import fire_and_forget_emit
 
 router = APIRouter(prefix="/diagrams", tags=["diagrams"])
@@ -177,14 +182,18 @@ async def add_object_to_diagram(
     diagram = await diagram_service.get_diagram(db, diagram_id)
     if not diagram:
         raise HTTPException(status_code=404, detail="Diagram not found")
-    obj = await diagram_service.add_object_to_diagram(
-        db, diagram_id, data,
-        actor_user=current_user,
-        workspace_id=getattr(diagram, "workspace_id", None),
-        from_draft_id=data.from_draft_id,
-    )
+    try:
+        obj = await diagram_service.add_object_to_diagram(
+            db, diagram_id, data,
+            actor_user=current_user,
+            workspace_id=getattr(diagram, "workspace_id", None),
+            from_draft_id=data.from_draft_id,
+        )
+    except diagram_service.DiagramObjectTargetMissingError as exc:
+        raise HTTPException(status_code=404, detail="Object not found") from exc
     body = DiagramObjectResponse.model_validate(obj).model_dump(mode="json")
     payload = {"diagram_id": str(diagram_id), "diagram_object": body}
+    await db.commit()
     fire_and_forget_publish(
         getattr(diagram, "workspace_id", None),
         "diagram_object.added",
@@ -219,6 +228,7 @@ async def update_diagram_object(
         )
     body = DiagramObjectResponse.model_validate(obj).model_dump(mode="json")
     payload = {"diagram_id": str(diagram_id), "diagram_object": body}
+    await db.commit()
     fire_and_forget_publish(
         getattr(diagram, "workspace_id", None) if diagram else None,
         "diagram_object.updated",
@@ -249,6 +259,7 @@ async def remove_object_from_diagram(
             status_code=404, detail="Object not found in diagram"
         )
     payload = {"diagram_id": str(diagram_id), "object_id": str(object_id)}
+    await db.commit()
     fire_and_forget_publish(
         getattr(diagram, "workspace_id", None) if diagram else None,
         "diagram_object.removed",
